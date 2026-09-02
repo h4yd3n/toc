@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "toc-workspace"
+version = "0.1.0"
+description = "TOC: Tactical Operations Center combining Coptoc (Policy-as-Code) & Sigtoc (Signals Intelligence)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0.1",
+    "jsonschema>=4.21.0",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "httpx>=0.27.0",
+    "anthropic>=0.25.0",
+    "rich>=13.7.0",
+    "networkx>=3.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [
+    "packages/shared/src",
+    "apps/coptoc/src",
+    "apps/sigtoc/src",
+]
+asyncio_mode = "auto"

@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "toc-api",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": ["coptoc.api.server:app", "--port", "8000"],
+      "env": { "PYTHONPATH": "packages/shared/src:apps/coptoc/src:apps/sigtoc/src" },
+      "port": 8000
+    },
+    {
+      "name": "cop-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "apps/cop-web", "run", "dev"],
+      "port": 5173
+    }
+  ]
+}

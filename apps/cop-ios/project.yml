@@ -1,0 +1,35 @@
+# XcodeGen project for the native iOS COP. Generate with `xcodegen generate` (see README).
+name: TOC
+options:
+  bundleIdPrefix: com.h4yd3n
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  TOC:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGNING_ALLOWED: "NO"
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: TOC
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        ITSAppUsesNonExemptEncryption: false
+        # Dev: the simulator talks to the FastAPI backend on the Mac over plain http.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true

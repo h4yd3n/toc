@@ -1,0 +1,32 @@
+import type { Snapshot } from './types'
+
+import type { Role } from './types'
+
+// Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
+export const session = { role: 'battle_captain' as Role }
+const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant' }
+const actor = () => `${ROLE_LABEL[session.role]} (web)`
+
+async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json', 'X-TOC-Actor': actor(), 'X-TOC-Role': session.role }, body: body ? JSON.stringify(body) : undefined })
+  if (!r.ok) throw new Error(`${method} ${path} → ${r.status} ${(await r.text()).slice(0, 200)}`)
+  return r.json()
+}
+
+export const fetchSnapshot = (restricted: boolean) => req<Snapshot>('GET', `/v1/cop/snapshot?restricted=${restricted}`)
+export const confirmLink = (threatId: string, target_type: 'location' | 'person', target_id: string, note?: string) =>
+  req<{ link_id: number; status: string }>('POST', `/v1/cop/threats/${threatId}/links`, { target_type, target_id, note })
+export const removeLink = (threatId: string, linkId: number) => req<unknown>('DELETE', `/v1/cop/threats/${threatId}/links/${linkId}`)
+export const setPosture = (locationId: string, posture: string, reason: string) => req<unknown>('PATCH', `/v1/cop/locations/${locationId}/posture`, { posture, reason })
+export const draftAssessment = (subject_type: string, subject_id: string) => req<{ id: string; refused: boolean; confidence: string }>('POST', '/v1/cop/assessments/draft', { subject_type, subject_id })
+export const setAssessmentStatus = (id: string, status: string) => req<unknown>('PATCH', `/v1/cop/assessments/${id}`, { status })
+export const setPirStatus = (id: string, status: string) => req<unknown>('PATCH', `/v1/cop/pirs/${id}`, { status })
+export const refreshIntel = () => req<{ collected: number; created: number; updated: number }>('POST', '/v1/cop/intel/refresh')
+export const openRollCall = (target: { location_id?: string; threat_id?: string; title?: string; notes?: string }) =>
+  req<{ id: string; roster: number }>('POST', '/v1/cop/incidents', target)
+export const updateRoster = (incidentId: string, personId: string, status: string, note?: string) =>
+  req<unknown>('PATCH', `/v1/cop/incidents/${incidentId}/roster/${personId}`, { status, method: 'call', note })
+export const closeIncident = (incidentId: string, notes?: string) => req<unknown>('PATCH', `/v1/cop/incidents/${incidentId}/close`, { notes })
+export const requestCheckins = (incidentId: string) => req<{ requested: number; simulated: boolean }>('POST', `/v1/cop/incidents/${incidentId}/request-checkins`)
+export const checkInByToken = (token: string, note?: string) => req<{ cleared_rosters: string[] }>('POST', `/v1/cop/checkin/${token}`, note ? { note } : undefined)
+export const checkIn = (personId: string, lat: number, lon: number, note: string) => req<{ cleared_rosters: string[] }>('POST', `/v1/cop/people/${personId}/checkin`, { lat, lon, note })

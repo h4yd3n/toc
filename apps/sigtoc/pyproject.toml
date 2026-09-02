@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sigtoc"
+version = "0.1.0"
+description = "All-Source Threat Intelligence & Signals Tactical Operations Center (TOC)"
+requires-python = ">=3.11"
+dependencies = [
+    "toc-shared",
+    "pydantic>=2.7.0",
+    "networkx>=3.3",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.scripts]
+sigtoc = "sigtoc.cli:app"
+

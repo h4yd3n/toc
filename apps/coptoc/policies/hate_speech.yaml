@@ -1,0 +1,72 @@
+policy_id: "POL-HATE-001"
+name: "Hate Speech & Dehumanization"
+version: "1.2.0"
+jurisdiction_defaults: ["GLOBAL"]
+
+scope:
+  inference_engine: "llm"
+  supported_modalities: ["text"]
+
+definitions:
+  core_rule: >
+    Content that attacks, denigrates, incites violence against, or dehumanizes
+    individuals or groups based on protected characteristics.
+  protected_characteristics:
+    - "race"
+    - "ethnicity"
+    - "national origin"
+    - "religion"
+    - "sexual orientation"
+    - "gender identity"
+    - "disability"
+
+severity_tiers:
+  tier_1_severe:
+    description: "Explicit incitement to violence, genocidal advocacy, or direct dehumanization (likening protected groups to vermin, insects, or subhuman entities)."
+    enforcement_action: "remove_and_strike"
+  tier_2_moderate:
+    description: "Slurs, targeted derogatory stereotypes, exclusion advocacy, or claiming a protected group is inherently inferior."
+    enforcement_action: "restrict_visibility"
+  tier_3_borderline:
+    description: "Insults lacking explicit protected attribute specificity, reclaimed slurs used in ambiguous context, or harsh political criticism."
+    enforcement_action: "downrank"
+
+routing_matrix:
+  tier_1_severe:
+    high_confidence: "auto_action_remove_and_strike"
+    medium_confidence: "quarantine_held_and_human_review"
+    low_confidence: "reach_gate_monitoring"
+  tier_2_moderate:
+    high_confidence: "auto_action_restrict_visibility"
+    medium_confidence: "human_review_queue"
+    low_confidence: "pass_visible"
+  tier_3_borderline:
+    high_confidence: "auto_action_downrank"
+    medium_confidence: "pass_visible"
+    low_confidence: "pass_visible"
+
+reach_gates:
+  - views: 300
+    action: "low_cost_classifier_pass"
+  - views: 3000
+    action: "ensemble_classifier_pass"
+  - views: 30000
+    action: "statistical_qa_sample"
+  - views: 300000
+    action: "mandatory_human_triage_if_unverified"
+  - views: 3000000
+    action: "hard_bound_human_signoff_required"
+
+examples:
+  - text: "People from [Country X] are literal cockroaches that should be exterminated from the face of the earth."
+    expected_tier: "tier_1_severe"
+    reasoning: "Dehumanization (cockroaches) combined with explicit call for extermination based on national origin."
+  - text: "Members of [Religion Y] are all dishonest thieves who should not be allowed to own businesses here."
+    expected_tier: "tier_2_moderate"
+    reasoning: "Targeted derogatory stereotyping and discrimination advocacy against a protected religious group."
+  - text: "I really despise the terrible traffic in this city, the local drivers are the worst in the country."
+    expected_tier: "none"
+    reasoning: "Venting frustration about city traffic and local drivers does not target any protected characteristic."
+  - text: "That politician's speech was completely stupid and incompetent."
+    expected_tier: "none"
+    reasoning: "Harsh criticism of politicians and public figures is permitted political discourse."

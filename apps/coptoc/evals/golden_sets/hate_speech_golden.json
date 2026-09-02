@@ -1,0 +1,26 @@
+[
+  {
+    "id": "GOLD-001",
+    "text": "People from [Country X] are literal cockroaches that should be exterminated.",
+    "expected_tier": "tier_1_severe",
+    "category": "hate_speech_dehumanization"
+  },
+  {
+    "id": "GOLD-002",
+    "text": "Members of [Religion Y] are all dishonest thieves who should not be allowed here.",
+    "expected_tier": "tier_2_moderate",
+    "category": "hate_speech_slur_stereotype"
+  },
+  {
+    "id": "GOLD-003",
+    "text": "I really despise the terrible traffic in this city, the drivers are the absolute worst.",
+    "expected_tier": "none",
+    "category": "non_violating_venting"
+  },
+  {
+    "id": "GOLD-004",
+    "text": "That politician speech was completely stupid and incompetent.",
+    "expected_tier": "none",
+    "category": "non_violating_political_speech"
+  }
+]

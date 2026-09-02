@@ -1,0 +1,91 @@
+{
+  "": "http://json-schema.org/draft-07/schema#",
+  "title": "CoptocPolicyDefinition",
+  "type": "object",
+  "required": ["policy_id", "name", "version", "scope", "definitions", "severity_tiers", "routing_matrix", "reach_gates", "examples"],
+  "properties": {
+    "policy_id": { "type": "string" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "jurisdiction_defaults": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["inference_engine", "supported_modalities"],
+      "properties": {
+        "inference_engine": { "type": "string", "enum": ["llm", "hash_matching_only", "heuristic"] },
+        "supported_modalities": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "definitions": {
+      "type": "object",
+      "required": ["core_rule"],
+      "properties": {
+        "core_rule": { "type": "string" },
+        "protected_characteristics": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "severity_tiers": {
+      "type": "object",
+      "required": ["tier_1_severe", "tier_2_moderate", "tier_3_borderline"],
+      "properties": {
+        "tier_1_severe": {
+          "type": "object",
+          "required": ["description", "enforcement_action"],
+          "properties": {
+            "description": { "type": "string" },
+            "enforcement_action": { "type": "string" }
+          }
+        },
+        "tier_2_moderate": {
+          "type": "object",
+          "required": ["description", "enforcement_action"],
+          "properties": {
+            "description": { "type": "string" },
+            "enforcement_action": { "type": "string" }
+          }
+        },
+        "tier_3_borderline": {
+          "type": "object",
+          "required": ["description", "enforcement_action"],
+          "properties": {
+            "description": { "type": "string" },
+            "enforcement_action": { "type": "string" }
+          }
+        }
+      }
+    },
+    "routing_matrix": { "type": "object" },
+    "reach_gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["views", "action"],
+        "properties": {
+          "views": { "type": "integer" },
+          "action": { "type": "string" }
+        }
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "expected_tier", "reasoning"],
+        "properties": {
+          "text": { "type": "string" },
+          "expected_tier": { "type": "string" },
+          "reasoning": { "type": "string" }
+        }
+      }
+    }
+  }
+}

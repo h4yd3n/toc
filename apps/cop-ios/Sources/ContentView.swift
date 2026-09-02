@@ -1,0 +1,71 @@
+import SwiftUI
+
+struct ContentView: View {
+    @Environment(COPStore.self) private var store
+
+    var body: some View {
+        @Bindable var store = store
+        TabView {
+            MapScreen().tabItem { Label("COP", systemImage: "map") }
+            PersonnelScreen().tabItem { Label("S1", systemImage: "person.3") }
+            IntelScreen().tabItem { Label("S2", systemImage: "eye") }
+            OpsScreen().tabItem { Label("S3", systemImage: "calendar") }
+        }
+        .tint(Theme.blue)
+        .safeAreaInset(edge: .top, spacing: 0) { PostureBar() }
+        .sheet(item: $store.selection) { sel in
+            DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
+        }
+        .overlay(alignment: .bottom) {
+            if let err = store.error {
+                Text(err).font(.system(size: 11, design: .monospaced)).lineLimit(2).padding(8)
+                    .background(Theme.red.opacity(0.9), in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
+                    .onTapGesture { store.error = nil }
+            } else if let busy = store.busy {
+                Text(busy.uppercased()).font(.system(size: 10, weight: .semibold, design: .monospaced)).tracking(1.5).padding(8)
+                    .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
+            }
+        }
+        .background(Theme.bg)
+    }
+}
+
+struct PostureBar: View {
+    @Environment(COPStore.self) private var store
+    var body: some View {
+        let s = store.snapshot?.summary
+        let posture = s?.posture ?? "normal"
+        VStack(spacing: 6) {
+            HStack(spacing: 10) {
+                Text("TOC").font(.system(size: 18, weight: .heavy, design: .monospaced)).tracking(3)
+                Chip(text: "POSTURE · \(posture.uppercased())", color: Theme.posture(posture))
+                Spacer()
+                Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    Stat("PERSONNEL", s?.totalPeople); Stat("PRESENT", s?.present); Stat("TRAVELING", s?.traveling, Theme.blue)
+                    Stat("VIP OUT", s?.vipsTraveling, Theme.gold); Stat("CHECKED IN", s?.checkedInFresh, Theme.green)
+                    Stat("SEC ON SHIFT", s?.securityOnShift, Theme.green); Stat("THREATS", s?.activeThreats, Theme.red)
+                    Stat("CONFIRMED", s?.confirmedLinks, Theme.red); Stat("UNACCOUNTED", s?.unaccounted, (s?.unaccounted ?? 0) > 0 ? Theme.red : .white)
+                    Stat("OPEN PIRs", s?.openPirs, Theme.amber); Stat("EVENTS", s?.upcomingEvents)
+                }
+            }
+        }
+        .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 8)
+        .background(Theme.panel)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+    func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
+}
+
+struct Stat: View {
+    var label: String; var value: Int?; var color: Color
+    init(_ label: String, _ value: Int?, _ color: Color = .white) { self.label = label; self.value = value; self.color = color }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value.map(String.init) ?? "—").font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundStyle(color)
+            Text(label).font(.system(size: 8, design: .monospaced)).tracking(1.2).foregroundStyle(Theme.dim)
+        }
+    }
+}

@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+dist/
+build/
+.env
+.mypy_cache/
+.ruff_cache/
+toc.db
+node_modules/
+apps/cop-web/dist/
+apps/cop-ios/build/
+apps/cop-ios/TOC.xcodeproj/
+sigtoc_state.json

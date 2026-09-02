@@ -1,0 +1,41 @@
+policy_id: "POL-CSAM-000"
+name: "Child Sexual Abuse Material (CSAM/CSAE)"
+version: "1.0.0"
+jurisdiction_defaults: ["GLOBAL"]
+
+scope:
+  inference_engine: "hash_matching_only"
+  supported_modalities: ["image", "video", "text"]
+
+definitions:
+  core_rule: >
+    Zero-tolerance mandatory legal compliance policy.
+    CRITICAL ARCHITECTURAL BOUNDARY: CSAM is explicitly scoped OUT of LLM/AI inference.
+    All detection is strictly routed to deterministic perceptual hash matching
+    (PhotoDNA / NCMEC API) and immediate mandatory law enforcement escalation.
+
+severity_tiers:
+  tier_1_severe:
+    description: "Known or suspected CSAM/CSAE material identified via perceptual hash or trusted legal flagger."
+    enforcement_action: "route_to_legal_hash_check"
+  tier_2_moderate:
+    description: "N/A - Zero tolerance binary classification."
+    enforcement_action: "route_to_legal_hash_check"
+  tier_3_borderline:
+    description: "N/A - Zero tolerance binary classification."
+    enforcement_action: "route_to_legal_hash_check"
+
+routing_matrix:
+  tier_1_severe:
+    high_confidence: "immediate_takedown_ncmec_report_account_lock"
+    medium_confidence: "immediate_takedown_ncmec_report_account_lock"
+    low_confidence: "immediate_takedown_ncmec_report_account_lock"
+
+reach_gates:
+  - views: 1
+    action: "mandatory_immediate_hash_triage"
+
+examples:
+  - text: "[Perceptual Hash Match PhotoDNA: Hash-ID-99281]"
+    expected_tier: "tier_1_severe"
+    reasoning: "Direct hash match triggers instantaneous quarantine and NCMEC filing."
