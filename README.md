@@ -1,7 +1,7 @@
 # TOC: Tactical Operations Center (Coptoc & Sigtoc)
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-![Tests](https://img.shields.io/badge/tests-passing_locally-brightgreen) <!-- CI badge goes here once the repo is on GitHub: .github/workflows/test.yml -->
+[![CI](https://github.com/h4yd3n/toc/actions/workflows/test.yml/badge.svg)](https://github.com/h4yd3n/toc/actions/workflows/test.yml)
 
 A unified **Tactical Operations Center (TOC)** combining:
 - **`apps/coptoc`**: Trust & Safety / Policy-as-Code compiler, reach gates, and immutable audit ledger.
