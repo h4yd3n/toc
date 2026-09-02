@@ -1,5 +1,8 @@
-PYTHON ?= python3
-PYTEST ?= .venv/bin/pytest
+# Use the local venv when it exists (dev), otherwise whatever is on PATH (CI).
+VENV_BIN := $(if $(wildcard .venv/bin/python),.venv/bin/,)
+PYTHON ?= $(VENV_BIN)python
+PYTEST ?= $(VENV_BIN)pytest
+UVICORN ?= $(VENV_BIN)uvicorn
 
 .PHONY: test test-coptoc test-sigtoc test-integration diff lint run-api run-web run-cop ios-gen ios-build ios-run
 
@@ -16,10 +19,10 @@ test-integration:
 	$(PYTEST) tests/integration/ -v
 
 diff:
-	PYTHONPATH=packages/shared/src:apps/coptoc/src .venv/bin/python apps/coptoc/evals/harness.py --policy apps/coptoc/policies/hate_speech.yaml --golden apps/coptoc/evals/golden_sets/hate_speech_golden.json
+	PYTHONPATH=packages/shared/src:apps/coptoc/src $(PYTHON) apps/coptoc/evals/harness.py --policy apps/coptoc/policies/hate_speech.yaml --golden apps/coptoc/evals/golden_sets/hate_speech_golden.json
 
 run-api:
-	PYTHONPATH=packages/shared/src:apps/coptoc/src:apps/sigtoc/src .venv/bin/uvicorn coptoc.api.server:app --reload --port 8000
+	PYTHONPATH=packages/shared/src:apps/coptoc/src:apps/sigtoc/src $(UVICORN) coptoc.api.server:app --reload --port 8000
 
 run-web:
 	npm --prefix apps/cop-web run dev
