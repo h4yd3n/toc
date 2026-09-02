@@ -364,7 +364,7 @@ make test
 make test-sigtoc
 
 # Live demo (requires ANTHROPIC_API_KEY for Claude analysis)
-export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=<your key>
 sigtoc trip create --traveler "CEO" --destination "Riyadh, Saudi Arabia" \
   --arrive 2026-10-01 --depart 2026-10-04 --purpose "Board meeting"
 sigtoc collect --trip TRIP-001

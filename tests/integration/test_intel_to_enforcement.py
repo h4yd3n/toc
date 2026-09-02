@@ -1,5 +1,5 @@
 import os
-from sigtoc.connectors.telegram_monitor import TelegramThreatMonitor
+from sigtoc.fixtures import FixtureThreatFeed
 from sigtoc.alerting.emitter import TacticalAlertEmitter
 from coptoc.compiler.validator import PolicyValidator
 from coptoc.compiler.prompt_builder import PolicyPromptCompiler
@@ -12,7 +12,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../apps/copto
 def test_end_to_end_intel_to_enforcement_loop():
     """
     Demonstrates the complete Intel-to-Enforcement loop:
-    1. Sigtoc monitors Telegram and discovers Storm-0821 coordinated slur campaign.
+    1. A fixture threat feed (stand-in for a closed-source collector) reports the Storm-0821 coordinated slur campaign.
     2. Sigtoc emits tactical alert & recommends policy overlay update.
     3. Policy overlay adds new evasion patterns (e.g., 'vermin' keyword)
     4. Bridge applies overlay to base hate_speech policy
@@ -22,7 +22,7 @@ def test_end_to_end_intel_to_enforcement_loop():
     7. Verify the ledger records the full chain including intel source.
     """
     # Step 1 & 2: Sigtoc discovers threat
-    monitor = TelegramThreatMonitor()
+    monitor = FixtureThreatFeed()
     threat_reports = monitor.parse_to_threat_reports(monitor.fetch_latest_signals())
     emitter = TacticalAlertEmitter()
     alert = emitter.emit_alert(threat_reports[0])
@@ -32,7 +32,7 @@ def test_end_to_end_intel_to_enforcement_loop():
     # Extract policy overlay from alert
     overlay = alert.get("policy_overlay")
     assert overlay is not None
-    assert overlay["metadata"]["threat_intel_source"] == "telegram_monitor"
+    assert overlay["metadata"]["threat_intel_source"] == "fixture:threat_feed"
 
     # Step 3 & 4: Load base policy and apply overlay
     validator = PolicyValidator()

@@ -1,11 +1,11 @@
-from sigtoc.connectors.telegram_monitor import TelegramThreatMonitor
+from sigtoc.fixtures import FixtureThreatFeed
 from sigtoc.normalizer.stix_mapper import STIXMapper
 from sigtoc.fusion.graph import ThreatEntityGraph
 from sigtoc.scoring.scorer import ThreatScorer
 from sigtoc.alerting.emitter import TacticalAlertEmitter
 
 def test_telegram_connector_and_scoring():
-    monitor = TelegramThreatMonitor()
+    monitor = FixtureThreatFeed()
     raw = monitor.fetch_latest_signals()
     assert len(raw) == 1
     
@@ -18,7 +18,7 @@ def test_telegram_connector_and_scoring():
     assert ThreatScorer.is_critical_escalation(report) is True
 
 def test_stix_normalization_and_entity_graph():
-    monitor = TelegramThreatMonitor()
+    monitor = FixtureThreatFeed()
     reports = monitor.parse_to_threat_reports(monitor.fetch_latest_signals())
     report = reports[0]
 
@@ -35,7 +35,7 @@ def test_stix_normalization_and_entity_graph():
 
 def test_tactical_alert_emitter():
     emitter = TacticalAlertEmitter()
-    monitor = TelegramThreatMonitor()
+    monitor = FixtureThreatFeed()
     report = monitor.parse_to_threat_reports(monitor.fetch_latest_signals())[0]
     alert = emitter.emit_alert(report)
     assert alert['is_critical'] is True

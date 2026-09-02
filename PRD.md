@@ -98,7 +98,7 @@ The COP is one screen. It never navigates away.
 
 **[TONIGHT] — placeholder.** A handful of synthetic threat markers near real locations, so the COP reads as blue *and* red. Each has a title, severity, radius, source, observed time, and a confidence. They're fake and labeled as such in the data.
 
-**[NEXT] — the real thing.** The full S2 spec was written and is preserved in `PRD-v2-trust-safety-ARCHIVE.md` §4 and `PRD-v1-travel-risk-ARCHIVE.md` §6.5. What carries forward unchanged:
+**[NEXT] — the real thing.** The full S2 spec was written and is preserved in `docs/archive/PRD-v2-trust-safety.md` §4 and `docs/archive/PRD-v1-travel-risk.md` §6.5. What carries forward unchanged:
 
 - **Three confidence axes** — source reliability (A–F), information credibility (1–6), analytic confidence (ICD 203) — always stated separately
 - **Confidence is not probability** — estimative language from a fixed seven-term list with numeric bands
@@ -272,8 +272,8 @@ COP never writes back to a source system.
 
 ## Appendix — Version History
 
-- **v1** — corporate travel-risk platform with a scoring model. Archived as `PRD-v1-travel-risk-ARCHIVE.md`. The scoring mathematics was invented and is not carried forward.
-- **v2** — trust & safety decision support. Archived as `PRD-v2-trust-safety-ARCHIVE.md`. The evidence discipline is carried forward as the S2 spec.
+- **v1** — corporate travel-risk platform with a scoring model. Archived as `docs/archive/PRD-v1-travel-risk.md`. The scoring mathematics was invented and is not carried forward.
+- **v2** — trust & safety decision support. Archived as `docs/archive/PRD-v2-trust-safety.md`. The evidence discipline is carried forward as the S2 spec.
 - **v3** — the TOC as a staff-structured operations center with a common operating picture at its center.
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
