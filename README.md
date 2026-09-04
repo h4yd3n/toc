@@ -86,8 +86,21 @@ list; the requirements' coverage bars move. Open the S2 **REQUIREMENTS** panel, 
 **ASSESS**: the Area Assessment lays the two candidates side by side with reported, quiet, and not-collected cells and
 no score. Open the seeded case **North gate loiterer** and work its review queue: every suggestion cites the report
 line it came from. Open a roll call on London, request check-ins (simulated unless Twilio and Slack are configured),
-and watch the fifteen-minute rule float the silent names to the top. Open **INTSUM**: the day's diff, drafted at the
-fixed hour, waiting for your release. Then hand over — the brief freezes, and the incoming Battle Captain must
-acknowledge every item that arrived during the overlap.
+and watch the fifteen-minute rule float the silent names to the top. Confirm the link on the DC-East threat and press
+**RUN RULE** under WARNINGS: the rule proposes a FLASH; release it and it goes out over SMS and chat (simulated) and
+sits red across the top of every client until each role acknowledges. Open **PLAN 90d** on the S3 panel and assign
+security to the board meeting. Open **INTSUM**: the day's diff, drafted at the fixed hour, waiting for your release.
+Then hand over — the brief freezes, and the incoming Battle Captain must acknowledge every item that arrived during
+the overlap.
 
 Every one of those actions is on the battle log, hash-chained, with who did it and why.
+
+## Before you deploy
+
+This is a prototype built to be read and run locally. It has **no authentication**: the role and the actor come from
+two request headers (`X-TOC-Role`, `X-TOC-Actor`), which is what lets one screen switch identities for a demo. The
+API allows any CORS origin. Cleartext HTTP is allowed only for the dev hosts the phones use. The check-in and roll-call
+links are HMAC tokens signed with `TOC_SECRET`, which defaults to a dev value. Twilio, Slack, ACLED, CLSTR, and the
+S2 drafter's model are all off until their keys are in the environment, and everything they would have done is
+recorded as *simulated* — never as sent. Put an identity layer, TLS, and a real database in front of it before any
+of this touches real people.
