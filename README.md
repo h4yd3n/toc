@@ -30,6 +30,33 @@ Everything is synthetic: people, sites, phone numbers, reports. Live feeds are r
 The rest is in [PRD.md §1.1](PRD.md). The COP is the fusion cell. Sigtoc is the S2. Modtoc is queue work that
 [ROOST](https://github.com/roostorg) has largely built already.
 
+## Who built this
+
+I spent more than twenty years as a US Army military intelligence officer. I ran an intelligence team, served as a
+Battle Captain and as a Chief of Staff, and spent a year in Iraq as the S2, working hand in hand with Ops to plan
+current and future operations. The habits in this repository come from that job: state source reliability and
+analytic confidence separately and never blend them into a single number; brief what you know, what you assess, and
+what would have to be true for you to be wrong; and hand over the watch by making the incoming shift acknowledge
+everything that happened while they were asleep.
+
+Then I did a version of the same work in the civilian world, at TikTok, leading coordinated-inauthentic-behavior
+investigations that ended in more than a million takedowns. Different adversary, same discipline: sources of uneven
+reliability, a picture that has to survive scrutiny, and a decision-maker who needs it now rather than perfect.
+
+Corporate security already has the pieces — travel security, executive protection, a GSOC, insider threat, an intel
+vendor feed or three. What it usually does not have is the staff structure that fuses them. Each piece lives in its
+own tool and its own browser tab, the watch floor sees a fraction of what the company knows, and nobody owns the
+single picture. The military solved that problem a long time ago, and the answer is a staff and a wall: named
+sections with named responsibilities, one common operating picture they all write to, and a Battle Captain on watch
+who owns the current fight and hands it over on the record. **TOC is the argument that the same structure works for
+a company.**
+
+It is also a portfolio. I am looking for threat-intelligence and trust-and-safety work, and I would rather show the
+approach than describe it — so this is a running prototype instead of a slide deck: it starts locally, the people
+and sites are synthetic, the feeds are real, and nothing needs a key. I do not write Python. The code here is
+AI-generated against a specification I wrote, and every contested design choice is logged in [PRD.md §14](PRD.md)
+with the reasoning, because a requirements document I could not defend would serve nobody.
+
 ## Layout — three modules, one repo
 
 ```
