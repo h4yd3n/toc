@@ -6,6 +6,7 @@ import { CasesPanel } from './Cases'
 import { AreaPanel } from './Area'
 import { IntsumPanel } from './Intsum'
 import { DistributionBox, OperationPanel } from './Operation'
+import { FlashStrip, WarningsSection } from './Warnings'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -16,7 +17,7 @@ const LOG_LABEL: Record<string, string> = {
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
-  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
+  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
 }
 
 function rel(iso: string | null, now: number): string {
@@ -68,7 +69,7 @@ export default function App() {
   const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
 
   return (
-    <div className={`wall posture-${s?.posture ?? 'normal'}`}>
+    <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''}`}>
       <header className="top">
         <div className="brand"><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         <div className={`posture-chip ${s?.posture ?? ''}`}>POSTURE · {(s?.posture ?? '—').toUpperCase()}</div>
@@ -79,6 +80,7 @@ export default function App() {
           <Stat label="CHECKED IN" v={s?.checked_in_fresh} accent="green" /><Stat label="SEC ON SHIFT" v={s?.security_on_shift} accent="green" />
           <Stat label="THREATS" v={s?.active_threats} accent="red" /><Stat label="CONFIRMED" v={s?.confirmed_links} accent="red" />
           {(s?.unaccounted ?? 0) > 0 && <Stat label="UNACCOUNTED" v={s?.unaccounted} accent="red" />}
+          {(s?.flash ?? 0) > 0 && <Stat label="FLASH" v={s?.flash} accent="red" />}
           <Stat label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat label="EVENTS" v={s?.upcoming_events} />
         </div>
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
@@ -86,6 +88,7 @@ export default function App() {
         </select>
         <div className="clock">{clock(new Date(now))}</div>
       </header>
+      <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
       <aside className="left">
         <PanelHead code="S1" title="PERSONNEL" hint="Blue Force" />
@@ -147,6 +150,7 @@ export default function App() {
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
+        <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
         <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
         <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
         <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>

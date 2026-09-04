@@ -350,3 +350,14 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .task .ttitle { flex: 1; } .task.done .ttitle { color: var(--dim); text-decoration: line-through; } .task.blocked .ttitle { color: var(--red); }
 .dist { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 4px; }
 .detail .row-btns input, .detail .row-btns select { font: inherit; font-size: 11px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; padding: 3px 6px; }
+
+/* §5.6 Warning — FLASH strip */
+.wall.has-flash { grid-template-rows: 54px auto 1fr 176px; grid-template-areas: "top top top" "flash flash flash" "left center right" "bottom bottom bottom"; }
+.flash { grid-area: flash; background: rgba(239,68,68,.12); border-bottom: 1px solid rgba(239,68,68,.6); display: flex; flex-direction: column; }
+.flash-item { display: flex; align-items: center; gap: 10px; padding: 4px 14px; cursor: pointer; border-bottom: 1px solid rgba(239,68,68,.15); }
+.flash-item:last-child { border-bottom: none; }
+.flash-tag { font-family: var(--mono); font-weight: 800; font-size: 10px; letter-spacing: .2em; color: #fff; background: var(--red); padding: 2px 7px; border-radius: 3px; animation: flashpulse 1.2s ease-in-out infinite; }
+@keyframes flashpulse { 50% { opacity: .55; } }
+.flash-title { font-weight: 600; color: #fecaca; font-size: 12px; }
+.flash-item .mini { margin-left: auto; }
+.row.warn { border-left-color: rgba(239,68,68,.5); }

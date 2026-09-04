@@ -66,7 +66,7 @@ export interface LogEntry { id: string; at: string; type: string; actor: string;
 export interface Summary {
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
-  open_incidents: number; unaccounted: number; posture: Posture
+  open_incidents: number; unaccounted: number; flash: number; warnings_pending: number; posture: Posture
 }
 export type Role = 'battle_captain' | 'ep' | 'security' | 'analyst' | 'ea'
 export interface Watch {
@@ -89,7 +89,7 @@ export interface Brief {
   handover_items: ({ kind: 'open_incident'; id: string; title: string; accounted: number; total: number } | { kind: 'during_handover'; id: string; summary: string; at: string })[]
   outgoing_notes: string | null; nstr: boolean; acknowledgement: { required_item_ids: string[]; by: string | null; at: string | null }; generated_at: string
 }
-export interface Snapshot {
+export interface Snapshot { warnings: Warning[];
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }
@@ -147,3 +147,8 @@ export interface OpResource { id: string; item: string; qty: number; status: 're
 export interface OperationSummary { id: string; title: string; subject_type: string; subject_id: string; subject_name: string; status: 'planned' | 'active' | 'complete' | 'cancelled'; tasks_total: number; tasks_done: number; blocked: number; resources_open: number; pct: number; from_product_type: string | null; from_product_id: string | null; opened_by: string }
 export interface Operation extends OperationSummary { opened_at: string; closed_at: string | null; notes: string; tasks: OpTask[]; resources: OpResource[] }
 export interface Distribution { product_type: string; product_id: string; recipients: { id: string; recipient: string; channel: string; delivery: string; sent_at: string; sent_by: string; acknowledged_at: string | null; acknowledged_by: string | null; latency: { created_to_sent_min: number | null; sent_to_ack_min: number | null; outstanding_min: number | null }; stale: boolean; note: string }[]; sent: number; acknowledged: number; unacknowledged: string[]; stale: string[] }
+
+// §5.6 Warning — FLASH
+export interface Warning { id: string; title: string; text: string; subject_type: 'location' | 'person' | 'event'; subject_id: string; subject_name: string; threat_id: string | null; severity: string
+  status: 'suggested' | 'draft' | 'released' | 'cancelled' | 'expired'; suggested_by: string; created_at: string; released_by: string | null; released_at: string | null; cancelled_by: string | null
+  dispatch: { sms?: { sent: number; simulated: number; failed: number }; chat?: string; people?: number; simulated?: boolean }; recipients: string[]; age_min: number | null }
