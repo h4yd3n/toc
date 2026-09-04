@@ -1,6 +1,7 @@
 # Use the local venv when it exists (dev), otherwise whatever is on PATH (CI).
 VENV_BIN := $(if $(wildcard .venv/bin/python),.venv/bin/,)
 PYTHON ?= $(VENV_BIN)python
+PY := $(VENV_BIN)python
 PYTEST ?= $(VENV_BIN)pytest
 UVICORN ?= $(VENV_BIN)uvicorn
 
