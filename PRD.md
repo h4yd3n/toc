@@ -287,6 +287,14 @@ store evidence — they must be graph-shaped from the start. The views come afte
 and the Area Assessment. All three views ship together (Decision R): they are one model, and building one without the
 others would mean building the model three times.
 
+**The analysis is not deferred — only the pictures are.** Extraction into the graph *is* link, event, and
+pattern-of-life analysis: once reports are read into entities, relationships, and events with times, the AI can state
+"activity clusters Thursday nights" or "three accounts share infrastructure" as judgments in an assessment, with
+evidence, before any chart exists. The views are how a human sees what the graph already holds. Two limits on
+"automatic": there is nothing to link until sources report on *people* (organic reports, social monitoring, cases —
+hazard feeds have no network), and automatic extraction makes automatic errors, which is why every extracted line is
+suggested until confirmed.
+
 **Not in scope.** Ingesting a platform's full event firehose; bulk data fusion; anything that competes with Gotham on
 volume. Cases are case-sized. The value is provenance on every line, not scale.
 
