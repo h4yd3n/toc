@@ -214,6 +214,22 @@ The fixed-time draft: the COP app runs a ten-minute clock that drafts once per c
 
 The snapshot's `events[]` and `trips[]` carry `operation` (summary or null) and the snapshot has `operations[]` (planned and active).
 
+## 3.7 Warnings (`/v1/s2/warnings`, PRD §5.6), planning (`/v1/cop/planning`, §6), imports (`/v1/cop/import`, §13)
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/s2/warnings?status=` | | suggested / draft / released / cancelled / expired; released ones expire after 24 h |
+| `POST` | `/s2/warnings` | `subject_type (location/person/event), subject_id, title, text?, severity (elevated/critical), threat_id?` — battle_captain / analyst | a human draft |
+| `POST` | `/s2/warnings/suggest` | | runs the rule (collection runs it after every refresh): critical live threat inside a subject's radius, or elevated with a confirmed link; idempotent per (threat, subject). Ledger `s2.warning.suggested` |
+| `POST` | `/s2/warnings/{id}/release` | — **battle_captain only** | SMS to the people at the subject, a post to the ops channel (simulated without credentials, and the ledger says so), an acknowledgement row per role (`battle_captain`, `ep`, `security`) readable and ackable at `/s2/products/warning/{id}/…`. Ledger `s2.warning.released` |
+| `POST` | `/s2/warnings/{id}/cancel` | — battle_captain / analyst | ledger `s2.warning.cancelled` |
+| `GET` | `/cop/planning?days=90` | | weeks with events (coverage: `required, assigned, gap, rule, people[]`), trips, `security[]` with commitments, `gaps[]` |
+| `POST` / `DELETE` | `/cop/events/{id}/coverage` · `/{person_id}` | `person_id, role (lead/agent/advance/driver)` — battle_captain / security | security-team people only; 409 on a duplicate; overlaps with another event are returned and logged. `PATCH /cop/events/{id}` accepts `required_security` to override the rule. Ledger `cop.event.coverage` |
+| `POST` | `/cop/import/{people\|shifts\|trips\|ics}` | `text, source?` — battle_captain / ea / security / analyst | export adapters; the response counts created / updated / skipped and lists what could not be placed. Ledger `cop.import` |
+| `POST` | `/cop/import/badge/events` | `events[] {person_id \| email, location_id, at?, direction}` | a badge-in is a check-in at the site |
+
+The snapshot carries `warnings[]` (suggested, draft, released), `summary.flash`, `summary.warnings_pending`, `summary.off_duty`, `summary.unreachable`, `people[].availability`, and `events[].coverage`.
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.

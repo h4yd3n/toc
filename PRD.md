@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.16
+**Version:** 3.17
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -58,8 +58,8 @@ This is the organizing principle for the whole product. Every feature belongs to
 | **S1** | Personnel | Where everyone is, who's assigned where, who's on shift, how to reach them | **Blue Force Tracker** | **[BUILT]** |
 | **S2** | Intelligence | External and open-source threat intel, assessments, PIRs | **Sigtoc** | **[BUILT]** live GDACS collection, analyst-confirmed links, CLUE-style drafter with refuse-to-assess |
 | **S3** | Operations | Executive travel, corporate events, planned activity | **Ops Calendar** | **[BUILT]** travel + events (attendees generate trips), write API for EAs |
-| **S4** | Supply / Logistics | Equipment, residence security, security team kit | **Equipment Board** | **[LATER]** |
-| **S6** | Communications | Check-ins, accountability roll calls, incident comms | **Accountability** | **[BUILT]** check-in, roll call with call log; alerting **[LATER]** |
+| **S4** | Supply / Logistics | Equipment, residence security, security team kit | **Equipment Board** | **[DROPPED]** by the author, 2026-09-04 — S4 lives on only as resource asks inside an operation |
+| **S6** | Communications | Check-ins, accountability roll calls, incident comms | **Accountability** | **[BUILT]** check-in, roll call with call log, SMS + chat out, SMS in, escalation rule, FLASH alerting |
 
 S1 and S3 feed each other: S3 says who is going where and when; S1 shows where they are now. S2 overlays threats on both. S4 says what they have with them.
 
@@ -167,7 +167,7 @@ is drawn from the same picture the INTSUM summarizes.
 
 **Aggregation.** Every location reports: people assigned, people present, security on shift, VIPs present. These roll up into clusters when zoomed out.
 
-**[BUILT]:** real-time check-in and last-known-position freshness (12 h window, Decision 2). **[NEXT]:** off-duty vs. unreachable as distinct states.
+**[BUILT]:** real-time check-in and last-known-position freshness (12 h window, Decision 2); availability as a state of its own — on shift, off duty, available, unreachable (a roll call that could not reach you, or a stale check-in on the road).
 
 ---
 
@@ -243,7 +243,7 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | **Assessment** | a wall subject | the finding for one trip, event, or site: BLUF, judgments with term + band + confidence, evidence, gaps | **[BUILT]** |
 | **Area Assessment** | a directed requirement | the environment for a place and window that may not be on the wall; **several candidates compared side by side** | **[BUILT]** — `/v1/s2/area-assessments`; the S2 panel picks directed requirements and opens the matrix |
 | **INTSUM** | daily, standing | what changed since the last one across every active requirement: new threats attributed to requirements, wall changes, organic reports and cases, products, collection and gaps | **[BUILT]** — drafts itself at `TOC_INTSUM_HOUR_UTC` (default 0500Z), the Battle Captain releases; NSTR when nothing happened |
-| **Warning** | collection | an imminent, specific threat to a subject — FLASH to the floor | **[LATER]** with S6 alerting |
+| **Warning** | collection | an imminent, specific threat to a subject — FLASH to the floor | **[BUILT]** — suggested by rule (critical inside a radius, or elevated with a confirmed link), released only by the Battle Captain; SMS to the people at the subject, a post to the ops channel, an acknowledgement row per role; on the wall and both phones as a FLASH strip; expires after 24 h; on the INTSUM |
 
 **The Area Assessment compares; it does not score** (Decision I). Candidates are laid side by side on what is known, how well it is known, and what is missing. Each cell is one of three states: **reported** — a term from the fixed list, its band, a code-computed confidence, and the evidence; **quiet** — a tasked source is watching and has reported nothing, which is worth exactly as much as that source's reliability and is never a finding of safety; **gap** — nobody is watching, with the sources that could. Reporting up to 90 days before the window counts as describing the place. A product where nothing is known for any candidate refuses and cannot be approved (§5.5). Ranking is the human's.
 
@@ -270,13 +270,13 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 
 Domains held for deployment: **coptoc.com**, **sigtoc.com**, **modtoc.com** — one per module, matching Decision 3a's standalone-plus-embedded shape.
 | Earthquakes | USGS | free, keyless | **[BUILT]** live — M6+ anywhere, anything within 400 km of a blue-force point |
-| Severe weather (US) | NWS / NOAA alerts | free, keyless | **[BUILT]** live — polygon alerts within 150 km; zone-only alerts skipped **[NEXT]** |
+| Severe weather (US) | NWS / NOAA alerts | free, keyless | **[BUILT]** live — polygon alerts within 150 km; zone-only alerts resolved through the zone endpoint, cached, at most 25 lookups per run |
 | Humanitarian / conflict situation | ReliefWeb API | free, needs an approved `appname` | **[LATER]** — v1 is decommissioned and v2 refuses unregistered app names |
 | Civil unrest, political violence | ACLED · GDELT | free key + email · free | ACLED **[BUILT]**, live when `ACLED_API_KEY` + `ACLED_EMAIL` are set (parser follows the documented shape; untested live). GDELT **[LATER]** — the GEO API is gone and the DOC API is rate-limited and has no coordinates |
 | Clustered news events by country, with timelines | CLSTR (clstr.news) — a new, single-maintainer service; multi-source clusters and "situations", ~30–90 min behind the wires by design | free key, 100 req/day, 7-day history | **[BUILT]** trial, live when `CLSTR_API_KEY` is set; country-scoped; source reliability **F** until it earns a grade; its significance score is theirs, never ours |
 | Health notices | WHO Disease Outbreak News | free JSON (the RSS is gone) | **[BUILT]** live — country-scoped |
 | Travel advisories | State Dept RSS · FCDO Atom | free | **[BUILT]** live — country-scoped; level 3–4 / advise-against draw a ring at our site in that country, lower levels a marker only |
-| Baseline for an unfamiliar place | Nager.Date holidays (Wikidata · NOAA climate **[LATER]**) | free, keyless | **[BUILT]** — public holidays in the window appear as a `facts` cell on the Area Assessment |
+| Baseline for an unfamiliar place | Nager.Date holidays · Wikidata nearest settlement (NOAA climate **[LATER]**) | free, keyless | **[BUILT]** — public holidays in the window and the nearest settlement's name, population, and country appear as a `facts` cell on the Area Assessment |
 | Sanctions, entities | OpenSanctions | free | **[LATER]** |
 | Targeted threat reporting | OSAC · Flashpoint · Dataminr · Recorded Future | login / paid | **[LATER]** premium connectors |
 
@@ -365,15 +365,15 @@ All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a
 
 **[BUILT] — events.** A corporate event has a venue, a time window, and attendees. Two months out it's on the calendar so S2 can assess threats against it and S1 can plan security coverage. Attending VIPs each get a trip generated.
 
-**[LATER]** — long-range planning view, security coverage assignment per event.
+**[BUILT]** — long-range planning view (the next 90 days by week: events with coverage and gaps, trips, who is committed) and security coverage per event: a default rule (one lead, one agent per VIP, one more past twenty attending) the Battle Captain can override; only security-team people can cover; overlapping assignments are flagged on the ledger.
 
 ---
 
-## 7. S4 — Supply: Equipment Board **[LATER]**
+## 7. S4 — Supply: Equipment Board **[DROPPED]**
 
 Who has what. Mostly laptops and phones at a tech company, but for the security team it's kit, and for executive residences it's cameras, access control, and — where lawful and policy allows — armed coverage.
 
-Entity sketch: `Equipment` (type, serial, assigned to person or location, status). Not built tonight.
+Dropped by the author on 2026-09-04 ("forget about S4 for now"). What survives is the S4 resource ask inside an operation (§5.10 #3).
 
 ---
 
@@ -493,11 +493,11 @@ COP never writes back to a source system.
 
 | Section | Fact | Comes from | Status |
 | :--- | :--- | :--- | :--- |
-| S1 | People, teams, roles, VIP flag, phone, email | HRIS / directory (Workday, Okta, Google Directory) | seed tagged `hris:workday` — connector **[NEXT]** |
-| S1 | Who is on shift | Security scheduling / guard-force system | manual on the wall — connector **[LATER]** |
-| S1 | Where someone actually is | Badge system, check-in app, EP team | check-in **[BUILT]** — badge feed **[LATER]** |
-| S3 | Executive travel | Travel management system (Concur, Egencia, Navan), executive calendars | seed tagged `travel_system:concur` / `calendar:google` — connector **[NEXT]** |
-| S3 | Corporate events and attendees | Calendar, event platform, EA entry | write API **[BUILT]** — calendar connector **[NEXT]** |
+| S1 | People, teams, roles, VIP flag, phone, email | HRIS / directory (Workday, Okta, Google Directory) | **[BUILT]** as an export adapter: CSV import upserts by id then email, provenance `hris:csv`; OAuth connectors **[LATER]** (need accounts) |
+| S1 | Who is on shift | Security scheduling / guard-force system | **[BUILT]** as a CSV import (`scheduling:csv`); a live connector **[LATER]** |
+| S1 | Where someone actually is | Badge system, check-in app, EP team | check-in **[BUILT]**; badge feed **[BUILT]** as a JSON event stream (`POST /v1/cop/import/badge/events`: a badge-in is a check-in at the site) |
+| S3 | Executive travel | Travel management system (Concur, Egencia, Navan), executive calendars | **[BUILT]** as a CSV import upserting by booking reference (`travel_system:csv`); API connectors **[LATER]** |
+| S3 | Corporate events and attendees | Calendar, event platform, EA entry | write API **[BUILT]**; calendar **[BUILT]** as an ICS import (attendees matched by email, venue by site name or GEO, trips generated); Google/Outlook OAuth **[LATER]** |
 | S2 | Natural hazards | GDACS (UN OCHA / EC JRC) — free, keyless | **[BUILT]** live |
 | S2 | Earthquakes, severe weather | USGS earthquake feed, NWS/NOAA alerts, national met services | USGS + NWS **[BUILT]** live |
 | S2 | Country and city advisories | State Dept, FCDO, OSAC | State Dept + FCDO **[BUILT]** live, country-scoped; OSAC **[LATER]** (login) |
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.17** — the rest of the document: the Warning product with S6 alerting, S1 availability states, NWS zone resolution, export adapters for HRIS / scheduling / travel / calendar / badge, long-range planning with coverage, Wikidata baseline; S2 panels and FLASH on iOS and Android. S4 dropped by the author.
 - **v3.16** — §5.10 #3 `Operation` (target package → OPORD) and #4 dissemination tracking built.
 - **v3.15** — S6 decisions L–N built: inbound SMS webhook, 15-minute escalation rule, manual roster adds.
 - **v3.14** — collectors: USGS, NWS, WHO DON, State Dept, FCDO live and keyless; ACLED and CLSTR behind keys; Nager.Date holiday baseline; country-scoped reporting attaches to requirements by country. ReliefWeb and GDELT deferred with reasons.
