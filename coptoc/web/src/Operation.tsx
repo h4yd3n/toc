@@ -11,7 +11,7 @@ export function OperationPanel({ id, role, busy, act, onClose, reload }: { id: s
   const [nt, setNt] = useState({ title: '', section: 'S3', owner: '' })
   const [nr, setNr] = useState({ item: '', qty: 1 })
   const load = () => api.getOperation(id).then(setOp).catch(() => setOp(null))
-  useEffect(load, [id, reload])
+  useEffect(() => { load() }, [id, reload])
   if (!op) return <div className="detail op"><button className="close" onClick={onClose}>×</button><div className="loading-inline">Loading…</div></div>
   const isBC = role === 'battle_captain'
   const next = (s: string) => s === 'todo' ? 'doing' : s === 'doing' ? 'done' : 'todo'
@@ -66,7 +66,7 @@ export function DistributionBox({ ptype, pid, role, busy, act, releasable }: { p
   const [d, setD] = useState<Distribution | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set(['battle_captain', 'ep', 'security']))
   const load = () => api.getDistribution(ptype, pid).then(setD).catch(() => setD(null))
-  useEffect(load, [ptype, pid])
+  useEffect(() => { load() }, [ptype, pid])
   const can = role === 'battle_captain' || role === 'analyst'
   const toggle = (r: string) => setPicked(p => { const n = new Set(p); n.has(r) ? n.delete(r) : n.add(r); return n })
   const mine = d?.recipients.find(r => (r.recipient === role || r.recipient === api.session.actor) && !r.acknowledged_at)

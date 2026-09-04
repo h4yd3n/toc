@@ -50,3 +50,12 @@ ios-run: ios-build
 	xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true
 	xcrun simctl install booted coptoc/ios/build/Build/Products/Debug-iphonesimulator/TOC.app
 	xcrun simctl launch booted com.h4yd3n.TOC
+
+# ---- Android (coptoc/android) — needs the Android SDK and a JDK 17+; Android Studio's bundled JBR works:
+#   JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" make android-build
+ANDROID_DIR := coptoc/android
+ADB := $(HOME)/Library/Android/sdk/platform-tools/adb
+android-build:
+	cd $(ANDROID_DIR) && ./gradlew :app:assembleDebug
+android-run: android-build
+	$(ADB) install -r $(ANDROID_DIR)/app/build/outputs/apk/debug/app-debug.apk && $(ADB) shell am start -n com.toc.coptoc/.MainActivity

@@ -247,10 +247,10 @@ function PanelHead({ code, title, hint, inline, children }: { code: string; titl
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
 function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
-  const [addOpen, setAddOpen] = useState(false)
   sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
   act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
 }) {
+  const [addOpen, setAddOpen] = useState(false)
   const threatRows = (ids: string[], confirmed: string[], target: { type: 'location' | 'person'; id: string }) => ids.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
     <li key={t!.id} className="tline" onClick={e => { e.stopPropagation(); onSelect({ type: 'threat', id: t!.id }) }}>
       <span className={`sev ${t!.severity}`}>{t!.severity.slice(0, 3).toUpperCase()}</span><span className="pname">{t!.title}</span>

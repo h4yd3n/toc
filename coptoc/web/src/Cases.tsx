@@ -51,7 +51,7 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
   const [tab, setTab] = useState<'queue' | 'graph' | 'reports'>('queue')
   const [mergeFrom, setMergeFrom] = useState<CaseEntity | null>(null)
   const load = () => { api.getCase(id).then(setD).catch(() => setD(null)); api.getQueue(id).then(setQ).catch(() => setQ(null)) }
-  useEffect(load, [id, reload])
+  useEffect(() => { load() }, [id, reload])
   const can = CASE_OPENERS.includes(role)
   const decideThen = (kind: 'entity' | 'relationship' | 'event', item: string, decision: 'confirm' | 'reject') => act(`${decision}ing`, () => api.decide(id, kind, item, decision).then(() => { load(); onChanged() }))
   if (!d) return <div className="plan dim">loading…</div>

@@ -14,3 +14,8 @@ coptoc/web/dist/
 coptoc/ios/build/
 coptoc/ios/TOC.xcodeproj/
 sigtoc_state.json
+coptoc/android/.gradle/
+coptoc/android/app/build/
+coptoc/android/build/
+coptoc/android/local.properties
+coptoc/android/.kotlin/

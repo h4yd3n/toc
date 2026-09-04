@@ -49,6 +49,20 @@ app = FastAPI(title="Coptoc — Common Operating Picture API", version="0.3.0",
               description="S1 personnel, S3 operations, S6 accountability; S2 via sigtoc. Contract: COP_API_CONTRACT.md",
               lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+
+class MethodOverride:
+    """Android's HttpURLConnection cannot send PATCH; it sends POST with X-HTTP-Method-Override: PATCH."""
+    def __init__(self, app): self.app = app
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("method") == "POST":
+            for k, v in scope.get("headers", []):
+                if k == b"x-http-method-override" and v.upper() in (b"PATCH", b"DELETE", b"PUT"):
+                    scope = dict(scope, method=v.decode().upper()); break
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(MethodOverride)
 app.include_router(cop_router)
 app.include_router(s2_router)  # Sigtoc embedded (Decision 3a); also runs standalone via sigtoc.api:app
 

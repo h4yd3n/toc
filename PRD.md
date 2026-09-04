@@ -436,8 +436,8 @@ Matches the Washi pattern — a web app and two native apps against one backend.
 | :--- | :--- | :--- |
 | **Web** | React 19, Vite, TypeScript, MapLibre GL | **[TONIGHT]** |
 | **Backend** | FastAPI, SQLAlchemy, SQLite → Postgres | **[TONIGHT]** |
-| **iOS** | SwiftUI, MapKit, XcodeGen | **[NEXT]** |
-| **Android** | Kotlin, Jetpack Compose, MapLibre Native | **[NEXT]** |
+| **iOS** | SwiftUI, MapKit, XcodeGen | **[BUILT]** — `coptoc/ios`, the wall with watch chip, estimates, roll call; S2 panels **[NEXT]** |
+| **Android** | Kotlin, Jetpack Compose, MapLibre Native | **[BUILT]** — `coptoc/android`, the wall with S1/S2/S3/S6 panels, detail sheets, and every role-gated action; built and run on the Pixel 7 emulator |
 
 The native apps are native for a reason: the map has to be fluid and the animations have to be immediate, and that's what MapKit and Compose are for. The web app is built against the same `/v1/cop` contract, so the apps share the backend and the data model, not the UI code.
 

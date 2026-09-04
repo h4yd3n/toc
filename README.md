@@ -3,10 +3,19 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![CI](https://github.com/h4yd3n/toc/actions/workflows/test.yml/badge.svg)](https://github.com/h4yd3n/toc/actions/workflows/test.yml)
 
-A unified **Tactical Operations Center (TOC)** combining:
-- **`apps/coptoc`**: Trust & Safety / Policy-as-Code compiler, reach gates, and immutable audit ledger.
-- **`apps/sigtoc`**: All-Source threat intelligence ingestion, STIX 2.1 entity resolution graph, and TOC alerts.
-- **`packages/shared`**: Shared Pydantic schemas, telemetry, and STIX contracts.
+A corporate-security **Tactical Operations Center**, built the way a military staff runs one:
+
+- **Coptoc** — the Common Operating Picture: one wall with S1 personnel (blue force tracker, check-ins), S3 operations
+  (travel, events, operations with tasks and S4 asks), S6 accountability (roll calls, check-in requests over SMS and
+  chat, inbound replies, the 15-minute escalation rule), the watch (shifts, running estimates, the shift-change brief),
+  and a hash-chained battle log. Web, iOS, and Android against one API.
+- **Sigtoc** — the S2: requirements that write themselves from the wall, a collection plan that recommends its own
+  sources, live collectors (GDACS, USGS, NWS, WHO, State Dept, FCDO; ACLED and CLSTR with keys), organic reports and
+  cases with a suggest-then-confirm graph, the Area Assessment (candidates side by side, no score), and the daily INTSUM
+  drafted at a fixed hour and released by the Battle Captain. Every product is disseminated and acknowledged on the record.
+- **Modtoc** — a separate content-moderation engine that shares the ledger. Frozen; [ROOST](https://github.com/roostorg) covers most of it.
+
+Everything is synthetic: people, sites, phone numbers, reports. Live feeds are real. Nothing needs a key to run.
 
 ## Why
 
@@ -26,8 +35,9 @@ toc/
 ├── coptoc/            # The COP — the wall a Battle Captain runs a shift from
 │   ├── api/           #   FastAPI: S1 personnel, S3 travel/events, S6 roll calls (contract: api/COP_API_CONTRACT.md)
 │   ├── web/           #   React + MapLibre — the wall
-│   └── ios/           #   SwiftUI + MapKit — the same wall on a phone
-├── sigtoc/            # S2 — live collectors (GDACS), the CLUE-style drafter with refuse-to-assess, the intel→policy bridge
+│   ├── ios/           #   SwiftUI + MapKit — the same wall on a phone
+│   └── android/       #   Kotlin + Compose + MapLibre Native — the same wall on Android
+├── sigtoc/            # S2 — requirements, collection plan, collectors, cases, area assessment, INTSUM, dissemination, the drafter
 ├── modtoc/            # Moderation engine — policy-as-code, severity × confidence routing, reach gates, evals. Separate tool.
 ├── shared/            # Models, database, the hash-chained ledger both APIs write to
 ├── tests/             # One folder per module + integration
@@ -60,8 +70,24 @@ make run-web
 # Native iOS on the booted simulator (needs xcodegen)
 make ios-run
 
+# Native Android on a running emulator (Android Studio's bundled JDK is enough)
+JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" make android-run
+
 # Outbound SMS/Slack for roll calls and the S2 drafter are optional — copy .env.example and fill what you have.
 # Unconfigured channels are recorded as SIMULATED, never as sent.
 
 # Native clients build against coptoc/api/COP_API_CONTRACT.md
 ```
+
+## Thirty minutes at the wall
+
+Open the wall as the Battle Captain. Take the watch. Press **COLLECT** and watch six live sources fill the threat
+list; the requirements' coverage bars move. Open the S2 **REQUIREMENTS** panel, tick Lisbon and Porto, press
+**ASSESS**: the Area Assessment lays the two candidates side by side with reported, quiet, and not-collected cells and
+no score. Open the seeded case **North gate loiterer** and work its review queue: every suggestion cites the report
+line it came from. Open a roll call on London, request check-ins (simulated unless Twilio and Slack are configured),
+and watch the fifteen-minute rule float the silent names to the top. Open **INTSUM**: the day's diff, drafted at the
+fixed hour, waiting for your release. Then hand over — the brief freezes, and the incoming Battle Captain must
+acknowledge every item that arrived during the overlap.
+
+Every one of those actions is on the battle log, hash-chained, with who did it and why.
