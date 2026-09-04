@@ -202,12 +202,9 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 
 An indicator with no connected source shows as a gap on every plan that needs it. That is the honest state, and it is the prompt to connect one.
 
-### 5.9 Open decisions for §5
+### 5.9 Decisions for §5 (2026-09-02)
 
-1. **INTSUM publication** — auto-published at a fixed time, or drafted for review and released by the Battle Captain?
-2. **Who may create directed requirements** — analysts only, any security role, or anyone (an EA planning an offsite)?
-3. **Numeric composite on the Area Assessment** — none (recommended), or a single band per candidate derived by a rule you can defend?
-4. **Signal retention** — how long raw collected items are kept; the ledger is forever, but the feed is not.
+All four taken — see §14 (G–J): INTSUM drafted at a fixed time and released by the Battle Captain; any security role or EA may create a directed requirement; no numeric composite on the Area Assessment; raw signals kept 90 days, cited signals as long as the product, the ledger forever.
 
 ---
 
@@ -378,6 +375,10 @@ COP never writes back to a source system.
 | D | Outbound channel for check-in requests | **SMS and chat at once.** Real when Twilio/Slack are configured; otherwise recorded and shown as SIMULATED — the wall never claims a message left the building when it didn't | `cop/comms.py` |
 | E | Roll-call closure | **May close with names unaccounted**; the number is the after-action record | `close_incident` |
 | F | Who opens a roll call | **Battle Captain only.** Anyone on the floor may work the roster | `ROLL_CALL_OPENERS` |
+| G | INTSUM publication | **Drafted at a fixed time, released by the Battle Captain** — one human gate on the product the whole floor reads | §5.6 — not yet built |
+| H | Who creates directed requirements | **Any security role, plus EAs**; the S2 analyst owns the answer | §5.2 — not yet built |
+| I | Area Assessment scoring | **No numeric composite.** Bands, confidence, and gaps per indicator; the human ranks | §5.6 — not yet built |
+| J | Raw signal retention | **90 days**; anything cited by a product lives as long as the product; the ledger is forever | §5.4 — not yet built |
 
 ---
 
@@ -395,3 +396,4 @@ COP never writes back to a source system.
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.4** — Sigtoc spec (§5): two missions, first-class requirements, self-generating collection plan, Area Assessment + INTSUM, standalone surface; decisions G–J.
