@@ -963,8 +963,13 @@ async def intel_refresh(session: AsyncSession = Depends(get_session), x_toc_acto
                                         reason=f"{cat[sid]['name']}: {created} new, {updated} updated", metadata={"created": created, "updated": updated, "collected": len(found)})
         results.append({"source": sid, "ok": True, "collected": len(found), "created": created, "updated": updated})
         total_created += created; total_updated += updated
+    # collection suggests warnings (§5.6); the Battle Captain releases them
+    from sigtoc.warning import suggest as suggest_warnings
+    suggested = await suggest_warnings(session, await build_snapshot(session, include_restricted=True, log_limit=1), now_utc())
+    for w in suggested:
+        await get_ledger().append_event(content_id=w.id, event_type="s2.warning.suggested", actor_type="system", actor_id=w.suggested_by, new_state="suggested", reason=f"{w.title} — awaiting the Battle Captain")
     return {"sources": results, "created": total_created, "updated": total_updated, "collected": sum(r.get("collected", 0) for r in results),
-            "failed": [r["source"] for r in results if not r["ok"]], "countries": sorted(countries)}
+            "failed": [r["source"] for r in results if not r["ok"]], "countries": sorted(countries), "warnings_suggested": len(suggested)}
 
 
 # ---------------------------------------------------------------- §5.10 #3 operations (target package → OPORD)

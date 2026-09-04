@@ -236,6 +236,8 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     op_by_subject = {(o["subject_type"], o["subject_id"]): o for o in operations_out}
     for e in events_out: e["operation"] = op_by_subject.get(("event", e["id"]))
     for t in trips_out: t["operation"] = op_by_subject.get(("trip", t["id"]))
+    from sigtoc.warning import WarningRow, to_dict as warning_dict
+    warnings_out = [warning_dict(w, now) for w in (await session.execute(select(WarningRow).where(WarningRow.status.in_(("suggested", "draft", "released"))).order_by(WarningRow.created_at.desc()))).scalars()]
     incidents_out = []
     for inc in sorted(incidents, key=lambda x: x.opened_at, reverse=True):
         if inc.status == "closed" and inc.closed_at and (now - inc.closed_at).total_seconds() > 86400:
@@ -288,6 +290,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "confirmed_links": len(links),
         "checked_in_fresh": sum(1 for p in people_out if p["position_source"] == "checkin"),
         "open_pirs": sum(1 for p in pirs_out if p["status"] in ("OPEN", "COLLECTING")),
+        "flash": sum(1 for w in warnings_out if w["status"] == "released"), "warnings_pending": sum(1 for w in warnings_out if w["status"] in ("suggested", "draft")),
         "open_incidents": sum(1 for i in incidents_out if i["status"] == "open"),
         "unaccounted": sum(i["counts"]["unaccounted"] + i["counts"]["unreachable"] for i in incidents_out if i["status"] == "open"),
         "upcoming_events": len(events_out),
@@ -296,7 +299,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     return {
-        "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary,
+        "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,

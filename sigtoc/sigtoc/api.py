@@ -21,6 +21,8 @@ from . import intsum as I
 from .intsum import IntsumRow
 from . import dissemination as D
 from .dissemination import DistributionRow
+from . import warning as W
+from .warning import WarningRow
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
 
@@ -550,6 +552,10 @@ async def _product(session: AsyncSession, ptype: str, pid: str):
         a = await session.get(IntsumRow, pid)
         if not a: raise HTTPException(404, "INTSUM not found")
         return f"INTSUM {a.id}", a.status, a.drafted_at, a.status == "released"
+    if ptype == "warning":
+        a = await session.get(WarningRow, pid)
+        if not a: raise HTTPException(404, "warning not found")
+        return a.title, a.status, a.created_at, a.status == "released"
     raise HTTPException(404, f"unknown product type {ptype}")
 
 
@@ -607,6 +613,103 @@ async def distribution(ptype: str, pid: str, session: AsyncSession = Depends(get
 @router.get("/products/unacknowledged")
 async def products_unacknowledged(session: AsyncSession = Depends(get_session)):
     return await D.unacknowledged(session, R.now_utc())
+
+
+# ---------------------------------------------------------------- §5.6 Warning — FLASH to the floor
+
+WARNING_DRAFTERS = {"battle_captain", "analyst"}
+WARNING_RELEASERS = {"battle_captain"}
+
+
+class WarningCreate(BaseModel):
+    subject_type: Literal["location", "person", "event"]
+    subject_id: str
+    title: str
+    text: str = ""
+    severity: Literal["elevated", "critical"] = "elevated"
+    threat_id: Optional[str] = None
+
+
+@router.get("/warnings")
+async def list_warnings(status: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    now = R.now_utc()
+    await W.expire(session, now)
+    rows = (await session.execute(select(WarningRow).order_by(WarningRow.created_at.desc()))).scalars().all()
+    return [W.to_dict(w, now) for w in rows if not status or w.status == status]
+
+
+@router.post("/warnings", status_code=201)
+async def draft_warning(body: WarningCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """A human-drafted warning (the rule suggests the rest). Still needs the Battle Captain's release."""
+    if (x_toc_role or "").lower() not in WARNING_DRAFTERS:
+        raise HTTPException(403, "Drafting a warning is the analyst's or the Battle Captain's")
+    from coptoc.service import build_snapshot
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    name = next((x["name"] for k in ("locations", "people", "events") for x in snap.get(k, []) if x["id"] == body.subject_id), None)
+    if name is None: raise HTTPException(404, f"{body.subject_type} {body.subject_id} not on the wall")
+    now = R.now_utc()
+    w = WarningRow(id=f"WARN-{uuid.uuid4().hex[:6].upper()}", title=body.title if body.title.startswith("FLASH") else f"FLASH — {body.title}", text=body.text, subject_type=body.subject_type,
+                   subject_id=body.subject_id, subject_name=name, threat_id=body.threat_id, severity=body.severity, status="draft", suggested_by=x_toc_actor or x_toc_role, created_at=now)
+    session.add(w); await session.commit()
+    await ledger().append_event(content_id=w.id, event_type="s2.warning.drafted", actor_type="human", actor_id=x_toc_actor or x_toc_role, new_state="draft", reason=f"{w.title} ({w.severity})")
+    return W.to_dict(w, now)
+
+
+@router.post("/warnings/suggest")
+async def suggest_warnings(session: AsyncSession = Depends(get_session)):
+    """Run the rule now (collection runs it after every refresh)."""
+    from coptoc.service import build_snapshot
+    now = R.now_utc()
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    new = await W.suggest(session, snap, now)
+    for w in new:
+        await ledger().append_event(content_id=w.id, event_type="s2.warning.suggested", actor_type="system", actor_id=w.suggested_by, new_state="suggested", reason=f"{w.title} — awaiting the Battle Captain")
+    return {"suggested": [W.to_dict(w, now) for w in new]}
+
+
+@router.post("/warnings/{wid}/release")
+async def release_warning(wid: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The Battle Captain releases: FLASH on the wall, SMS to the people at the subject, a post to the ops channel,
+    and an acknowledgement row per role. Nothing leaves the building before this."""
+    if (x_toc_role or "").lower() not in WARNING_RELEASERS:
+        raise HTTPException(403, "Only the Battle Captain releases a warning")
+    w = await session.get(WarningRow, wid)
+    if not w: raise HTTPException(404, "warning not found")
+    if w.status not in ("suggested", "draft"): raise HTTPException(409, f"warning is {w.status}")
+    from coptoc.comms import ChatChannel, SMSChannel
+    from coptoc.service import build_snapshot
+    now = R.now_utc()
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    people = W.people_for_subject(snap, w)
+    sms = SMSChannel()
+    text = W.flash_text(w)
+    deliveries = {"sent": 0, "simulated": 0, "failed": 0}
+    for p in people:
+        d = await sms.send(p.get("phone"), text)
+        deliveries[d.status] = deliveries.get(d.status, 0) + 1
+    chat = await ChatChannel().post(f":rotating_light: *{w.title}*\n{w.text}\nAcknowledge on the wall.")
+    w.status, w.released_by, w.released_at = "released", x_toc_actor or "battle_captain", now
+    w.dispatch_json = json.dumps({"sms": deliveries, "chat": chat.status, "people": len(people), "simulated": not sms.configured and not ChatChannel().configured})
+    w.recipients_json = json.dumps([p["id"] for p in people])
+    session.add_all([D.new_row("warning", w.id, w.title, role, "wall", "recorded", w.released_by, now, w.created_at) for role in W.ROLES_TO_ACK])
+    await session.commit()
+    await ledger().append_event(content_id=w.id, event_type="s2.warning.released", actor_type="human", actor_id=w.released_by, old_state="draft", new_state="released",
+                                reason=f"{w.title}: SMS to {len(people)} ({deliveries}), chat {chat.status}" + (" — SIMULATED, no Twilio/Slack" if not sms.configured and not ChatChannel().configured else ""),
+                                metadata={"people": len(people), "deliveries": deliveries, "chat": chat.status})
+    return W.to_dict(w, now)
+
+
+@router.post("/warnings/{wid}/cancel")
+async def cancel_warning(wid: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    if (x_toc_role or "").lower() not in WARNING_DRAFTERS:
+        raise HTTPException(403, "Cancelling is the analyst's or the Battle Captain's")
+    w = await session.get(WarningRow, wid)
+    if not w: raise HTTPException(404, "warning not found")
+    old = w.status
+    w.status, w.cancelled_by = "cancelled", x_toc_actor or x_toc_role
+    await session.commit()
+    await ledger().append_event(content_id=w.id, event_type="s2.warning.cancelled", actor_type="human", actor_id=w.cancelled_by, old_state=old, new_state="cancelled", reason=f"{w.title} cancelled")
+    return W.to_dict(w)
 
 
 def standalone_app() -> FastAPI:

@@ -78,6 +78,8 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
     # 5. Products
     products = {"assessments": T("cop.assessment.drafted", "cop.assessment.status"), "area_assessments": T("s2.area.drafted", "s2.area.status")}
     pending_area = [{"id": a.id, "title": a.title, "status": a.status} for a in (await session.execute(select(AreaAssessmentRow).where(AreaAssessmentRow.status != "approved"))).scalars()]
+    from .warning import WarningRow, to_dict as warning_dict
+    warnings = [warning_dict(x, period_to) for x in (await session.execute(select(WarningRow).where(WarningRow.created_at > period_from, WarningRow.created_at <= period_to))).scalars()]
     from .dissemination import unacknowledged
     unread = await unacknowledged(session, period_to)  # a warning nobody read is a failure the INTSUM shows (§5.10 #4)
     # 6. Collection — who reported, who is broken, where the gaps are
@@ -89,7 +91,7 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
         for g in R.plan_for(r, cat)["gaps"]: gaps[g] = gaps.get(g, 0) + 1
     gaps_ranked = [{"indicator": k, "label": R.INDICATORS[k]["label"], "requirements_affected": n} for k, n in sorted(gaps.items(), key=lambda kv: -kv[1])]
 
-    significant = len(new_threats) + len(wall["links"]) + len(wall["posture"]) + len(wall["roll_calls"]) + len(reports) + len(cases["opened"]) + len(products["assessments"]) + len(products["area_assessments"])
+    significant = len(warnings) + len(new_threats) + len(wall["links"]) + len(wall["posture"]) + len(wall["roll_calls"]) + len(reports) + len(cases["opened"]) + len(products["assessments"]) + len(products["area_assessments"])
     nstr = significant == 0
     headline = ("NSTR — nothing significant to report across %d active requirements." % len(active)) if nstr else \
         (f"{len(new_threats)} new threat(s)" + (f", worst {new_threats[0]['severity']}" if new_threats else "") + f"; {len(wall['links'])} link change(s); {len(wall['posture'])} posture change(s); "
@@ -97,7 +99,7 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
     return {"period": {"from": R.iso(period_from), "to": R.iso(period_to), "hours": round((period_to - period_from).total_seconds() / 3600, 1)},
             "headline": headline, "nstr": nstr, "requirements": {"active": len(active), "standing": sum(1 for r in active if r.kind == "standing"), "directed": sum(1 for r in active if r.kind == "directed"), **req_changes},
             "new_threats": new_threats, "wall": wall, "reports": reports, "cases": {**cases, "open": len(open_cases)},
-            "products": {**products, "pending_area_assessments": pending_area, "disseminated": T("s2.product.disseminated"), "acknowledged": T("s2.product.acknowledged"),
+            "products": {**products, "pending_area_assessments": pending_area, "warnings": warnings, "disseminated": T("s2.product.disseminated"), "acknowledged": T("s2.product.acknowledged"),
                          "unacknowledged": [{"product": u["product_title"], "recipient": u["recipient"], "outstanding_min": u["latency"]["outstanding_min"]} for u in unread]},
             "collection": {**collection, "gaps": gaps_ranked, "coverage": cov},
             "event_count": len(ev), "structure": ["headline", "requirements", "new_threats", "wall", "reports_and_cases", "products", "collection"]}
