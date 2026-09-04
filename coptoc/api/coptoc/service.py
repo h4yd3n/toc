@@ -58,6 +58,19 @@ def event_status(e: EventRow, now: datetime) -> str:
     return "upcoming"
 
 
+def coverage_required(vip_count: int, attendee_count: int, override: Optional[int] = None) -> int:
+    """The default rule, adjustable per event by the Battle Captain: one lead, one agent per VIP, one more past twenty attendees."""
+    if override is not None: return override
+    return 1 + vip_count + (1 if attendee_count >= 20 else 0)
+
+
+def coverage_for(e, attendee_ids, person_by_id, rows) -> Dict[str, Any]:
+    vips = sum(1 for i in attendee_ids if person_by_id.get(i, {}).get("is_vip"))
+    required = coverage_required(vips, len(attendee_ids), e.required_security)
+    assigned = [{"person_id": r.person_id, "name": person_by_id.get(r.person_id, {}).get("name", r.person_id), "role": r.role, "assigned_by": r.assigned_by} for r in rows]
+    return {"required": required, "assigned": len(assigned), "gap": max(0, required - len(assigned)), "rule": "override" if e.required_security is not None else "1 lead + 1 per VIP (+1 over 20 attending)", "people": assigned}
+
+
 async def build_snapshot(session: AsyncSession, include_restricted: bool = False, log_limit: int = 40) -> Dict[str, Any]:
     now = now_utc()
     locations = (await session.execute(select(LocationRow))).scalars().all()
@@ -174,6 +187,10 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     for t in trips:
         if t.event_id:
             trips_by_event[t.event_id] = trips_by_event.get(t.event_id, 0) + 1
+    from .db_models import EventCoverageRow
+    cov_rows = (await session.execute(select(EventCoverageRow))).scalars().all()
+    cov_by_event: Dict[str, list] = {}
+    for c in cov_rows: cov_by_event.setdefault(c.event_id, []).append(c)
     events_out = []
     for e in sorted(events, key=lambda x: x.start_at):
         st = event_status(e, now)
@@ -189,6 +206,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "vip_count": sum(1 for i in ids if person_by_id[i]["is_vip"]),
             "security_count": sum(1 for i in ids if team_by_id[people_by_id_row(people, i).team_id].is_security),
             "trips_generated": trips_by_event.get(e.id, 0), "source": e.source,
+            "coverage": coverage_for(e, ids, person_by_id, cov_by_event.get(e.id, [])),
             "threat_ids_in_area": [t.id for t in threats if haversine_km(e.venue_lat, e.venue_lon, t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM],
         })
 

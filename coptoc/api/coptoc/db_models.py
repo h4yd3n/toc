@@ -62,6 +62,7 @@ class EventRow(Base):
     end_at: Mapped[datetime] = mapped_column(DateTime)
     description: Mapped[str] = mapped_column(Text, default="")
     security_plan: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    required_security: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # None → the default rule (see service.coverage_required)
     created_by: Mapped[str] = mapped_column(String, default="seed")
     source: Mapped[str] = mapped_column(String, default="calendar")  # provenance: calendar | manual | travel_system
 
@@ -202,3 +203,14 @@ class DeliveryRow(Base):
     provider_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class EventCoverageRow(Base):
+    """S3 long-range planning: a security person assigned to cover an event, in a role."""
+    __tablename__ = "cop_event_coverage"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(ForeignKey("cop_events.id"), index=True)
+    person_id: Mapped[str] = mapped_column(ForeignKey("cop_people.id"), index=True)
+    role: Mapped[str] = mapped_column(String, default="agent")  # lead | agent | advance | driver
+    assigned_by: Mapped[str] = mapped_column(String)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime)

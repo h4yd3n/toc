@@ -40,7 +40,7 @@ export interface Trip { operation?: OperationSummary | null;
   depart_at: string; return_at: string; purpose: string; status: 'planned' | 'active' | 'complete'
   event_id: string | null; created_by: string; source: string
 }
-export interface CopEvent { operation?: OperationSummary | null;
+export interface CopEvent { operation?: OperationSummary | null; coverage?: Coverage;
   id: string; name: string; event_type: string; venue_location_id: string | null
   venue_name: string; venue_lat: number; venue_lon: number; start_at: string; end_at: string
   status: 'upcoming' | 'active' | 'past'; days_until: number; description: string; security_plan: string | null
@@ -152,3 +152,11 @@ export interface Distribution { product_type: string; product_id: string; recipi
 export interface Warning { id: string; title: string; text: string; subject_type: 'location' | 'person' | 'event'; subject_id: string; subject_name: string; threat_id: string | null; severity: string
   status: 'suggested' | 'draft' | 'released' | 'cancelled' | 'expired'; suggested_by: string; created_at: string; released_by: string | null; released_at: string | null; cancelled_by: string | null
   dispatch: { sms?: { sent: number; simulated: number; failed: number }; chat?: string; people?: number; simulated?: boolean }; recipients: string[]; age_min: number | null }
+
+// §6 planning + coverage, §13 imports
+export interface Coverage { required: number; assigned: number; gap: number; rule: string; people: { person_id: string; name: string; role: string; assigned_by: string }[] }
+export interface PlanWeek { week: string; events: (Pick<CopEvent, 'id' | 'name' | 'venue_name' | 'start_at' | 'end_at' | 'attendee_count' | 'vip_count' | 'security_count' | 'threat_ids_in_area' | 'days_until' | 'status'> & { coverage: Coverage; operation: OperationSummary | null })[]
+  trips: { id: string; person_name: string; is_vip: boolean; dest_name: string; depart_at: string; return_at: string; purpose: string; status: string; event_id: string | null }[] }
+export interface Planning { from: string; to: string; weeks: PlanWeek[]; security: { id: string; name: string; team_name: string; home_location_id: string; on_shift: boolean; commitments: { event_id: string; event: string; week: string; role: string }[] }[]
+  gaps: { event_id: string; name: string; week: string; gap: number; required: number }[]; summary: { events: number; trips: number; events_with_gaps: number; security_available: number } }
+export interface ImportResult { kind: string; source: string; created?: number; updated?: number; skipped?: number; applied?: number; trips_generated?: number; errors: string[] }

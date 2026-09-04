@@ -15,11 +15,11 @@ from shared.ledger import AsyncDatabaseEventLedger
 from shared.database import async_session_factory, create_engine, init_db
 from . import db_models  # noqa: F401 — registers tables on Base.metadata
 from .comms import Dispatcher, public_url
-from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
+from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -308,7 +308,7 @@ async def create_event(body: EventCreate, session: AsyncSession = Depends(get_se
 async def update_event(event_id: str, body: EventUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
     ev = await one_or_404(session, EventRow, event_id, "event")
     changes = {}
-    for f in ("name", "description", "security_plan"):
+    for f in ("name", "description", "security_plan", "required_security"):
         v = getattr(body, f)
         if v is not None:
             setattr(ev, f, v); changes[f] = v if f != "security_plan" else "(updated)"
@@ -1106,6 +1106,75 @@ async def answer_resource(op_id: str, res_id: str, body: ResourceUpdate, session
     await session.commit()
     await get_ledger().append_event(content_id=op_id, event_type="cop.operation.resource", actor_type="human", actor_id=r.updated_by, old_state=old, new_state=body.status, reason=f"S4: {r.qty} × {r.item} {body.status.upper()}" + (f" — {body.note}" if body.note else ""))
     return resource_dict(r)
+
+
+# ---------------------------------------------------------------- §6 long-range planning and security coverage
+
+COVERAGE_ASSIGNERS = {"battle_captain", "security"}
+
+
+@router.get("/planning")
+async def planning(days: int = 90, session: AsyncSession = Depends(get_session)):
+    """The long-range view: the next N days by week — events with their coverage and gaps, trips, and who is already
+    committed. What the S3 plans from and the Battle Captain resources."""
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    now = now_utc(); horizon = now + timedelta(days=days)
+    def week_of(iso_s: str) -> str:
+        d = datetime.fromisoformat(iso_s.replace("Z", ""))
+        monday = d - timedelta(days=d.weekday())
+        return monday.strftime("%Y-%m-%d")
+    weeks: Dict[str, Dict[str, Any]] = {}
+    def bucket(k: str) -> Dict[str, Any]:
+        return weeks.setdefault(k, {"week": k, "events": [], "trips": []})
+    for e in snap["events"]:
+        s = datetime.fromisoformat(e["start_at"].replace("Z", ""))
+        if s > horizon or datetime.fromisoformat(e["end_at"].replace("Z", "")) < now - timedelta(days=7): continue
+        bucket(week_of(e["start_at"]))["events"].append({k: e[k] for k in ("id", "name", "venue_name", "start_at", "end_at", "attendee_count", "vip_count", "security_count", "coverage", "operation", "threat_ids_in_area", "days_until", "status")})
+    for t in snap["trips"]:
+        d = datetime.fromisoformat(t["depart_at"].replace("Z", ""))
+        if d > horizon or datetime.fromisoformat(t["return_at"].replace("Z", "")) < now - timedelta(days=7): continue
+        bucket(week_of(t["depart_at"]))["trips"].append({k: t[k] for k in ("id", "person_name", "is_vip", "dest_name", "depart_at", "return_at", "purpose", "status", "event_id")})
+    committed: Dict[str, list] = {}
+    for w in weeks.values():
+        for e in w["events"]:
+            for p in e["coverage"]["people"]: committed.setdefault(p["person_id"], []).append({"event_id": e["id"], "event": e["name"], "week": w["week"], "role": p["role"]})
+    security = [{"id": p["id"], "name": p["name"], "team_name": p["team_name"], "home_location_id": p["home_location_id"], "on_shift": p["on_shift"], "commitments": committed.get(p["id"], [])}
+                for p in snap["people"] if any(t["id"] == p["team_id"] and t["is_security"] for t in snap["teams"])]
+    gaps = [{"event_id": e["id"], "name": e["name"], "week": w["week"], "gap": e["coverage"]["gap"], "required": e["coverage"]["required"]} for w in weeks.values() for e in w["events"] if e["coverage"]["gap"] > 0]
+    return {"from": now.isoformat() + "Z", "to": horizon.isoformat() + "Z", "weeks": [weeks[k] for k in sorted(weeks)], "security": security, "gaps": sorted(gaps, key=lambda g: g["week"]),
+            "summary": {"events": sum(len(w["events"]) for w in weeks.values()), "trips": sum(len(w["trips"]) for w in weeks.values()), "events_with_gaps": len(gaps), "security_available": len(security)}}
+
+
+@router.post("/events/{event_id}/coverage", status_code=201)
+async def assign_coverage(event_id: str, body: CoverageAssign, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Assign a security person to an event. Only security-team people can cover; one row per person per event."""
+    require_role(x_toc_role, COVERAGE_ASSIGNERS, "Assigning coverage")
+    ev = await one_or_404(session, EventRow, event_id, "event")
+    p = await one_or_404(session, PersonRow, body.person_id, "person")
+    team = await session.get(TeamRow, p.team_id)
+    if not team or not team.is_security: raise HTTPException(422, f"{p.name} is not on a security team")
+    dup = (await session.execute(select(EventCoverageRow).where(EventCoverageRow.event_id == event_id, EventCoverageRow.person_id == p.id))).scalar_one_or_none()
+    if dup: raise HTTPException(409, f"{p.name} already covers {ev.name} as {dup.role}")
+    clash = [c for c in (await session.execute(select(EventCoverageRow).where(EventCoverageRow.person_id == p.id))).scalars()]
+    overlaps = []
+    for c in clash:
+        other = await session.get(EventRow, c.event_id)
+        if other and other.start_at <= ev.end_at and ev.start_at <= other.end_at: overlaps.append(other.name)
+    actor = actor_from(x_toc_actor)
+    session.add(EventCoverageRow(event_id=event_id, person_id=p.id, role=body.role, assigned_by=actor, assigned_at=now_utc())); await session.commit()
+    await get_ledger().append_event(content_id=event_id, event_type="cop.event.coverage", actor_type="human", actor_id=actor, new_state=body.role,
+                                    reason=f"{p.name} assigned to {ev.name} as {body.role}" + (f" — WARNING overlaps {', '.join(overlaps)}" if overlaps else ""), metadata={"person_id": p.id, "role": body.role, "overlaps": overlaps})
+    return {"event_id": event_id, "person_id": p.id, "role": body.role, "overlaps": overlaps}
+
+
+@router.delete("/events/{event_id}/coverage/{person_id}")
+async def remove_coverage(event_id: str, person_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, COVERAGE_ASSIGNERS, "Removing coverage")
+    row = (await session.execute(select(EventCoverageRow).where(EventCoverageRow.event_id == event_id, EventCoverageRow.person_id == person_id))).scalar_one_or_none()
+    if not row: raise HTTPException(404, "not assigned")
+    await session.delete(row); await session.commit()
+    await get_ledger().append_event(content_id=event_id, event_type="cop.event.coverage", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=row.role, new_state="removed", reason=f"{person_id} removed from coverage")
+    return {"event_id": event_id, "person_id": person_id, "status": "removed"}
 
 
 # ---------------------------------------------------------------- §13 imports — the connectors we can build without accounts

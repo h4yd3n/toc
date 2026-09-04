@@ -7,6 +7,7 @@ import { AreaPanel } from './Area'
 import { IntsumPanel } from './Intsum'
 import { DistributionBox, OperationPanel } from './Operation'
 import { FlashStrip, WarningsSection } from './Warnings'
+import { ImportDrawer, PlanningPanel } from './Planning'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -47,6 +48,8 @@ export default function App() {
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
   const [opId, setOpId] = useState<string | null>(null)
+  const [showPlan, setShowPlan] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [briefReload, setBriefReload] = useState(0)
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
@@ -92,7 +95,8 @@ export default function App() {
       <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
       <aside className="left">
-        <PanelHead code="S1" title="PERSONNEL" hint="Blue Force" />
+        <PanelHead code="S1" title="PERSONNEL" hint="Blue Force">{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
+        {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         <div className="layer-toggles">
           {(['locations', 'travelers', 'routes', 'threats', 'events'] as (keyof Layers)[]).map(k => (
@@ -135,10 +139,11 @@ export default function App() {
 
       <main className="center">
         <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
-        {opId && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
+        {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} />}
+        {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
         {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
         {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
-        {sel && snap && !showBrief && !areaId && !showIntsum && !opId && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} onOp={setOpId} role={role} />}
+        {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} onOp={setOpId} role={role} />}
         {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
@@ -189,7 +194,7 @@ export default function App() {
 
       <footer className="bottom">
         <div className="s3">
-          <PanelHead code="S3" title="OPERATIONS" hint="Events · Travel" inline />
+          <PanelHead code="S3" title="OPERATIONS" hint="Events · Travel" inline><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
           <div className="timeline">
             {snap?.events.map(e => (
@@ -403,6 +408,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
         <div className="kv"><span>Brief</span>{e.description}</div>
         <div className="kv"><span>Source</span><code>{e.source}</code></div>
         {e.security_plan && <div className="kv"><span>Sec plan</span>{e.security_plan}</div>}
+        {e.coverage && <div className="kv"><span>Coverage</span><span className={e.coverage.gap > 0 ? 'bad' : 'ok'}>{e.coverage.assigned}/{e.coverage.required}</span> {e.coverage.people.map(p => `${p.name} (${p.role})`).join(', ') || 'nobody assigned'} <span className="dim">· {e.coverage.rule}</span></div>}
         {e.threat_ids_in_area.length > 0 && <><div className="section-label">THREATS IN AREA</div>
           <ul className="people">{e.threat_ids_in_area.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
             <li key={t!.id} className="tline" onClick={ev => { ev.stopPropagation(); onSelect({ type: 'threat', id: t!.id }) }}><span className={`sev ${t!.severity}`}>{t!.severity.slice(0, 3).toUpperCase()}</span><span className="pname">{t!.title}</span></li>))}</ul></>}

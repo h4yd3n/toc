@@ -149,11 +149,19 @@ async def _baseline_facts(req: R.RequirementRow, cat: List[Dict[str, Any]]) -> D
     src = next((c for c in cat if c["id"] == "wikidata"), None)
     if not src or not (src["enabled"] and src["configured"]) or not req.country: return {}
     from .baseline import holidays
+    from .placefacts import place_facts
     try:
         items = await holidays(req.country, req.window_from, req.window_to)
     except RuntimeError as e:
         return {"baseline": {"source": src["name"], "items": [], "basis": f"lookup failed: {e}", "note": "failed"}}
-    return {"baseline": {"source": src["name"], "items": items, "basis": f"{src['name']} for {req.country}: {len(items)} public holiday(s) in the window", "note": None}}
+    place = None
+    try:
+        place = await place_facts(req.lat, req.lon)
+    except RuntimeError:
+        place = None  # Wikidata is best-effort; the holidays still stand
+    basis = f"{src['name']} for {req.country}: {len(items)} public holiday(s) in the window"
+    if place: basis += f"; {place['name']}, pop. {place['population']:,}" + (f", {place['timezone']}" if place.get("timezone") else "")
+    return {"baseline": {"source": src["name"], "items": items, "basis": basis, "note": None, "place": place}}
 
 
 async def build_product(session: AsyncSession, reqs: List[R.RequirementRow], purpose: str, now: datetime) -> Dict[str, Any]:

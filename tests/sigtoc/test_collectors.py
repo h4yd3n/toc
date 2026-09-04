@@ -78,3 +78,10 @@ def test_countries_and_holiday_baseline():
     inwin = holidays_in_window(data, datetime(2026, 4, 1), datetime(2026, 4, 30))
     assert [h["date"] for h in inwin] == ["2026-04-03", "2026-04-05", "2026-04-25"] and inwin[0]["name"] == "Good Friday"
     assert holidays_in_window(data, datetime(2026, 10, 14), datetime(2026, 10, 17)) == []
+
+
+def test_wikidata_place_facts_parse():
+    from sigtoc.placefacts import parse_place
+    p = parse_place(json.loads((FX / "wikidata_lisbon.json").read_text()))
+    assert p["name"] == "Lisbon" and p["wikidata"] == "Q597" and p["population"] > 500000 and p["country"] == "Portugal"
+    assert parse_place({"results": {"bindings": []}}) is None

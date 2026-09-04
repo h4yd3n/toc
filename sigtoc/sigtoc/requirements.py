@@ -59,7 +59,7 @@ CATALOG: List[Dict[str, Any]] = [
     {"id": "who_don",     "name": "WHO Disease Outbreak News",   "indicators": ["health"],                      "access": "free RSS",      "reliability": "A", "cadence": "daily",   "built": True},
     {"id": "state_dept",  "name": "State Dept advisories (RSS)", "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": True},
     {"id": "fcdo",        "name": "FCDO travel advice",          "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": True},
-    {"id": "wikidata",    "name": "Nager.Date holidays (baseline)", "indicators": ["baseline"],           "access": "free, keyless", "reliability": "B", "cadence": "on demand", "built": True},
+    {"id": "wikidata",    "name": "Nager.Date · Wikidata (baseline)", "indicators": ["baseline"],           "access": "free, keyless", "reliability": "B", "cadence": "on demand", "built": True},
     {"id": "opensanctions","name": "OpenSanctions",              "indicators": ["targeted"],                    "access": "free",          "reliability": "B", "cadence": "weekly",  "built": False},
     {"id": "osac",        "name": "OSAC",                        "indicators": ["crime", "advisory", "targeted"], "access": "login",       "reliability": "A", "cadence": "daily",   "built": False},
     {"id": "commercial",  "name": "Flashpoint · Dataminr · Recorded Future", "indicators": ["targeted", "crime", "civil_unrest"], "access": "paid", "reliability": "B", "cadence": "continuous", "built": False},

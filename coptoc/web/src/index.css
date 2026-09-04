@@ -361,3 +361,10 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .flash-title { font-weight: 600; color: #fecaca; font-size: 12px; }
 .flash-item .mini { margin-left: auto; }
 .row.warn { border-left-color: rgba(239,68,68,.5); }
+
+/* §6 planning */
+.detail.plan { width: 640px; border-color: rgba(192,132,252,.5); }
+.pweek { margin-top: 4px; } .pevent { padding: 5px 0; border-top: 1px solid var(--line-2); }
+.pcover { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; } .pcover .row-btns { margin: 0; }
+.pcover .chip a { cursor: pointer; color: var(--red); } .ptrip { font-size: 10.5px; padding: 2px 0; }
+.bad { color: var(--red); } .ok { color: var(--green); }

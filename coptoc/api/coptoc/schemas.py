@@ -44,6 +44,11 @@ class EventUpdate(BaseModel):
     end_at: Optional[datetime] = None
     description: Optional[str] = None
     security_plan: Optional[str] = None
+    required_security: Optional[int] = Field(None, ge=0)
+
+class CoverageAssign(BaseModel):
+    person_id: str
+    role: Literal["lead", "agent", "advance", "driver"] = "agent"
 
 class AttendeesAdd(BaseModel):
     person_ids: List[str]
