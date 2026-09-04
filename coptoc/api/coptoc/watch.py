@@ -151,6 +151,7 @@ LOG_BUCKETS = {
     "cop.event.created": "operations", "cop.event.updated": "operations", "cop.event.cancelled": "operations", "cop.event.attendees_added": "operations",
     "cop.assessment.drafted": "intel", "cop.assessment.status": "intel", "cop.pir.created": "intel", "cop.pir.updated": "intel",
     "cop.person.shift": "personnel", "cop.watch.estimate": "estimates",
+    "s2.requirement.created": "intel", "s2.requirement.updated": "intel", "s2.source.updated": "collection", "s2.requirements.synced": "estimates",
 }
 
 
@@ -158,7 +159,7 @@ async def build_brief(session: AsyncSession, snap: Dict[str, Any], row: WatchRow
     """The running estimates read out at handover, in briefing order (§3.1)."""
     start, end = row.started_at, max(row.ends_at, now)
     overlap_from = row.ends_at - timedelta(minutes=cfg.overlap_minutes)
-    rows = (await session.execute(select(LedgerEventRow).where(LedgerEventRow.event_type.like("cop.%"), LedgerEventRow.timestamp >= start,
+    rows = (await session.execute(select(LedgerEventRow).where((LedgerEventRow.event_type.like("cop.%") | LedgerEventRow.event_type.like("s2.%")), LedgerEventRow.timestamp >= start,
                                                                 LedgerEventRow.timestamp <= end).order_by(LedgerEventRow.id))).scalars().all()
     events, buckets = [], {}
     for r in rows:

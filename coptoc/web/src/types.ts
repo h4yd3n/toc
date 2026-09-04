@@ -96,3 +96,14 @@ export interface Snapshot {
 export type Selection =
   | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | null
 export interface Layers { locations: boolean; travelers: boolean; threats: boolean; routes: boolean; events: boolean; residences: boolean }
+
+export interface Requirement {
+  id: string; kind: 'standing' | 'directed'; subject_type: 'location' | 'trip' | 'event' | 'person' | 'place'; subject_id: string | null; subject_name: string
+  lat: number; lon: number; radius_km: number; question: string; purpose: string; priority: number; window_from: string | null; window_to: string | null
+  status: 'active' | 'answered' | 'expired'; owner: string; indicators: string[]; created_at: string; updated_at: string
+  coverage: { covered: number; total: number; pct: number; gaps: string[] }
+}
+export interface PlanRow { indicator: string; label: string; covered: boolean; sources: { id: string; name: string; reliability: string; cadence: string }[]; recommended: { id: string; name: string; access: string; reliability: string; built: boolean }[] }
+export interface Plan { requirement_id: string; indicators: PlanRow[]; covered: number; total: number; gaps: string[]; coverage_pct: number }
+export interface Coverage { requirements: number; fully_covered: number; avg_coverage_pct: number; gaps: { indicator: string; label: string; requirements_affected: number; recommended_sources: { id: string; name: string; access: string; built: boolean }[] }[] }
+export interface SourceInfo { id: string; name: string; indicators: string[]; access: string; reliability: string; cadence: string; built: boolean; enabled: boolean; configured: boolean; last_collected_at: string | null; last_result: string | null; cadences: string[] }

@@ -1,6 +1,6 @@
 import type { Snapshot } from './types'
 
-import type { Brief, Role, Watch } from './types'
+import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
 export const session = { role: 'battle_captain' as Role }
@@ -35,3 +35,10 @@ export const takeWatch = (battle_captain: string) => req<Watch>('POST', '/v1/cop
 export const handover = (notes: string, nstr: boolean) => req<Brief>('POST', '/v1/cop/watch/handover', { notes: notes || undefined, nstr })
 export const acknowledge = (battle_captain: string, acknowledged_item_ids: string[]) => req<{ now_holding: Watch }>('POST', '/v1/cop/watch/acknowledge', { battle_captain, acknowledged_item_ids })
 export const setEstimate = (section: string, assessment: string, recommendation: string) => req<unknown>('PATCH', `/v1/cop/watch/estimate/${section}`, { assessment, recommendation })
+export const listRequirements = (status = 'active') => req<Requirement[]>('GET', `/v1/s2/requirements?status=${status}`)
+export const getPlan = (id: string) => req<Plan>('GET', `/v1/s2/requirements/${id}/plan`)
+export const getCoverage = () => req<Coverage>('GET', '/v1/s2/coverage')
+export const createDirected = (body: { place: string; lat: number; lon: number; window_from?: string; window_to?: string; purpose: string; priority: number }) => req<Requirement>('POST', '/v1/s2/requirements', body)
+export const updateRequirement = (id: string, body: { status?: string; priority?: number; indicators?: string[] }) => req<Requirement>('PATCH', `/v1/s2/requirements/${id}`, body)
+export const listSources = () => req<SourceInfo[]>('GET', '/v1/s2/sources')
+export const updateSource = (id: string, body: { enabled?: boolean; cadence?: string; reliability?: string }) => req<SourceInfo>('PATCH', `/v1/s2/sources/${id}`, body)

@@ -181,12 +181,12 @@ is drawn from the same picture the INTSUM summarizes.
 
 | Mission | The question | Where the requirement comes from | Status |
 | :--- | :--- | :--- | :--- |
-| **Force protection** | What threatens *our* people, sites, and events, now and in the near term? | **The blue force picture.** Every site, trip, and event on the wall generates standing requirements automatically. | Partly **[BUILT]** — threats filtered against blue force, per-subject assessments, refuse-to-assess. Auto-generated requirements **[NEXT]**. |
-| **Decision support** | What is the environment in a place we are *considering* — an offsite, a conference, a new office — for a given window? | **A person asks.** A directed requirement names a place, a window, and a purpose; the place need not be on the wall. | **[NEXT]** |
+| **Force protection** | What threatens *our* people, sites, and events, now and in the near term? | **The blue force picture.** Every site, trip, and event on the wall generates standing requirements automatically. | **[BUILT]** — standing requirements write themselves from S1/S3 and expire with their subject; the collection plan shows coverage and gaps per requirement. |
+| **Decision support** | What is the environment in a place we are *considering* — an offsite, a conference, a new office — for a given window? | **A person asks.** A directed requirement names a place, a window, and a purpose; the place need not be on the wall. | Requirement + plan **[BUILT]**; the Area Assessment product **[NEXT]** |
 
 Same machinery, two triggers. Everything after the requirement — collection plan, sources, grading, drafting, refusal — is identical.
 
-### 5.2 Requirements are first-class
+### 5.2 Requirements are first-class **[BUILT]**
 
 A requirement is the unit of work. Nothing is collected and nothing is assessed without one.
 
@@ -205,7 +205,7 @@ A requirement is the unit of work. Nothing is collected and nothing is assessed 
 
 **Directed requirements are a form.** Place, window, purpose, priority. That is the whole input for the Lisbon question.
 
-### 5.3 The collection plan — sources recommend themselves
+### 5.3 The collection plan — sources recommend themselves **[BUILT]** (one live source; the plan shows the gaps)
 
 The requirement determines the sources, not the other way around. Each requirement is decomposed into **indicators** — observable facts that would answer it — and each indicator maps to the sources that can observe it. That mapping is the synchronization matrix, and it is generated, not hand-built.
 
@@ -249,7 +249,7 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 
 **The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. **[NEEDS RULING]** publication time and whether it is auto-published or reviewed first.
 
-### 5.7 Surfaces (Decision 3a)
+### 5.7 Surfaces (Decision 3a) **[BUILT]** — `/v1/s2` API mounted in the wall and standalone (`make run-s2`); the S2 panel shows requirements, coverage, gaps, the directed form, and the source settings
 
 **Sigtoc API** — its own contract, versioned like the COP's:
 - requirements: create directed, list, expire; standing ones appear as the wall changes
@@ -267,6 +267,8 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | Indicator | Source | Access | Status |
 | :--- | :--- | :--- | :--- |
 | Natural hazards | GDACS | free, keyless | **[BUILT]** |
+
+Domains held for deployment: **coptoc.com**, **sigtoc.com**, **modtoc.com** — one per module, matching Decision 3a's standalone-plus-embedded shape.
 | Earthquakes | USGS | free, keyless | **[NEXT]** |
 | Severe weather (US) | NWS / NOAA alerts | free, keyless | **[NEXT]** |
 | Humanitarian / conflict situation | ReliefWeb API | free, keyless | **[NEXT]** |
@@ -555,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.10** — Sigtoc requirements, the self-generating collection plan, sources as operator settings, `/v1/s2` embedded and standalone; domains recorded.
 - **v3.9** — the watch built: shift model, estimate lines on every panel, the brief, handover/acknowledge on the ledger (web + API; iOS read-only).
 - **v3.8** — the watch (§3.1): shift model, panels as running estimates with owned assessment lines, the shift change brief, handover on the ledger; decisions S–V.
 - **v3.7** — the analyst's workbench (§5.11): case graph with provenance, suggest→confirm extraction, link chart / timeline / time wheel; decisions O–R.

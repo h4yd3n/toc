@@ -133,6 +133,23 @@ contract — same endpoints, same shapes — so every client shares one backend 
 | `POST` | `/watch/acknowledge` | `battle_captain, acknowledged_item_ids[]` — **role battle_captain** | `409` unless every `during_handover` item id is acknowledged; the watch transfers, both names on the ledger, the incoming BC holds the next slot from now |
 | `PATCH` | `/watch/config` | `pattern: follow_the_sun|day_night, overlap_minutes?` — **role battle_captain** | |
 
+## 3.2 Sigtoc — requirements and the collection plan (`/v1/s2`, PRD §5.2–5.3, §5.7)
+Mounted in the COP app (the wall's S2 panel) **and** runnable standalone: `make run-s2` → `sigtoc.api:app` on :8002. Same DB.
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/s2/requirements?status=&kind=` | | every requirement with its `coverage {covered,total,pct,gaps}` |
+| `GET` | `/s2/requirements/{id}` · `/plan` | | the synchronization matrix: indicator → live sources (with reliability, cadence) → covered, or `recommended` sources for the gap |
+| `POST` | `/s2/requirements` | `place, lat, lon, window_from?, window_to?, purpose, priority, radius_km?` — roles battle_captain / security / analyst / ea (Decision H) | a directed requirement; ledger `s2.requirement.created` with coverage |
+| `PATCH` | `/s2/requirements/{id}` | `status, priority, indicators[]` | the analyst adds or drops indicators; coverage recomputes |
+| `POST` | `/s2/requirements/sync` | a wall snapshot | standing requirements upsert/expire — the COP calls this as a library after every S1/S3 write and at startup |
+| `GET` | `/s2/coverage` | | the whole plan: fully-covered count, average coverage, gaps ranked by requirements affected with recommended sources |
+| `GET` | `/s2/indicators` · `/s2/sources` | | the taxonomy and the catalog (`configured` = built and keyed; `enabled`, `cadence`, `reliability` are the operator's) |
+| `PATCH` | `/s2/sources/{id}` | `enabled, cadence, reliability` — Decision K | ledger `s2.source.updated` |
+| `GET` | `/s2/query?lat&lon&radius_km` | | the standalone use: threats held near a point and requirements whose subject is nearby |
+
+Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `req_evt_<event>`; a trip's requirement expires when the trip is cancelled or its window passes. Directed places count as blue-force points for collection relevance.
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.

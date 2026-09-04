@@ -46,6 +46,9 @@ make test
 # The COP: API on :8000 and the wall on http://localhost:5173
 make run-cop
 
+# Sigtoc standalone on :8002 (it is also embedded in the COP as the S2 panel)
+make run-s2
+
 # The moderation engine on :8001, and its policy-diff eval harness
 make run-mod
 make diff

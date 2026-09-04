@@ -264,7 +264,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "channels": ["sms", "chat"], "delivery_summary": dsum, "roster": roster,
         })
 
-    log_rows = (await session.execute(select(LedgerEventRow).where(LedgerEventRow.event_type.like("cop.%"))
+    log_rows = (await session.execute(select(LedgerEventRow).where(LedgerEventRow.event_type.like("cop.%") | LedgerEventRow.event_type.like("s2.%"))
                                       .order_by(LedgerEventRow.id.desc()).limit(log_limit))).scalars().all()
     log_out = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "actor": r.actor_id, "actor_type": r.actor_type,
                 "subject": r.content_id, "old": r.old_state, "new": r.new_state, "summary": r.reason,

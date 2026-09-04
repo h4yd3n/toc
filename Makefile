@@ -30,6 +30,9 @@ run-api:
 run-mod:
 	PYTHONPATH=shared:modtoc $(UVICORN) modtoc.api:app --reload --port 8001
 
+run-s2:
+	PYTHONPATH=shared:sigtoc:coptoc/api $(UVICORN) sigtoc.api:app --reload --port 8002
+
 run-web:
 	npm --prefix coptoc/web run dev
 

@@ -51,6 +51,14 @@ async def startup() -> None:
     await init_db(_engine)
     async with sessions()() as session:
         await seed_if_empty(session)
+        await sync_standing_requirements(session)
+
+
+async def sync_standing_requirements(session: AsyncSession) -> None:
+    """§5.2 — standing requirements write themselves. Called at startup and after every S1/S3 write."""
+    from sigtoc.requirements import sync_standing
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    await sync_standing(session, snap)
 
 
 def actor_from(x_toc_actor: Optional[str]) -> str:
@@ -210,6 +218,7 @@ async def create_trip(body: TripCreate, session: AsyncSession = Depends(get_sess
     await get_ledger().append_event(content_id=trip.id, event_type="cop.trip.created", actor_type="human",
                                     actor_id=actor_from(x_toc_actor), new_state="planned",
                                     reason=f"{person.name} → {name}", metadata={"person_id": person.id, "dest": name})
+    await sync_standing_requirements(session)
     return {"id": trip.id, "status": "created"}
 
 
@@ -237,6 +246,7 @@ async def update_trip(trip_id: str, body: TripUpdate, session: AsyncSession = De
     await get_ledger().append_event(content_id=trip.id, event_type="cop.trip.updated", actor_type="human",
                                     actor_id=actor_from(x_toc_actor), reason=", ".join(f"{k}={v}" for k, v in changes.items()) or "no-op",
                                     metadata=changes)
+    await sync_standing_requirements(session)
     return {"id": trip.id, "status": "updated", "changes": changes}
 
 
@@ -247,6 +257,7 @@ async def delete_trip(trip_id: str, session: AsyncSession = Depends(get_session)
     await session.commit()
     await get_ledger().append_event(content_id=trip_id, event_type="cop.trip.cancelled", actor_type="human",
                                     actor_id=actor_from(x_toc_actor), old_state="planned", new_state="cancelled", reason="Trip cancelled")
+    await sync_standing_requirements(session)
     return {"id": trip_id, "status": "cancelled"}
 
 
@@ -287,6 +298,7 @@ async def create_event(body: EventCreate, session: AsyncSession = Depends(get_se
     await session.commit()
     await get_ledger().append_event(content_id=ev.id, event_type="cop.event.created", actor_type="human", actor_id=actor,
                                     new_state="upcoming", reason=f"{ev.name} @ {vname}", metadata={"venue": vname, **result})
+    await sync_standing_requirements(session)
     return {"id": ev.id, "status": "created", **result}
 
 
@@ -318,6 +330,7 @@ async def add_attendees(event_id: str, body: AttendeesAdd, session: AsyncSession
     await session.commit()
     await get_ledger().append_event(content_id=ev.id, event_type="cop.event.attendees_added", actor_type="human", actor_id=actor,
                                     reason=f"+{result['attendees_added']} attendees, {result['trips_generated']} trips", metadata=result)
+    await sync_standing_requirements(session)
     return {"id": ev.id, **result}
 
 
@@ -348,6 +361,7 @@ async def delete_event(event_id: str, session: AsyncSession = Depends(get_sessio
     await session.commit()
     await get_ledger().append_event(content_id=event_id, event_type="cop.event.cancelled", actor_type="human",
                                     actor_id=actor_from(x_toc_actor), old_state="upcoming", new_state="cancelled", reason=f"{ev.name} cancelled")
+    await sync_standing_requirements(session)
     return {"id": event_id, "status": "cancelled"}
 
 
@@ -787,8 +801,10 @@ async def intel_refresh(session: AsyncSession = Depends(get_session), x_toc_acto
     """Run the real Sigtoc collectors and upsert what they find. GDACS today."""
     from sigtoc.collectors.gdacs import collect_gdacs
     snap = await build_snapshot(session, include_restricted=True)
+    from sigtoc.requirements import RequirementRow
+    directed = (await session.execute(select(RequirementRow).where(RequirementRow.status == "active", RequirementRow.kind == "directed"))).scalars().all()
     points = [(l["lat"], l["lon"]) for l in snap["locations"]] + [(p["lat"], p["lon"]) for p in snap["people"] if p["status"] == "traveling"] \
-             + [(e["venue_lat"], e["venue_lon"]) for e in snap["events"]]
+             + [(e["venue_lat"], e["venue_lon"]) for e in snap["events"]] + [(r.lat, r.lon) for r in directed]
     try:
         found = await collect_gdacs(points)
     except RuntimeError as e:

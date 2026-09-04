@@ -277,3 +277,31 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .watch-chip { white-space: nowrap; gap: 8px; padding: 4px 8px; font-size: 10px; margin-left: 4px; }
 .stats { gap: 12px; } .stat .l { white-space: nowrap; font-size: 8.5px; } .stat .v { font-size: 18px; }
 .role { margin-left: 8px; }
+
+/* ---- S2 requirements & collection plan ---- */
+.section-label .mini { margin-left: 6px; padding: 2px 6px; }
+.gaps { margin: 4px 14px 6px; padding: 6px 8px; border: 1px dashed rgba(245,158,11,.5); border-radius: 4px; }
+.gaps-head { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--amber); margin-bottom: 3px; }
+.gap { display: flex; gap: 6px; font-size: 11px; align-items: baseline; padding: 1px 0; }
+.gap-n { font-family: var(--mono); font-weight: 800; color: var(--amber); min-width: 16px; } .gap-l { color: #c4d0dc; } .gap-rec { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reqrow { display: block; padding: 5px 14px; }
+.rq-head { display: flex; align-items: center; gap: 6px; }
+.prio { font-family: var(--mono); font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; }
+.prio.p1 { color: #fff; background: var(--red); } .prio.p2 { color: var(--amber); border: 1px solid rgba(245,158,11,.5); } .prio.p3 { color: var(--dim); border: 1px solid var(--line-2); }
+.chip.standing, .chip.location, .chip.trip, .chip.event, .chip.person { color: var(--dim); } .chip.directed { color: #c084fc; border-color: rgba(192,132,252,.5); }
+.covpct { font-family: var(--mono); font-size: 11px; color: var(--amber); } .covpct.ok { color: var(--green); } .covpct.bad { color: var(--red); }
+.bar > span.amber { background: var(--amber); }
+.rq-when { font-family: var(--mono); font-size: 10px; margin-top: 2px; }
+.plan { margin-top: 6px; padding: 6px 8px; background: var(--panel-2); border-radius: 4px; }
+.plan .q { font-size: 11.5px; color: #e2e8f0; margin-bottom: 4px; }
+.pline { display: flex; gap: 6px; font-size: 11px; padding: 2px 0; align-items: baseline; }
+.pline .mark { font-family: var(--mono); font-weight: 800; } .pline.ok .mark { color: var(--green); } .pline.gap .mark { color: var(--red); }
+.pline .lbl { flex: 1; } .pline .src { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.dform, .sources { margin: 4px 14px 8px; padding: 8px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; display: flex; flex-direction: column; gap: 5px; }
+.dform-head { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; color: var(--blue-2); }
+.dform input, .dform select, .sources select { font: 12px var(--sans); background: var(--panel); border: 1px solid var(--line-2); border-radius: 4px; color: var(--text); padding: 5px 6px; }
+.dform .two { display: flex; gap: 5px; } .dform .two input { flex: 1; min-width: 0; }
+.srow { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 0; border-top: 1px solid var(--line); }
+.srow .sname { flex: 1; } .srow.unbuilt .sname { color: var(--dim); } .srow select { padding: 2px 4px; font-size: 10px; }
+.list .row.reqrow { display: block; }  /* beat .list .row's flex */
+.list .row.rollcall { display: block; }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
 import { BriefPanel, EstimateLine, WatchChip } from './Watch'
+import { RequirementsPanel } from './Requirements'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -9,6 +10,7 @@ const LOG_LABEL: Record<string, string> = {
   'cop.trip.created': 'TRIP', 'cop.trip.updated': 'TRIP', 'cop.trip.cancelled': 'TRIP', 'cop.event.created': 'EVENT', 'cop.event.updated': 'EVENT',
   'cop.event.attendees_added': 'EVENT', 'cop.event.attendee_removed': 'EVENT', 'cop.event.cancelled': 'EVENT', 'cop.person.checkin': 'CHECK-IN',
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
+  's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
   'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
 }
@@ -134,6 +136,7 @@ export default function App() {
           <button className="mini" disabled={!!busy} onClick={() => act('collecting GDACS', api.refreshIntel)} title="Run live collectors (GDACS)">⟳ COLLECT</button>
         </PanelHead>
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
+        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} />
         <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>
         <ul className="list">
           {snap?.threats.map(t => (
