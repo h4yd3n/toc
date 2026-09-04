@@ -35,8 +35,8 @@ const short = (s: string) => s.split(',')[0]
 type ById = { loc: Map<string, Location>; person: Map<string, Person>; threat: Map<string, Threat>; trip: Map<string, Trip>; event: Map<string, CopEvent>; incident: Map<string, Incident> }
 const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreachable: 'amber', assist: 'red', injured: 'red', contacted: 'green', safe: 'green' }
 
-type UiPrefs = { mode: 'wall' | 'focus'; labels: 'full' | 'lean'; header: 'counters' | 'posture' }
-const UI_DEFAULTS: UiPrefs = { mode: 'focus', labels: 'lean', header: 'posture' }  // the quieter wall is the default; WALL is the display mode
+type UiPrefs = { labels: 'full' | 'lean'; header: 'counters' | 'posture' }
+const UI_DEFAULTS: UiPrefs = { labels: 'lean', header: 'posture' }
 
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
@@ -44,8 +44,8 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection>(null)
   // Decision 1: restricted layer is OFF by default. Toggling it re-fetches with restricted=true.
-  // The wall's density: WALL keeps every panel visible (the 1920×1080 display); FOCUS gives the map the room and
-  // slides panels out from rails. Labels and the header are separate toggles. Persisted per browser.
+  // The wall: the map has the room; S1 and S2 live on rails and slide out over the map, never over S3 or the log.
+  // Labels and the header are toggles under DISPLAY, persisted per browser.
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
   const [openPanel, setOpenPanel] = useState<'left' | 'right' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -85,7 +85,7 @@ export default function App() {
   const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
 
   return (
-    <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} mode-${ui.mode} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         <div className={`posture-chip ${s?.posture ?? ''}`}>POSTURE · {(s?.posture ?? '—').toUpperCase()}</div>
@@ -103,9 +103,6 @@ export default function App() {
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option>
         </select>
-        <div className="modeswitch" title="WALL keeps every panel on screen (the wall display). FOCUS gives the map the room and slides panels out from the rails.">
-          {(['wall', 'focus'] as const).map(m => <button key={m} className={ui.mode === m ? 'on' : ''} onClick={() => { setUi({ ...ui, mode: m }); setOpenPanel(null) }}>{m.toUpperCase()}</button>)}
-        </div>
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -115,13 +112,13 @@ export default function App() {
       </header>
       <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
-      {ui.mode === 'focus' && <nav className="rail rail-left">
+      <nav className="rail rail-left">
         <button className={`rail-btn ${openPanel === 'left' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'left' ? null : 'left')} title="S1 Personnel">S1</button>
         {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setOpenPanel('left')} title="open roll calls">S6</button>}
-      </nav>}
-      {ui.mode === 'focus' && <nav className="rail rail-right">
+      </nav>
+      <nav className="rail rail-right">
         <button className={`rail-btn ${openPanel === 'right' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'right' ? null : 'right')} title="S2 Intelligence">S2{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
-      </nav>}
+      </nav>
       <aside className={`left ${openPanel === 'left' ? 'open' : ''}`}>
         <PanelHead code="S1" title="PERSONNEL" hint="Blue Force">{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
         {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
