@@ -48,6 +48,15 @@ ios-gen:
 ios-build: ios-gen
 	cd coptoc/ios && xcodebuild -project TOC.xcodeproj -scheme TOC -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | grep -E "error:|BUILD"
 
+# A real iPhone: paired in Xcode, signed with the team in project.yml. The phone must reach the Mac's API on the LAN.
+#   make ios-device TOC_API=http://$(ipconfig getifaddr en0):8000
+IOS_DEVICE ?= $(shell xcrun devicectl list devices 2>/dev/null | awk '/available \(paired\)/ {print $$3; exit}')
+TOC_API ?= http://$(shell ipconfig getifaddr en0):8000
+ios-device: ios-gen
+	cd coptoc/ios && xcodebuild -project TOC.xcodeproj -scheme TOC -configuration Debug -destination 'id=$(IOS_DEVICE)' -derivedDataPath build-device -allowProvisioningUpdates TOC_API=$(TOC_API) build | grep -E "error:|BUILD"
+	xcrun devicectl device install app --device $(IOS_DEVICE) coptoc/ios/build-device/Build/Products/Debug-iphoneos/TOC.app
+	xcrun devicectl device process launch --device $(IOS_DEVICE) com.h4yd3n.TOC
+
 ios-run: ios-build
 	xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true
 	xcrun simctl install booted coptoc/ios/build/Build/Products/Debug-iphonesimulator/TOC.app

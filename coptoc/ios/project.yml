@@ -20,7 +20,10 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGNING_ALLOWED: "NO"
+        DEVELOPMENT_TEAM: M69WQS6C98   # the author's team; the simulator build passes CODE_SIGNING_ALLOWED=NO on the command line
+        # Where the wall's API is. The simulator uses the Mac's localhost; a real phone needs the Mac's LAN address:
+        #   make ios-device TOC_API=http://<mac-lan-ip>:8000
+        TOC_API: http://localhost:8000
     info:
       path: Sources/Info.plist
       properties:
@@ -30,6 +33,7 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
+        TOC_API: "$(TOC_API)"
         # Dev: the simulator talks to the FastAPI backend on the Mac over plain http.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

@@ -3,7 +3,10 @@ import Foundation
 /// The COP backend client. Same contract as the web app: apps/coptoc/COP_API_CONTRACT.md.
 struct COPClient {
     // Simulator reaches the Mac's FastAPI on localhost. Override with TOC_API in the scheme environment.
-    var baseURL: URL = URL(string: ProcessInfo.processInfo.environment["TOC_API"] ?? "http://localhost:8000")!
+    // Scheme environment first (Xcode runs), then the value baked into Info.plist at build time (device installs), then the Mac's localhost (simulator).
+    var baseURL: URL = URL(string: ProcessInfo.processInfo.environment["TOC_API"]
+        ?? (Bundle.main.object(forInfoDictionaryKey: "TOC_API") as? String).flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }
+        ?? "http://localhost:8000")!
     var actor = "Battle Captain (iOS)"
     var role = "battle_captain"  // Decision C: only battle_captain / ep may see the restricted layer
 

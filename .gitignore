@@ -19,3 +19,4 @@ coptoc/android/app/build/
 coptoc/android/build/
 coptoc/android/local.properties
 coptoc/android/.kotlin/
+coptoc/ios/build-device/
