@@ -102,6 +102,56 @@ The COP is one screen. It never navigates away.
 
 ---
 
+### 3.1 The watch — shifts, running estimates, and handover **[NEXT]**
+
+The wall has a Battle Captain but, until now, no concept of a *watch*. A TOC runs twenty-four seven and one human
+cannot; the floor changes hands, and the moment it changes hands is where information is lost. This section is the
+fix, and the battle log already holds most of the raw material.
+
+**The shift model.** Configurable per deployment; the default is follow-the-sun in three eight-hour watches —
+Singapore, Dublin, San Francisco — with a 12-hour day/night pattern as the alternative (Decision S). The wall always
+shows the watch: *"Dublin watch · Battle Captain R. Kovač · 3h12 into shift · handover to San Francisco in 4h48."*
+Shift boundaries are in the watch site's local time.
+
+**The panels are running estimates.** Each staff section keeps a continuously current picture of its own area —
+facts, what changed, assessment, gaps, recommendation. On the wall those pictures *are* the panels, and each has an
+owner:
+
+| Panel | Running estimate | Owner |
+| :--- | :--- | :--- |
+| S1 (left) | Personnel status and disposition | the floor / security |
+| S2 (right) | Threat picture, assessments, open PIRs | the S2 analyst |
+| S3 (bottom) | Travel, events, operations | ops, EAs |
+| S6 (roll calls) | Accountability and comms | the Battle Captain |
+
+What each estimate lacks today is its **assessment line**: a short, human-owned "S2 assesses…" / "S1 assesses coverage
+is thin at DC-East tonight" kept current at the top of the panel, with a recommendation when there is one. Those four
+lines are the spine of the handover.
+
+**The shift change brief** is not a report written at handover. It is the running estimates read out at handover,
+generated from the wall for the watch window, in the order it is briefed:
+
+1. **Significant events this shift** — posture changes, threats confirmed, roll calls opened or closed and where they stand, trips started or ended, anything gone stale
+2. **Current status** — the four assessment lines; posture; open incidents and unaccounted names; travelers in their windows; assessments in review; open PIRs
+3. **Next shift** — events starting, trips departing or returning, requirements expiring, known collection gaps
+4. **Handover items** — outstanding actions, and the outgoing Battle Captain's own "things to be aware of," in their words
+5. **Acknowledgement** — the incoming Battle Captain accepts; both names go on the ledger
+
+**Handover mechanics (Decision T).** The brief is generated; the outgoing Battle Captain annotates it; the incoming
+Battle Captain acknowledges it. **The watch does not transfer until it is acknowledged.** Both names and the time
+are on the ledger — the handover is itself a logged event.
+
+**The overlap (Decision U).** Thirty minutes. The brief covers watch start → handover. Anything that arrives inside the
+overlap is flagged *during handover*: it belongs to the incoming shift, and the incoming Battle Captain must acknowledge
+each item explicitly, so nothing falls between two people.
+
+**NSTR is a state (Decision V).** "Nothing significant to report" is a valid brief — and it must be *affirmed* by the
+outgoing Battle Captain. An empty brief and an affirmed nothing are different things; the ledger shows which it was.
+
+**Relationship to the INTSUM.** The INTSUM (§5.6) is S2's daily product across all standing requirements. The shift
+change brief is the Battle Captain's product across all sections, once per watch. The S2 assessment line in the brief
+is drawn from the same picture the INTSUM summarizes.
+
 ## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
 
 **Locations.** HQ, offices, data centers, executive residences, event venues. Each has a position, a type, a posture (normal / elevated / critical), and a sensitivity tier. Residences are restricted-tier: they exist because the security team needs them, and they are never shown to a general audience.
@@ -485,6 +535,10 @@ COP never writes back to a source system.
 | P | Extracted links | **Suggested until an analyst confirms**; source grade visible on every edge; no line without a citation | §5.11 |
 | Q | Case access | **Battle Captain or S2 lead opens a case on a person**; viewing role-gated; **every read on the ledger** | §5.11 |
 | R | Which views first | **All three together** — link chart, timeline, time wheel — one model, three renderings | §5.11 |
+| S | Shift pattern | **Follow-the-sun, three 8 h watches (Singapore · Dublin · San Francisco)** by default; 12 h day/night as the alternative; configurable | §3.1 — not yet built |
+| T | Handover | **Generated brief → outgoing annotates → incoming acknowledges on the ledger; the watch does not transfer until acknowledged** | §3.1 — not yet built |
+| U | Overlap window | **30 minutes**; items arriving inside it are flagged and must be acknowledged by the incoming shift | §3.1 — not yet built |
+| V | NSTR | **Explicit** — the outgoing Battle Captain affirms "nothing significant"; the affirmation is logged | §3.1 — not yet built |
 
 ---
 
@@ -500,6 +554,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.8** — the watch (§3.1): shift model, panels as running estimates with owned assessment lines, the shift change brief, handover on the ledger; decisions S–V.
 - **v3.7** — the analyst's workbench (§5.11): case graph with provenance, suggest→confirm extraction, link chart / timeline / time wheel; decisions O–R.
 - **v3.6** — the origin in the author's words (§1.1); the ops↔intel loop and the four requirements it adds (§5.10).
 - **v3.5** — cadence adjustable (K); S6 inbound, escalation, roster edits decided (L–N). No open decisions.
