@@ -1,16 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="1024" android:viewportHeight="1024">
-    <!-- the blue force dot inside the threat ring — see brand/icon.svg; drawn inside the adaptive-icon safe zone -->
-    <group android:scaleX="0.62" android:scaleY="0.62" android:pivotX="512" android:pivotY="512">
-        <path android:strokeColor="#7B8AA0" android:strokeWidth="6" android:strokeAlpha="0.7" android:fillColor="#00000000"
-              android:pathData="M512,120 a392,392 0 1,0 0.1,0 Z"/>
-        <path android:fillColor="#F59E0B" android:fillAlpha="0.10" android:strokeColor="#F59E0B" android:strokeWidth="30"
-              android:pathData="M512,212 a300,300 0 1,0 0.1,0 Z"/>
-        <path android:strokeColor="#DCE4EE" android:strokeWidth="16" android:strokeLineCap="round" android:fillColor="#00000000"
-              android:pathData="M512,74 L512,150 M512,874 L512,950 M74,512 L150,512 M874,512 L950,512"/>
-        <path android:fillColor="#3B82F6" android:fillAlpha="0.18" android:pathData="M512,282 a230,230 0 1,0 0.1,0 Z"/>
-        <path android:fillColor="#3B82F6" android:strokeColor="#0B0F14" android:strokeWidth="14" android:pathData="M512,394 a118,118 0 1,0 0.1,0 Z"/>
-        <path android:strokeColor="#60A5FA" android:strokeWidth="10" android:strokeAlpha="0.9" android:fillColor="#00000000" android:pathData="M512,362 a150,150 0 1,0 0.1,0 Z"/>
-        <path android:fillColor="#DCE4EE" android:pathData="M512,474 a38,38 0 1,0 0.1,0 Z"/>
+    <!-- the recon diamond — brand/mark.svg — inside the adaptive-icon safe zone -->
+    <group android:scaleX="0.6" android:scaleY="0.6" android:pivotX="512" android:pivotY="512">
+        <path android:strokeColor="#DCE4EE" android:strokeWidth="58" android:fillColor="#00000000" android:pathData="M512 182L644 314 M667 337L687 357 M710 380L842 512 M842 512L710 644 M687 667L667 687 M644 710L512 842 M512 842L380 710 M357 687L337 667 M314 644L182 512 M182 512L314 380 M337 357L357 337 M380 314L512 182"/>
+        <path android:fillColor="#3B82F6" android:pathData="M190 834L228 802L872 228L834 190L796 222L152 796Z"/>
     </group>
 </vector>

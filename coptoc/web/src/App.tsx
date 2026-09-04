@@ -74,7 +74,7 @@ export default function App() {
   return (
     <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''}`}>
       <header className="top">
-        <div className="brand"><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
+        <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         <div className={`posture-chip ${s?.posture ?? ''}`}>POSTURE · {(s?.posture ?? '—').toUpperCase()}</div>
         <WatchChip w={snap?.watch} onOpen={() => setShowBrief(v => !v)} />
         <div className="stats">

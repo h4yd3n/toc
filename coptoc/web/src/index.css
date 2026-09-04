@@ -368,3 +368,5 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .pcover { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; } .pcover .row-btns { margin: 0; }
 .pcover .chip a { cursor: pointer; color: var(--red); } .ptrip { font-size: 10.5px; padding: 2px 0; }
 .bad { color: var(--red); } .ok { color: var(--green); }
+
+.brand .glyph { width: 30px; height: 30px; margin-right: 4px; align-self: center; }
