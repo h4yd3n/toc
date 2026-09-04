@@ -4,14 +4,14 @@
     {
       "name": "toc-api",
       "runtimeExecutable": ".venv/bin/uvicorn",
-      "runtimeArgs": ["coptoc.api.server:app", "--port", "8000"],
-      "env": { "PYTHONPATH": "packages/shared/src:apps/coptoc/src:apps/sigtoc/src" },
+      "runtimeArgs": ["coptoc.app:app", "--port", "8000"],
+      "env": { "PYTHONPATH": "shared:coptoc/api:sigtoc" },
       "port": 8000
     },
     {
       "name": "cop-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "apps/cop-web", "run", "dev"],
+      "runtimeArgs": ["--prefix", "coptoc/web", "run", "dev"],
       "port": 5173
     }
   ]

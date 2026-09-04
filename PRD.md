@@ -193,6 +193,15 @@ The native apps are native for a reason: the map has to be fluid and the animati
 
 ---
 
+## 11.1 Repository Layout
+
+| Folder | Module | Role |
+| :--- | :--- | :--- |
+| `coptoc/` | **Coptoc** | The COP — `api/` (S1/S3/S6), `web/` (the wall), `ios/` |
+| `sigtoc/` | **Sigtoc** | S2 — collectors, the drafter, the intel→policy bridge |
+| `modtoc/` | **Modtoc** | The content-moderation engine. **Not part of the COP** — a separate tool for a company that also runs a consumer platform, sharing the repo and the ledger |
+| `shared/` | — | Models, database, the hash-chained ledger |
+
 ## 12. Data Model
 
 **S1:**

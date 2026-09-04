@@ -10,7 +10,7 @@ build/
 .ruff_cache/
 toc.db
 node_modules/
-apps/cop-web/dist/
-apps/cop-ios/build/
-apps/cop-ios/TOC.xcodeproj/
+coptoc/web/dist/
+coptoc/ios/build/
+coptoc/ios/TOC.xcodeproj/
 sigtoc_state.json

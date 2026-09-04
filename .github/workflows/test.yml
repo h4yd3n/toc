@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e packages/shared -e apps/coptoc -e apps/sigtoc
+          pip install -e shared -e sigtoc -e modtoc -e coptoc/api
           pip install pytest pytest-asyncio httpx
       - name: Run Test Suite
         run: |

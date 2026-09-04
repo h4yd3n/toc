@@ -8,21 +8,23 @@ A unified **Tactical Operations Center (TOC)** combining:
 - **`apps/sigtoc`**: All-Source threat intelligence ingestion, STIX 2.1 entity resolution graph, and TOC alerts.
 - **`packages/shared`**: Shared Pydantic schemas, telemetry, and STIX contracts.
 
-## Architecture
+## Layout — three modules, one repo
 
 ```
-TOC/
-├── apps/
-│   ├── cop-web/       # The wall — React + MapLibre common operating picture (S1/S2/S3/S6)
-│   ├── cop-ios/       # Native iOS client — SwiftUI + MapKit, same /v1/cop contract
-│   ├── coptoc/        # COP API (/v1/cop, contract in COP_API_CONTRACT.md) + Policy-as-Code moderation engine
-│   └── sigtoc/        # S2 — live collectors (GDACS), the CLUE-style drafter, and the intel→enforcement bridge
-├── docs/archive/      # Superseded PRDs and the v1 MVP walkthrough (kept for the record)
-├── packages/
-│   └── shared/        # Shared models, database layer, & constants
-├── PRD.md             # Product requirements — staff-section structure, scope tags
-└── tests/             # Unit and integration test suite
+toc/
+├── coptoc/            # The COP — the wall a Battle Captain runs a shift from
+│   ├── api/           #   FastAPI: S1 personnel, S3 travel/events, S6 roll calls (contract: api/COP_API_CONTRACT.md)
+│   ├── web/           #   React + MapLibre — the wall
+│   └── ios/           #   SwiftUI + MapKit — the same wall on a phone
+├── sigtoc/            # S2 — live collectors (GDACS), the CLUE-style drafter with refuse-to-assess, the intel→policy bridge
+├── modtoc/            # Moderation engine — policy-as-code, severity × confidence routing, reach gates, evals. Separate tool.
+├── shared/            # Models, database, the hash-chained ledger both APIs write to
+├── tests/             # One folder per module + integration
+├── PRD.md             # Product requirements — staff-section structure, decisions log
+└── docs/archive/      # Superseded PRDs and the v1 MVP walkthrough (kept for the record)
 ```
+
+**Coptoc** and **Sigtoc** are the product: the operations center. **Modtoc** is a different tool that shares the repo and the ledger — a content-moderation engine for a company that also runs a consumer platform. Sigtoc's `PolicyOverlayBridge` can feed it threat-driven policy updates; nothing in the COP depends on it.
 
 ## Quickstart
 
@@ -30,11 +32,12 @@ TOC/
 # Run all tests
 make test
 
-# Run policy-diff eval harness
-make diff
-
-# Start the COP: API on :8000 and the wall on http://localhost:5173
+# The COP: API on :8000 and the wall on http://localhost:5173
 make run-cop
+
+# The moderation engine on :8001, and its policy-diff eval harness
+make run-mod
+make diff
 
 # Or separately
 make run-api
@@ -46,5 +49,5 @@ make ios-run
 # Outbound SMS/Slack for roll calls and the S2 drafter are optional — copy .env.example and fill what you have.
 # Unconfigured channels are recorded as SIMULATED, never as sent.
 
-# Native clients build against apps/coptoc/COP_API_CONTRACT.md
+# Native clients build against coptoc/api/COP_API_CONTRACT.md
 ```

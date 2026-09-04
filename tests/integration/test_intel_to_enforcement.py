@@ -1,13 +1,13 @@
 import os
 from sigtoc.fixtures import FixtureThreatFeed
 from sigtoc.alerting.emitter import TacticalAlertEmitter
-from coptoc.compiler.validator import PolicyValidator
-from coptoc.compiler.prompt_builder import PolicyPromptCompiler
-from coptoc.engine.router import ModerationRouter
-from coptoc.ledger.event_stream import ImmutableEventLedger
+from modtoc.compiler.validator import PolicyValidator
+from modtoc.compiler.prompt_builder import PolicyPromptCompiler
+from modtoc.engine.router import ModerationRouter
+from shared.ledger import ImmutableEventLedger
 from shared.models import ContentItem, VisibilityState, SeverityTier
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../apps/coptoc'))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../modtoc'))
 
 def test_end_to_end_intel_to_enforcement_loop():
     """

@@ -10,7 +10,7 @@ os.environ.pop("TOC_DRAFTER", None)
 import pytest
 from fastapi.testclient import TestClient
 
-from coptoc.api.server import app
+from coptoc.app import app
 
 @pytest.fixture(scope="module")
 def client():
@@ -123,7 +123,7 @@ def test_posture_shift_and_ledger(client):
     posture_evt = next(e for e in log if e["type"] == "cop.location.posture")
     assert posture_evt["actor"] == "Battle Captain" and posture_evt["old"] == "normal" and posture_evt["new"] == "elevated"
     # Every subject's chain verifies
-    from coptoc.cop.routes import get_ledger
+    from coptoc.routes import get_ledger
     import asyncio
     assert asyncio.run(get_ledger().verify_chain_integrity("loc_sgp")) is True
     client.patch("/v1/cop/locations/loc_sgp/posture", json={"posture": "normal"})
@@ -181,7 +181,7 @@ def test_accountability_roll_call(client):
     log = [e for e in client.get("/v1/cop/log", params={"limit": 200}).json() if e["subject"] == iid]
     assert [e["type"] for e in log][:4] == ["cop.incident.contact", "cop.incident.contact", "cop.incident.contact", "cop.incident.opened"]
     assert "Trapped in elevator" in log[0]["summary"]
-    from coptoc.cop.routes import get_ledger
+    from coptoc.routes import get_ledger
     import asyncio
     assert asyncio.run(get_ledger().verify_chain_integrity(iid)) is True
     # Closing records how many were never reached; the incident leaves the open count
@@ -205,7 +205,7 @@ def test_decisionB_checkin_request_and_self_clear(client):
     log = [e for e in client.get("/v1/cop/log", params={"limit": 50}).json() if e["subject"] == iid]
     assert "SIMULATED" in log[0]["summary"]
     # The link in the message works with no auth and no coordinates — that's the SMS reply path
-    from coptoc.cop.routes import checkin_token
+    from coptoc.routes import checkin_token
     linked = d["roster"][1]["person_id"]
     r = client.post(f"/v1/cop/checkin/{checkin_token(linked, iid)}")
     assert r.status_code == 200 and r.json()["cleared_rosters"] == [iid]
