@@ -38,8 +38,17 @@ struct PostureBar: View {
         VStack(spacing: 6) {
             HStack(spacing: 10) {
                 Text("TOC").font(.system(size: 18, weight: .heavy, design: .monospaced)).tracking(3)
-                Chip(text: "POSTURE · \(posture.uppercased())", color: Theme.posture(posture))
+                if store.postureHeader {
+                    Text("POSTURE · \(posture.uppercased())").font(.system(size: 13, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
+                        .padding(.horizontal, 12).padding(.vertical, 6).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.posture(posture), lineWidth: 2))
+                } else {
+                    Chip(text: "POSTURE · \(posture.uppercased())", color: Theme.posture(posture))
+                }
                 Spacer()
+                Menu {
+                    Toggle("Lean labels", isOn: Binding(get: { store.leanLabels }, set: { store.leanLabels = $0 }))
+                    Toggle("Posture header", isOn: Binding(get: { store.postureHeader }, set: { store.postureHeader = $0 }))
+                } label: { Text("DISPLAY ▾").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim).padding(.horizontal, 6).padding(.vertical, 4).overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.line, lineWidth: 1)) }
                 Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
             }
             if let w = store.snapshot?.watch {
@@ -53,13 +62,15 @@ struct PostureBar: View {
             }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
-                    Stat("PERSONNEL", s?.totalPeople); Stat("PRESENT", s?.present); Stat("TRAVELING", s?.traveling, Theme.blue)
-                    Stat("VIP OUT", s?.vipsTraveling, Theme.gold); Stat("CHECKED IN", s?.checkedInFresh, Theme.green)
-                    Stat("SEC ON SHIFT", s?.securityOnShift, Theme.green); Stat("THREATS", s?.activeThreats, Theme.red)
-                    Stat("CONFIRMED", s?.confirmedLinks, Theme.red); Stat("UNACCOUNTED", s?.unaccounted, (s?.unaccounted ?? 0) > 0 ? Theme.red : .white)
+                    Stat("PERSONNEL", s?.totalPeople); Stat("TRAVELING", s?.traveling, Theme.blue); Stat("VIP OUT", s?.vipsTraveling, Theme.gold)
+                    Stat("THREATS", s?.activeThreats, Theme.red); Stat("CONFIRMED", s?.confirmedLinks, Theme.red)
                     if (s?.flash ?? 0) > 0 { Stat("FLASH", s?.flash, Theme.red) }
+                    if (s?.unaccounted ?? 0) > 0 { Stat("UNACCOUNTED", s?.unaccounted, Theme.red) }
                     if (s?.unreachable ?? 0) > 0 { Stat("UNREACHABLE", s?.unreachable, Theme.red) }
-                    Stat("OPEN PIRs", s?.openPirs, Theme.amber); Stat("EVENTS", s?.upcomingEvents)
+                    if !store.postureHeader {  // the full counter row
+                        Stat("PRESENT", s?.present); Stat("CHECKED IN", s?.checkedInFresh, Theme.green); Stat("SEC ON SHIFT", s?.securityOnShift, Theme.green)
+                        Stat("OPEN PIRs", s?.openPirs, Theme.amber); Stat("EVENTS", s?.upcomingEvents)
+                    }
                 }
             }
         }

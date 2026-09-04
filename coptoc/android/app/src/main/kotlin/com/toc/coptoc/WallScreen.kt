@@ -52,7 +52,7 @@ fun WallScreen(store: Store) {
 @Composable fun Panel(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) = Column(modifier.background(Palette.panel).border(0.5.dp, Palette.line), content = content)
 @Composable fun Label(text: String, hint: String? = null, action: (@Composable () -> Unit)? = null) = Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
     Text(text, color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
-    hint?.let { Text("  $it", color = Palette.dim.copy(alpha = .7f), fontSize = 9.sp, fontFamily = FontFamily.Monospace) }
+    if (!Ui.lean || (hint != null && hint.any { it.isDigit() })) hint?.let { Text("  $it", color = Palette.dim.copy(alpha = .7f), fontSize = 9.sp, fontFamily = FontFamily.Monospace) }  // lean keeps counts, drops words
     Spacer(Modifier.weight(1f)); action?.invoke()
 }
 @Composable fun Chip(text: String, color: Color = Palette.dim, filled: Boolean = false, onClick: (() -> Unit)? = null) = Text(text, Modifier.let { m -> if (onClick != null) m.clickable { onClick() } else m }
@@ -73,14 +73,25 @@ fun Header(st: WallState, store: Store) {
         Text("TOC", color = Palette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
         Text("  COMMON OPERATING PICTURE", color = Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
         Spacer(Modifier.width(12.dp))
-        s?.let { Chip("POSTURE · ${it.posture.uppercase()}", Palette.posture(it.posture), filled = true) }
+        s?.let { if (Ui.posture) Text("POSTURE · ${it.posture.uppercase()}", Modifier.border(2.dp, Palette.posture(it.posture).copy(alpha = .8f), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 5.dp), color = Palette.posture(it.posture), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+                 else Chip("POSTURE · ${it.posture.uppercase()}", Palette.posture(it.posture), filled = true) }
         Spacer(Modifier.width(8.dp))
         w?.let { Chip("${it.name.uppercase()} WATCH ${it.battleCaptain ?: "UNASSIGNED"} · ${"%.0f".format(it.remainingH)}h left", if (it.overdue) Palette.red else if (it.inOverlap) Palette.amber else Palette.blue2, filled = true,
             onClick = if (it.battleCaptain == null && st.role == "battle_captain") ({ store.act("taking the watch") { takeWatch("Battle Captain (Android)") } }) else null) }
         Spacer(Modifier.weight(1f))
         val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 1100
-        s?.let { if (wide) { Stat("${it.totalPeople}", "PERSONNEL"); Stat("${it.traveling}", "TRAVELING", Palette.blue2); Stat("${it.vipsTraveling}", "VIP OUT", Palette.amber) }
-                 Stat("${it.realThreats}", "LIVE THR", Palette.red); Stat("${it.confirmedLinks}", "CONFIRMED", Palette.amber); Stat("${it.unaccounted}", "UNACCTD", if (it.unaccounted > 0) Palette.red else Palette.green) }
+        s?.let { if (wide || !Ui.posture) { Stat("${it.totalPeople}", "PERSONNEL"); Stat("${it.traveling}", "TRAVELING", Palette.blue2); Stat("${it.vipsTraveling}", "VIP OUT", Palette.amber) }
+                 Stat("${it.realThreats}", "LIVE THR", Palette.red); Stat("${it.confirmedLinks}", "CONFIRMED", Palette.amber)
+                 if (it.unaccounted > 0 || !Ui.posture) Stat("${it.unaccounted}", "UNACCTD", if (it.unaccounted > 0) Palette.red else Palette.green)
+                 if (it.flash > 0) Stat("${it.flash}", "FLASH", Palette.red)
+                 if (!Ui.posture) { Stat("${it.present}", "PRESENT"); Stat("${it.securityOnShift}", "SEC ON", Palette.green); Stat("${it.openPirs}", "PIRS", Palette.amber) } }
+        Spacer(Modifier.width(8.dp))
+        var dispMenu by remember { mutableStateOf(false) }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        Box { Chip("DISPLAY ▾", Palette.dim, onClick = { dispMenu = true })
+            DropdownMenu(dispMenu, { dispMenu = false }) {
+                DropdownMenuItem({ Text((if (Ui.lean) "✓ " else "   ") + "Lean labels", fontSize = 12.sp) }, { Ui.lean = !Ui.lean; Ui.save(ctx) })
+                DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) }) } }
         Spacer(Modifier.width(8.dp))
         Box { Chip(st.role.uppercase().replace('_', ' '), Palette.text, onClick = { roleMenu = true })
             DropdownMenu(roleMenu, { roleMenu = false }) { ROLES.forEach { r -> DropdownMenuItem({ Text(r, fontSize = 12.sp) }, { store.setRole(r); roleMenu = false }) } } }
@@ -207,8 +218,8 @@ fun ColumnScope.LogPanel(st: WallState) {
             Text(e.summary, color = Palette.text.copy(alpha = .85f), fontSize = 9.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
 }
 
-@Composable fun EstimateLine(e: Estimate?) = Text(buildString { append(e?.section ?: "—"); append(" assesses: "); append(e?.assessment?.ifBlank { null } ?: "no assessment on record") },
-    Modifier.padding(horizontal = 10.dp, vertical = 2.dp), color = if (e?.assessment.isNullOrBlank()) Palette.dim else Palette.text, fontSize = 9.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+@Composable fun EstimateLine(e: Estimate?) { if (Ui.lean && e?.assessment.isNullOrBlank()) return; Text(buildString { append(e?.section ?: "—"); append(" assesses: "); append(e?.assessment?.ifBlank { null } ?: "no assessment on record") },
+    Modifier.padding(horizontal = 10.dp, vertical = 2.dp), color = if (e?.assessment.isNullOrBlank()) Palette.dim else Palette.text, fontSize = 9.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
 @Composable fun Dot(color: Color) = Box(Modifier.size(7.dp).background(color, RoundedCornerShape(50)))
 @Composable fun RowItem(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) =
     Row(Modifier.fillMaxWidth().background(if (selected) Palette.blue.copy(alpha = .12f) else Color.Transparent).clickable { onClick() }.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), content = content)

@@ -35,6 +35,7 @@ struct SectionLabel: View {
 }
 
 struct PanelHead: View {
+    @Environment(COPStore.self) private var store
     var code: String; var title: String; var hint: String? = nil
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -42,7 +43,7 @@ struct PanelHead: View {
                 .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
             Text(title).font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(2)
             Spacer()
-            if let hint { Text(hint).font(.system(size: 10)).foregroundStyle(Theme.dim) }
+            if let hint, !store.leanLabels { Text(hint).font(.system(size: 10)).foregroundStyle(Theme.dim) }
         }
     }
 }
@@ -50,9 +51,10 @@ struct PanelHead: View {
 
 /// The running-estimate line under a panel head (§3.1). Read-only on the phone; edited from the wall.
 struct EstimateLine: View {
+    @Environment(COPStore.self) private var store
     var e: Estimate?
     var body: some View {
-        if let e {
+        if let e, !(store.leanLabels && e.assessment.isEmpty) {
             VStack(alignment: .leading, spacing: 2) {
                 (Text("\(e.section) assesses: ").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(Theme.blue)
                  + Text(e.assessment.isEmpty ? "no assessment on record" : e.assessment).font(.system(size: 12)).foregroundColor(e.assessment.isEmpty ? Theme.dim : .primary))

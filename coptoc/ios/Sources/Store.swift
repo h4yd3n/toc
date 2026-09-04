@@ -15,6 +15,10 @@ final class COPStore {
     /// Decision 1: the restricted layer (residences) is off by default.
     var showRestricted = false { didSet { Task { await load() } } }
     var now = Date()
+    /// DISPLAY toggles, the same two as the wall. Lean labels drop hints and empty estimate lines; the posture header
+    /// leads with posture and keeps five counters. Both default on; persisted per device.
+    var leanLabels: Bool = UserDefaults.standard.object(forKey: "toc.leanLabels") as? Bool ?? true { didSet { UserDefaults.standard.set(leanLabels, forKey: "toc.leanLabels") } }
+    var postureHeader: Bool = UserDefaults.standard.object(forKey: "toc.postureHeader") as? Bool ?? true { didSet { UserDefaults.standard.set(postureHeader, forKey: "toc.postureHeader") } }
 
     let client = COPClient()
     private var polling = false

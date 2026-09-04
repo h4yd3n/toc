@@ -11,6 +11,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(this)  // no key: OpenFreeMap tiles are keyless
+        Ui.load(applicationContext)
         setContent { TOCTheme { WallScreen(store) } }
     }
 }
