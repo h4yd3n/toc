@@ -20,6 +20,33 @@ It runs as a web app now, and as native iOS and Android apps later, against one 
 
 **The feel:** a strategy game's command view. Simple to read, immediate to interact with, comprehensive underneath. The map animates; the panels are live; nothing requires a manual.
 
+### 1.1 Where this comes from — in the author's words
+
+> The entire concept of this COP was born from my years of experience working in tactical operations centers that
+> run twenty-four seven. Each TOC is also known as a fusion center, because it fuses S1, S2, S3, S4, S6, and other
+> special sections — and they're all there, twenty-four seven. In Iraq I worked a whole year like this as the S2,
+> hand in hand with Ops, the S3, to plan current and future operations. The importance of each role cannot be
+> overstated.
+>
+> Intelligence and Ops are extremely important together, because Ops feeds Intel and Intel feeds Ops — but our
+> sources are different. Ops feeds Intel with our soldiers on the ground, or other direct reports that come in
+> through our soldiers or our pilots who see something from the air. Intel typically gets its reports from other
+> sources: higher headquarters, or partner sources such as CIA, NSA, or partner nations. The S2 analyzes that
+> information and tracks it over months, if not years — building cases, collecting evidence, building assessments.
+>
+> If the evidence was strong enough, there were times I would put together a target package and hand it to Ops to
+> conduct an operation with boots on the ground. Ops would plan it directly with the combat units — arrange for the
+> infantry to be at that location at that time — and figure out the logistics: helicopters, air operations, how to
+> move soldiers where trucks can't go. Then we watched the operation on real-time feeds, with Intel constantly
+> analyzing what came back from the soldiers and pushing information down to them if we got something from another
+> source. That is the whole purpose of the TOC: to support ongoing operations.
+>
+> Here, the COP is the fusion cell. Sigtoc is the S2 function — the people monitoring threats twenty-four seven and
+> pushing anything relevant down to the COP and to Ops, while also watching the COP. The S2's job is more specific:
+> making sure intelligence assessments reach the right people at the right time, and that the information is timely
+> and accurate. Modtoc, the moderation module, comes later — it's queue work, and ROOST has largely built that
+> already, so there's no reason to reinvent it; being open source, we may take some of theirs and adapt it.
+
 ---
 
 ## 2. The Staff Structure
@@ -201,6 +228,24 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | Targeted threat reporting | OSAC · Flashpoint · Dataminr · Recorded Future | login / paid | **[LATER]** premium connectors |
 
 An indicator with no connected source shows as a gap on every plan that needs it. That is the honest state, and it is the prompt to connect one.
+
+### 5.10 Ops and Intel feed each other — what that adds to the requirements
+
+§1.1 describes a loop the document had only half of. Intel's sources are external; **Ops' sources are our own people.**
+Intel builds cases over time; when the evidence is strong enough the product goes to Ops, who plan and resource the
+response; the floor watches it happen and Intel pushes anything new down to the people in the field. Four things
+follow from that, none of which the wall has yet.
+
+| # | Requirement | Military analog | Corporate form | Section | Status |
+| :-- | :--- | :--- | :--- | :--- | :--- |
+| 1 | **Organic reporting is a first-class source.** Our own people report what they see, and S2 treats it as reporting from the most reliable source there is. | SPOTREP / SITREP from the unit | A security officer in the SF lobby reports a crowd forming; an EP agent reports the route is blocked; a traveler's check-in note. Each is a `Report` with who, where, when, what — and it is a Sigtoc source (`source: ops`, reliability graded like any other, typically A). | S3 → S2 | **[NEXT]** — the check-in note is the seed; the `Report` object does not exist |
+| 2 | **Cases that live for months.** S2 tracks a thing over time, accumulating evidence, with assessments that version rather than replace. | The target folder | A recurring protest group at HQ; a persistent online threat actor naming the company; a fixation case against an executive. A `Case` holds evidence and every assessment ever made on it. Threats are events; a case is the thread through them. | S2 | **[NEXT]** — threats and assessments exist; nothing persists across them |
+| 3 | **A product hands off to an operation.** When an assessment is strong enough, Ops plans the response and resources it. | Target package → OPORD | An approved assessment on the Vegas keynote becomes an `Operation`: tasks (advance the venue, vet transport, brief the principal), assignments (EP team, local vendor), and resource asks (S4: vehicles, kit). The wall shows the operation's status against the event. | S2 → S3 (S4 for resources) | **[LATER]** — the wall has events and trips, not plans |
+| 4 | **Dissemination is tracked.** "Right people, right time" is a measurable: who a product went to, when, and whether they acknowledged it. | Distribution list and read-back | Every product carries recipients and acknowledgements; latency from `observed_at` → published → acknowledged is on the record. A warning nobody read is a failure the ledger should show. | S2 → S6 | **[NEXT]** — products exist; recipients and acknowledgements do not |
+
+The loop, closed: **Ops reports → S2 grades and files into cases → S2 assesses → the product is disseminated and
+acknowledged → Ops plans the operation → the floor watches it → Ops reports.** The wall is where all of it is visible
+at once, which is what a fusion cell is.
 
 ### 5.9 Decisions for §5 (2026-09-02)
 
@@ -398,5 +443,6 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.6** — the origin in the author's words (§1.1); the ops↔intel loop and the four requirements it adds (§5.10).
 - **v3.5** — cadence adjustable (K); S6 inbound, escalation, roster edits decided (L–N). No open decisions.
 - **v3.4** — Sigtoc spec (§5): two missions, first-class requirements, self-generating collection plan, Area Assessment + INTSUM, standalone surface; decisions G–J.

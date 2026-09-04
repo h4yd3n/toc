@@ -8,6 +8,17 @@ A unified **Tactical Operations Center (TOC)** combining:
 - **`apps/sigtoc`**: All-Source threat intelligence ingestion, STIX 2.1 entity resolution graph, and TOC alerts.
 - **`packages/shared`**: Shared Pydantic schemas, telemetry, and STIX contracts.
 
+## Why
+
+> The entire concept of this COP was born from my years of experience working in tactical operations centers that
+> run twenty-four seven — fusion centers, because they fuse S1, S2, S3, S4, S6, and other special sections, all there,
+> twenty-four seven. In Iraq I worked a year as the S2, hand in hand with Ops, to plan current and future operations.
+> Ops feeds Intel and Intel feeds Ops, but our sources are different: Ops has our own people on the ground; Intel has
+> everyone else. The whole purpose of the TOC is to support ongoing operations.
+
+The rest is in [PRD.md §1.1](PRD.md). The COP is the fusion cell. Sigtoc is the S2. Modtoc is queue work that
+[ROOST](https://github.com/roostorg) has largely built already.
+
 ## Layout — three modules, one repo
 
 ```
