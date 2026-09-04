@@ -5,7 +5,7 @@ import os
 import re
 import uuid
 from datetime import timedelta, datetime, timezone
-from typing import Tuple, Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import Request, APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select

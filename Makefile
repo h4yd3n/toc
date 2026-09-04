@@ -7,6 +7,7 @@ UVICORN ?= $(VENV_BIN)uvicorn
 .PHONY: test test-coptoc test-sigtoc test-modtoc test-integration diff lint run-api run-mod run-web run-cop ios-gen ios-build ios-run
 
 test:
+	$(PY) scripts/check_annotations.py
 	$(PYTEST) tests/ -v
 
 test-coptoc:

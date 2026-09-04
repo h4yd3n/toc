@@ -63,7 +63,7 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
                     circleRadius(switchCase(eq(get("kind"), literal("site")), literal(7f), literal(5f))),
                     circleColor(get("color")), circleStrokeColor(literal("#0b0f14")), circleStrokeWidth(1.5f)))
                 style.addLayer(SymbolLayer("blue-labels", "blue").withProperties(
-                    textField(get("label")), textSize(10f), textColor(literal("#dce4ee")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
+                    textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
                     textOffset(arrayOf(0f, 1.3f)), textAllowOverlap(false), textOptional(true)))
                 applySnapshot(style, latest[0], latestRestricted[0])  // the first snapshot usually arrives before the style does
                 map.addOnMapClickListener { p ->
@@ -85,7 +85,11 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
     })
 }
 
-private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean) {
+private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean) = try {
+    applySnapshotInner(style, s, restricted)
+} catch (e: Exception) { android.util.Log.e("WallMap", "applySnapshot failed", e) }
+
+private fun applySnapshotInner(style: Style, s: Snapshot?, restricted: Boolean) {
     s ?: return
     val threats = s.threats.map { t -> feature(t.lon, t.lat, "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm) }
     val blue = s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l -> feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to l.name, "color" to hex(Palette.posture(l.effectivePosture))) } +
@@ -93,4 +97,5 @@ private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean) {
             s.events.map { e -> feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple)) }
     (style.getSource("threats") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(threats))
     (style.getSource("blue") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(blue))
+    android.util.Log.i("WallMap", "applied ${threats.size} threats, ${blue.size} blue features; blue source present=${style.getSource("blue") != null}, layer present=${style.getLayer("blue-dots") != null}")
 }
