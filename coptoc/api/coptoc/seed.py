@@ -154,6 +154,9 @@ def _threats(now):
         ThreatRow(id="thr_001", title="Regional drone / missile activity", lat=24.7136, lon=46.6753, radius_km=60,
                   severity="moderate", source="synthetic:osint_feed", confidence="moderate", observed_at=h(6), event_type="conflict",
                   summary="Reporting of intercepted UAS activity targeting infrastructure in the region. No indication of targeting against business travelers."),
+        ThreatRow(id="thr_007", title="Transport strike called — Lisbon metro and CP rail", lat=38.7223, lon=-9.1393, radius_km=30,
+                  severity="moderate", source="synthetic:news_rss", confidence="high", observed_at=h(10), event_type="transit",
+                  summary="Unions announce a 48-hour stoppage across Lisbon metro and suburban rail from the 14th. Airport link affected."),
         ThreatRow(id="thr_002", title="Large demonstration planned — Westminster", lat=51.5007, lon=-0.1246, radius_km=3,
                   severity="low", source="synthetic:news_rss", confidence="high", observed_at=h(14), event_type="civil_unrest",
                   summary="Permitted march expected 20–40k attendees Saturday. Road closures around Whitehall. Historically peaceful."),
@@ -237,8 +240,23 @@ async def _seed_case(session: AsyncSession, now: datetime) -> None:
         await file_report_into_case(session, r, case, known)
 
 
+async def _seed_directed(session: AsyncSession, now: datetime) -> None:
+    """The Lisbon question (§5.1): an EA asks about two candidate offsite venues. Synthetic, like everything else here."""
+    from sigtoc.area import AreaAssessmentRow
+    from sigtoc.requirements import RequirementRow
+    for row in (await session.execute(select(AreaAssessmentRow))).scalars():
+        await session.delete(row)
+    for rid, place, lat, lon in (("req_dir_seed_lisbon", "Lisbon, Portugal", 38.7223, -9.1393), ("req_dir_seed_porto", "Porto, Portugal", 41.1579, -8.6291)):
+        if not await session.get(RequirementRow, rid):
+            session.add(RequirementRow(id=rid, kind="directed", subject_type="place", subject_id=None, subject_name=place, lat=lat, lon=lon, radius_km=50.0,
+                                       question=f"What is the environment in {place} for the Q1 leadership offsite?", purpose="Q1 leadership offsite — candidate venue", priority=2,
+                                       window_from=now + timedelta(days=40), window_to=now + timedelta(days=43), status="active", owner="EA - Office of the CEO", created_at=now, updated_at=now))
+    await session.flush()
+
+
 async def reseed(session: AsyncSession) -> None:
     await _seed_case(session, now_utc())
+    await _seed_directed(session, now_utc())
     for model in (AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)

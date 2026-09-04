@@ -118,3 +118,12 @@ export interface Case { id: string; title: string; kind: 'general' | 'person' | 
   opened_by: string; opened_at: string; closed_at: string | null; access_roles: string[]; entities?: number; relationships?: number; events?: number; pending_review?: number }
 export interface CaseDetail extends Case { graph: { entities: CaseEntity[]; relationships: CaseRel[]; events: CaseEvent[] }; reports: Report[]; analysis: { links: string[]; pattern: string } }
 export interface Queue { case_id: string; entities: CaseEntity[]; relationships: CaseRel[]; events: CaseEvent[]; total: number }
+
+// §5.6 Area Assessment — candidates side by side, no composite
+export interface AreaCell { indicator: string; label: string; state: 'reported' | 'quiet' | 'gap'; likelihood: string | null; band: string | null; confidence: string | null
+  confidence_basis: string[]; evidence: { threat_id: string; title: string; source: string; severity: string; distance_km: number; observed_at: string; synthetic: boolean }[]; sources: string[]; recommended?: string[]; worst?: string; severity?: string }
+export interface AreaCandidate { requirement_id: string; place: string; lat: number; lon: number; window_from: string | null; window_to: string | null; cells: AreaCell[]
+  counts: { reported: number; quiet: number; gap: number }; worst: { indicator: string; label: string; likelihood: string; band: string; confidence: string; title: string } | null; known: boolean; bluf: string; author: string
+  unclassified: { threat_id: string; title: string }[] }
+export interface AreaAssessment { id: string; title: string; purpose: string; requirement_ids: string[]; status: 'draft' | 'review' | 'approved'; author: string; created_at: string; decided_by: string | null
+  indicators: { id: string; label: string }[]; candidates: AreaCandidate[]; gaps: string[]; approvable: boolean; refusal: string | null; note: string; places?: string[] }

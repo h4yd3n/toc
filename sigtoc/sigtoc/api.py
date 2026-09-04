@@ -15,6 +15,8 @@ from . import requirements as R
 from .requirements import CADENCES, CATALOG, INDICATORS, RequirementRow, SourceStateRow
 from . import cases as C
 from .cases import CaseEventRow, CaseRow, EntityRow, RelationshipRow, ReportRow
+from . import area as A
+from .area import AreaAssessmentRow
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
 
@@ -380,6 +382,73 @@ async def close_case(case_id: str, session: AsyncSession = Depends(get_session),
     c.status, c.closed_at = "closed", R.now_utc(); await session.commit()
     await ledger().append_event(content_id=case_id, event_type="s2.case.closed", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state="open", new_state="closed", reason=f"{c.title} closed")
     return C.case_dict(c)
+
+
+# ---------------------------------------------------------------- §5.6 Area Assessment
+
+AREA_DRAFTERS = {"battle_captain", "analyst"}
+AREA_APPROVERS = {"battle_captain", "analyst"}
+
+
+class AreaCreate(BaseModel):
+    requirement_ids: List[str] = Field(..., min_length=1, max_length=6)
+    title: Optional[str] = None
+    purpose: Optional[str] = None
+
+class AreaUpdate(BaseModel):
+    status: Literal["draft", "review", "approved"]
+
+
+@router.post("/area-assessments", status_code=201)
+async def draft_area(body: AreaCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Candidates side by side. Directed requirements only — the wall's own subjects get the per-subject Assessment."""
+    if (x_toc_role or "").lower() not in AREA_DRAFTERS:
+        raise HTTPException(403, f"Drafting an Area Assessment needs {sorted(AREA_DRAFTERS)}")
+    reqs = []
+    for rid in body.requirement_ids:
+        r = await session.get(RequirementRow, rid)
+        if not r: raise HTTPException(404, f"requirement {rid} not found")
+        if r.kind != "directed": raise HTTPException(422, f"{rid} is a standing requirement; an Area Assessment compares directed candidates")
+        reqs.append(r)
+    now = R.now_utc()
+    purpose = body.purpose or reqs[0].purpose
+    product = await A.build_product(session, reqs, purpose, now)
+    title = body.title or (f"Area Assessment — {' vs '.join(r.subject_name for r in reqs)}" if len(reqs) > 1 else f"Area Assessment — {reqs[0].subject_name}")
+    row = A.new_row(title, purpose, body.requirement_ids, product, now)
+    session.add(row); await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.area.drafted", actor_type="ai_model" if "heuristic" in row.author or "claude" in row.author else "system", actor_id=row.author, new_state="draft",
+                                reason=f"{title}: " + "; ".join(f"{c['place']} {c['counts']['reported']}/{c['counts']['quiet']}/{c['counts']['gap']}" for c in product["candidates"]) + (" — REFUSED" if not product["approvable"] else ""),
+                                metadata={"requirement_ids": body.requirement_ids, "approvable": product["approvable"], "requested_by": x_toc_actor or x_toc_role})
+    return A.to_dict(row)
+
+
+@router.get("/area-assessments")
+async def list_areas(session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(AreaAssessmentRow).order_by(AreaAssessmentRow.created_at.desc()))).scalars().all()
+    return [{k: v for k, v in A.to_dict(r).items() if k != "candidates"} | {"places": [c["place"] for c in json.loads(r.product_json).get("candidates", [])]} for r in rows]
+
+
+@router.get("/area-assessments/{area_id}")
+async def get_area(area_id: str, session: AsyncSession = Depends(get_session)):
+    row = await session.get(AreaAssessmentRow, area_id)
+    if not row: raise HTTPException(404, "area assessment not found")
+    return A.to_dict(row)
+
+
+@router.patch("/area-assessments/{area_id}")
+async def update_area(area_id: str, body: AreaUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    row = await session.get(AreaAssessmentRow, area_id)
+    if not row: raise HTTPException(404, "area assessment not found")
+    if (x_toc_role or "").lower() not in AREA_APPROVERS:
+        raise HTTPException(403, "Reviewing or approving is the analyst's or the Battle Captain's")
+    product = json.loads(row.product_json)
+    if body.status == "approved" and not product.get("approvable"):
+        raise HTTPException(409, "No qualifying evidence: a collection gap cannot be approved (§5.5)")
+    old = row.status
+    row.status, row.decided_by, row.decided_at = body.status, x_toc_actor or x_toc_role, R.now_utc()
+    await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.area.status", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=body.status, reason=f"{row.title} → {body.status}")
+    return A.to_dict(row)
 
 
 def standalone_app() -> FastAPI:

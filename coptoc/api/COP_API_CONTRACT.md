@@ -167,6 +167,16 @@ Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `re
 
 Extraction (Decision P) only suggests. Without `ANTHROPIC_API_KEY` it is a cited heuristic: capitalized names and initials, `@handles`, phone numbers, emails, plates after "plate"/"reg", and an `associate` link when two people share a sentence with an association word. With the key, the model (`TOC_MODEL`, default `claude-opus-5`) returns the same shape with an exact quote per item; anything without a quote is dropped. Every item's evidence carries the report's grade, so a relationship's `grade` is the best reliability and credibility among its citations.
 
+## 3.4 Sigtoc — Area Assessment (`/v1/s2/area-assessments`, PRD §5.6, Decision I)
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/s2/area-assessments` | `requirement_ids[1..6]` (directed only), `title?`, `purpose?` — battle_captain / analyst | drafts the comparison; ledger `s2.area.drafted` with per-candidate reported/quiet/gap counts and `approvable` |
+| `GET` | `/s2/area-assessments` · `/{id}` | | list (with `places`) or the full product |
+| `PATCH` | `/s2/area-assessments/{id}` | `status: draft/review/approved` — battle_captain / analyst | `409` on approve when `approvable` is false. Ledger `s2.area.status` |
+
+Product shape: `indicators[]` (rows), `candidates[]` (columns) each with `cells[]` — `state` is `reported` (`likelihood` from the ICD 203 list, `band`, code-computed `confidence` with `confidence_basis`, `evidence[]`), `quiet` (a tasked source, nothing reported; `confidence: low`), or `gap` (`recommended[]` sources) — plus `counts`, `worst`, `bluf`, `author`. No score, rank, or composite field exists (Decision I). Evidence is the wall's threat table within the requirement's radius (+5 km buffer) observed between 90 days before the window and its end; a threat's `event_type` maps to an indicator, unmapped ones are listed as `unclassified`. `refusal` is set and approval is refused when no candidate has a reported or quiet cell.
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.

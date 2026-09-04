@@ -319,3 +319,20 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .rpt { border-top: 1px solid var(--line-2); padding: 5px 0; font-size: 11px; }
 .rpt-head { display: flex; gap: 6px; align-items: center; margin-bottom: 3px; } .rpt-text { color: var(--text); white-space: pre-wrap; }
 .dform textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 11px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; padding: 6px; margin-bottom: 6px; resize: vertical; }
+
+/* §5.6 Area Assessment */
+.detail.area { width: 640px; border-color: rgba(245,158,11,.5); }
+.matrix-wrap { overflow-x: auto; margin-top: 8px; }
+.matrix { border-collapse: collapse; width: 100%; font-size: 11px; }
+.matrix th { text-align: left; font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--dim); padding: 4px 6px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+.matrix th .small { letter-spacing: 0; text-transform: none; }
+.matrix td { padding: 5px 6px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+.matrix td.ind { color: var(--dim); font-size: 10.5px; max-width: 180px; }
+.matrix td.cell { cursor: pointer; border-left: 2px solid transparent; }
+.matrix td.cell:hover, .matrix td.cell.on { background: var(--panel-2); border-left-color: var(--blue); }
+.matrix .term { font-family: var(--mono); font-size: 11px; color: var(--amber); }
+.matrix .term.quiet { color: var(--green); } .matrix .term.gap { color: var(--red); }
+.matrix .cell.st-reported { background: rgba(245,158,11,.06); }
+.cellview { margin-top: 8px; padding: 8px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--panel-2); }
+.refusal { margin-top: 8px; padding: 8px; border: 1px solid rgba(239,68,68,.5); border-radius: 4px; color: var(--red); font-size: 11.5px; }
+.pick { margin: 0 2px 0 0; accent-color: var(--amber); }

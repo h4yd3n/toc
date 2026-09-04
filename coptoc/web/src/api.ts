@@ -1,4 +1,4 @@
-import type { Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { AreaAssessment, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -51,3 +51,7 @@ export const mergeEntity = (caseId: string, id: string, into: string) => req<Cas
 export const closeCase = (id: string) => req<Case>('PATCH', `/v1/s2/cases/${id}/close`)
 export const fileReport = (body: { text: string; kind: string; reported_by: string; reporter_role?: string; place?: string; case_id?: string; lat?: number; lon?: number }) => req<Report & { extracted: { entities: number; relationships: number; events: number } | null }>('POST', '/v1/s2/reports', body)
 export const listReports = (caseId?: string) => req<Report[]>('GET', caseId ? `/v1/s2/reports?case_id=${caseId}` : '/v1/s2/reports')
+export const listAreas = () => req<AreaAssessment[]>('GET', '/v1/s2/area-assessments')
+export const getArea = (id: string) => req<AreaAssessment>('GET', `/v1/s2/area-assessments/${id}`)
+export const draftArea = (requirement_ids: string[], title?: string) => req<AreaAssessment>('POST', '/v1/s2/area-assessments', { requirement_ids, title })
+export const setAreaStatus = (id: string, status: 'draft' | 'review' | 'approved') => req<AreaAssessment>('PATCH', `/v1/s2/area-assessments/${id}`, { status })

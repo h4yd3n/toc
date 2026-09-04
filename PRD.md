@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.11
+**Version:** 3.12
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -182,7 +182,7 @@ is drawn from the same picture the INTSUM summarizes.
 | Mission | The question | Where the requirement comes from | Status |
 | :--- | :--- | :--- | :--- |
 | **Force protection** | What threatens *our* people, sites, and events, now and in the near term? | **The blue force picture.** Every site, trip, and event on the wall generates standing requirements automatically. | **[BUILT]** — standing requirements write themselves from S1/S3 and expire with their subject; the collection plan shows coverage and gaps per requirement. |
-| **Decision support** | What is the environment in a place we are *considering* — an offsite, a conference, a new office — for a given window? | **A person asks.** A directed requirement names a place, a window, and a purpose; the place need not be on the wall. | Requirement + plan **[BUILT]**; the Area Assessment product **[NEXT]** |
+| **Decision support** | What is the environment in a place we are *considering* — an offsite, a conference, a new office — for a given window? | **A person asks.** A directed requirement names a place, a window, and a purpose; the place need not be on the wall. | Requirement + plan **[BUILT]**; the Area Assessment product **[BUILT]** — candidates side by side, three cell states, no composite |
 
 Same machinery, two triggers. Everything after the requirement — collection plan, sources, grading, drafting, refusal — is identical.
 
@@ -241,13 +241,13 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | :--- | :--- | :--- | :--- |
 | **Threat** | collection | something happened near a subject — a ring on the map with source, severity, confidence | **[BUILT]** |
 | **Assessment** | a wall subject | the finding for one trip, event, or site: BLUF, judgments with term + band + confidence, evidence, gaps | **[BUILT]** |
-| **Area Assessment** | a directed requirement | the environment for a place and window that may not be on the wall; **several candidates compared side by side** | **[NEXT]** |
+| **Area Assessment** | a directed requirement | the environment for a place and window that may not be on the wall; **several candidates compared side by side** | **[BUILT]** — `/v1/s2/area-assessments`; the S2 panel picks directed requirements and opens the matrix |
 | **INTSUM** | daily, standing | what changed in the last 24 h across every active requirement: new threats, changed scores, expired windows, open gaps | **[NEXT]** |
 | **Warning** | collection | an imminent, specific threat to a subject — FLASH to the floor | **[LATER]** with S6 alerting |
 
-**The Area Assessment compares; it does not score.** Candidates are laid side by side on what is known, how well it is known, and what is missing — bands, confidence, and gaps per indicator. Ranking is the human's. **[NEEDS RULING]** whether to add a numeric composite; the recommendation is no — v1's scoring model was invented and could not be defended.
+**The Area Assessment compares; it does not score** (Decision I). Candidates are laid side by side on what is known, how well it is known, and what is missing. Each cell is one of three states: **reported** — a term from the fixed list, its band, a code-computed confidence, and the evidence; **quiet** — a tasked source is watching and has reported nothing, which is worth exactly as much as that source's reliability and is never a finding of safety; **gap** — nobody is watching, with the sources that could. Reporting up to 90 days before the window counts as describing the place. A product where nothing is known for any candidate refuses and cannot be approved (§5.5). Ranking is the human's.
 
-**The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. **[NEEDS RULING]** publication time and whether it is auto-published or reviewed first.
+**The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. Drafted at a fixed time and released by the Battle Captain (Decision G).
 
 ### 5.7 Surfaces (Decision 3a) **[BUILT]** — `/v1/s2` API mounted in the wall and standalone (`make run-s2`); the S2 panel shows requirements, coverage, gaps, the directed form, and the source settings
 
@@ -528,7 +528,7 @@ COP never writes back to a source system.
 | F | Who opens a roll call | **Battle Captain only.** Anyone on the floor may work the roster | `ROLL_CALL_OPENERS` |
 | G | INTSUM publication | **Drafted at a fixed time, released by the Battle Captain** — one human gate on the product the whole floor reads | §5.6 — not yet built |
 | H | Who creates directed requirements | **Any security role, plus EAs**; the S2 analyst owns the answer | §5.2 — not yet built |
-| I | Area Assessment scoring | **No numeric composite.** Bands, confidence, and gaps per indicator; the human ranks | §5.6 — not yet built |
+| I | Area Assessment scoring | **No numeric composite.** Bands, confidence, and gaps per indicator; the human ranks | §5.6 — enforced: the product has no score field; three cell states |
 | J | Raw signal retention | **90 days**; anything cited by a product lives as long as the product; the ledger is forever | §5.4 — not yet built |
 | K | Collection cadence | **Per source, operator-adjustable**, all options exposed; shipped defaults are starting points, not rules | §5.3 — not yet built |
 | L | Inbound SMS replies | **The check-in link is enough for v1**; a Twilio inbound webhook (a "SAFE" text clears the row) comes with a public deploy | §8 — not yet built |
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.12** — Area Assessment built (§5.6): candidates side by side, reported / quiet / gap cells, refuse-to-approve; stale rulings in §5.6 replaced with G and I.
 - **v3.11** — `Report`/`Case` and the case graph built (§5.10 #1–2, §5.11); the review queue is the v1 workbench.
 - **v3.10** — Sigtoc requirements, the self-generating collection plan, sources as operator settings, `/v1/s2` embedded and standalone; domains recorded.
 - **v3.9** — the watch built: shift model, estimate lines on every panel, the brief, handover/acknowledge on the ledger (web + API; iOS read-only).

@@ -3,6 +3,7 @@ import MapView from './MapView'
 import { BriefPanel, EstimateLine, WatchChip } from './Watch'
 import { RequirementsPanel } from './Requirements'
 import { CasesPanel } from './Cases'
+import { AreaPanel } from './Area'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -40,6 +41,7 @@ export default function App() {
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
   const [showBrief, setShowBrief] = useState(false)
+  const [areaId, setAreaId] = useState<string | null>(null)
   const [briefReload, setBriefReload] = useState(0)
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
@@ -125,7 +127,8 @@ export default function App() {
 
       <main className="center">
         <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
-        {sel && snap && !showBrief && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} />}
+        {areaId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
+        {sel && snap && !showBrief && !areaId && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} />}
         {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
@@ -137,7 +140,7 @@ export default function App() {
           <button className="mini" disabled={!!busy} onClick={() => act('collecting GDACS', api.refreshIntel)} title="Run live collectors (GDACS)">⟳ COLLECT</button>
         </PanelHead>
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
-        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} />
+        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
         <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
         <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>
         <ul className="list">
