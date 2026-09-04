@@ -1,8 +1,10 @@
 import argparse
+import os
 import json
 from typing import Dict, List
 from shared.models import ContentItem
 from modtoc.compiler.validator import PolicyValidator
+from modtoc.classifier.client import ClassifierClient
 from modtoc.engine.router import ModerationRouter
 
 
@@ -68,6 +70,8 @@ if __name__ == "__main__":
     parser.add_argument("--policy", required=True, help="Path to policy YAML file")
     parser.add_argument("--golden", required=True, help="Path to golden eval JSON file")
     parser.add_argument("--output-comment", help="Optional file to write GitHub PR comment markdown")
+    parser.add_argument("--mode", choices=["heuristic", "claude"], default=os.environ.get("MODTOC_CLASSIFIER", "heuristic"),
+                        help="heuristic (offline, CI) or claude (needs ANTHROPIC_API_KEY; model from MODTOC_MODEL, default claude-opus-5)")
     args = parser.parse_args()
 
     report = run_eval_harness(args.policy, args.golden)

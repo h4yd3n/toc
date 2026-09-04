@@ -1,6 +1,6 @@
 import uuid
 from typing import Any, Dict, Optional
-from shared.models import ContentItem, ModerationDecision, VisibilityState
+from shared.models import ContentItem, EnforcementAction, ModerationDecision, VisibilityState
 from ..classifier.client import ClassifierClient
 from ..compiler.prompt_builder import PolicyPromptCompiler
 from ..compiler.routing_generator import RoutingTableGenerator
@@ -35,10 +35,14 @@ class ModerationRouter:
         # Step 1: Classify content
         result = self.classifier.classify_text(item.text, self.system_prompt, self.policy)
 
-        # Step 2: Route via matrix
-        action, target_vis, route_name = RoutingTableGenerator.resolve_decision(
-            self.policy, result.severity, result.confidence
-        )
+        # Step 2: Route via matrix — unless the classifier failed, in which case we fail CLOSED:
+        # limited visibility and a human review, never "allow because nothing was found".
+        if result.failed:
+            action, target_vis, route_name = EnforcementAction.RESTRICT_VISIBILITY, VisibilityState.LIMITED, "classifier_failure_human_review"
+        else:
+            action, target_vis, route_name = RoutingTableGenerator.resolve_decision(
+                self.policy, result.severity, result.confidence
+            )
 
         # REACH GATE OVERRIDE CHECK
         tripped_gate = self.reach_gate.check_reach_gate_tripped(0, item.view_count)
@@ -91,6 +95,7 @@ class ModerationRouter:
                 "severity": result.severity.value,
                 "confidence": result.confidence,
                 "route_instruction": route_name,
+                "classifier_failed": result.failed,
             },
         )
 
