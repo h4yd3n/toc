@@ -145,3 +145,70 @@ Kill every idea that does not survive both."
 >
 > Show each idea at 1024×1024 on a phone home screen beside Mail, Maps, and Slack, then the winner alone, large,
 > with a two-sentence reason a stranger would recognize it a week later.
+
+---
+
+## 4. Google Stitch — UI directions
+
+Stitch builds one screen per prompt. Start with the main prompt, then paste the follow-ups one at a time to branch.
+Attach `docs/wall.png` as the reference if it asks for one, and say "do not copy the layout".
+
+### Main prompt — the wall, map-first
+
+> A dark, minimalist security operations dashboard for desktop (1920×1080) called TOC. The interface is a full-bleed
+> world map (dark basemap, near-black land, slightly lighter water lines) that fills the entire screen. Everything
+> else floats over the map as thin, translucent panels with 1 px borders; no solid sidebars, no dense tables.
+>
+> Top edge, one slim bar, left to right: the wordmark "TOC" in a monospaced font; a posture pill reading "ELEVATED"
+> in amber; a watch pill reading "DUBLIN WATCH · R. Kovac · 5h12 left"; then six large numerals with tiny mono
+> labels beneath: 97 PERSONNEL, 5 TRAVELING, 4 VIP OUT, 7 THREATS, 3 CONFIRMED, 0 UNACCOUNTED; a role selector at
+> the far right reading "Battle Captain". Directly under the bar, a red strip that appears only when a warning is
+> live: a pulsing red "FLASH" tag, the text "Online threats against data center operators — DC-East (Virginia)",
+> and one green "ACKNOWLEDGE" button.
+>
+> On the map: our sites as small solid dots colored by posture (green normal, amber elevated, red critical) with a
+> short label; travelers as blue dots with a first name; events as purple diamonds; threats as translucent amber or
+> red rings sized by radius; travel routes as thin blue arcs. Clusters when zoomed out show a count.
+>
+> Left edge: a narrow vertical rail of icons for S1 Personnel, S2 Intelligence, S3 Operations, S6 Roll calls, and the
+> Battle log. Hovering or clicking a rail icon slides out a 320 px panel over the map. Show the S1 panel open: a list
+> of eight sites, each row a posture dot, the site name, and "34/39" present/assigned in mono; below it "TRAVELING 5"
+> with five names, VIPs starred, each with a small green "✓ 2h" check-in chip.
+>
+> Right edge: the S2 panel open, 340 px: a "WARNINGS · 1 awaiting release" header with one card (a red CRITICAL chip,
+> the title "Credible threat to venue — LVMPD advisory", buttons "RELEASE · SMS + CHAT" and "CANCEL"); then
+> "REQUIREMENTS · 44 active · 92% coverage" with rows of "P1 TRIP  Priya Ramanathan — London Office  7/8" over a
+> thin amber progress bar; then "THREATS · 7 · 5 live" with rows of a severity chip and a title.
+>
+> Bottom edge: a single horizontal strip of cards over the map, scrolling sideways: event cards ("T-21d ★ EMEA
+> Engineering Summit · London Office · 6 attending · COVER 2/3") and trip cards ("ACTIVE ★ Alex Ventura · San
+> Francisco → Riyadh · OP 2/4"). To its right, a compact battle log: five one-line entries, each a mono timestamp,
+> a small blue or amber type tag, and a sentence.
+>
+> Typography: an engineered grotesk for content, a monospace for labels, numerals, and timestamps; labels are 9–10 px
+> uppercase with wide tracking; nothing bold except numerals and titles. Colors: ground #0b0f14, panels #111821 at
+> 92% opacity, lines #223041, text #dce4ee, dim #7b8aa0, blue #3b82f6, amber #f59e0b, red #ef4444, green #22c55e,
+> purple #c084fc. Flat, crisp, no glassmorphism blur, no neon, no drop shadows heavier than 1 px lines. Sparse:
+> generous padding, at most one number per row, color and position carrying meaning instead of text.
+
+### Follow-ups, one at a time
+
+1. "Collapse both side panels to their rails so the map fills 90% of the screen. Show what the rail icons look like
+   with small badge counts (S2 shows 1 for the pending warning, S6 shows 0)."
+2. "Add a roll-call overlay: a 420 px panel over the map titled 'Roll call — London Office · 9/15 accounted', a
+   thick progress bar, chips 'UNREACHABLE 2 · ASSIST 1 · UNACCOUNTED 3 · SAFE 9', a green button 'REQUEST CHECK-INS ·
+   SMS + CHAT (5)', then a roster list sorted unreachable first, each row a name, phone in mono, and four small
+   buttons SAFE, NO ANSWER, ASSIST, INJURED. One row carries a red 'AUTO · 15m' chip."
+3. "Show the same wall on a phone in portrait (390×844): the map fills the screen, the top bar collapses to the
+   posture pill and the watch, the FLASH strip stays, and the four sections become a bottom tab bar (COP, S1, S2,
+   S3). Show the S2 tab open as a full-screen list."
+4. "Redesign the top bar as a single horizontal timeline instead of counters: the current 12-hour watch as a bar with
+   a marker at 'now', the handover at the right end, events and trip departures for the next 90 days plotted to its
+   right at a compressed scale. Keep everything else."
+5. "Make the version that Linear or Vercel would ship: cards with 8 px radius, a big posture tile top-left, ultra-
+   sparse mono labels, more empty space, the map reduced to a 60% wide tile in the center."
+6. "Show the FLASH state at full intensity: the released warning, the whole top bar tinted, the affected site
+   pulsing on the map, the roll-call button surfaced next to the warning."
+7. "Show the area assessment overlay: a matrix with two columns 'Lisbon, Portugal' and 'Porto, Portugal' and nine
+   rows of indicators; cells read 'unlikely · 20–45% · low conf' in amber, 'quiet · GDACS watching' in green, or
+   'not collected → USGS' in red; no scores, no totals, a BLUF paragraph per column beneath."
