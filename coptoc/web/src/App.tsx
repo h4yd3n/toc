@@ -50,10 +50,6 @@ export default function App() {
   const [openPanel, setOpenPanel] = useState<'left' | 'right' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
-  useEffect(() => {  // FOCUS: a list shows its top rows; clicking the "+ more" line (the list's own padding) expands it
-    const h = (e: MouseEvent) => { const t = e.target as HTMLElement; if (t.classList?.contains('list') || t.classList?.contains('timeline') || t.classList?.contains('logs')) t.classList.toggle('expanded') }
-    document.addEventListener('click', h); return () => document.removeEventListener('click', h)
-  }, [])
   const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false })
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)

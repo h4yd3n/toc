@@ -371,7 +371,7 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 
 .brand .glyph { width: 30px; height: 30px; margin-right: 4px; align-self: center; }
 
-/* ---- the wall: rails and slide-out panels over the map only; top rows then '+ more'; lean labels and the posture header as toggles ---- */
+/* ---- the wall: rails and slide-out panels over the map only; lean labels and the posture header as toggles ---- */
 .gear { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--dim); padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 4px; margin-left: 8px; } .gear:hover { color: var(--text); }
 .settings { position: absolute; top: 56px; right: 14px; z-index: 30; background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
 .s-row { display: flex; align-items: center; gap: 6px; } .s-row > span:first-child { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--dim); width: 58px; }
@@ -388,12 +388,6 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .left:not(.open), .right:not(.open) { visibility: hidden; }  /* off-screen and out of the rail's way */
 .left.open, .right.open { transform: none; }
 .center .detail { z-index: 9; }
-/* B — top rows, then "+ more" (click the line to expand); the counts stay in the section labels */
-.list:not(.expanded) > li:nth-child(n+4), .timeline:not(.expanded) > .trip:nth-child(n+5), .logs:not(.expanded) > li:nth-child(n+6), .gaps:not(.expanded) .gap:nth-child(n+3) { display: none; }
-.list:not(.expanded)::after, .logs:not(.expanded)::after { content: "+ more"; display: block; padding: 3px 14px 8px; font: 10px var(--mono); letter-spacing: .14em; color: var(--dim); cursor: pointer; }
-.list:not(.expanded):empty::after { content: none; }
-.timeline:not(.expanded)::after { content: "+ more"; align-self: center; padding: 0 12px; font: 10px var(--mono); letter-spacing: .14em; color: var(--dim); cursor: pointer; }
-.list.expanded::after, .logs.expanded::after { content: "− less"; display: block; padding: 3px 14px 8px; font: 10px var(--mono); letter-spacing: .14em; color: var(--dim); cursor: pointer; }
 /* C — lean labels */
 .labels-lean .panel-head .hint, .labels-lean .estimate.empty, .labels-lean .brand .sub, .labels-lean .rq-when, .labels-lean .purpose, .labels-lean .card-foot, .labels-lean .oplog .la { display: none !important; }
 .labels-lean .stat .l { opacity: .7; }
