@@ -96,16 +96,118 @@ The COP is one screen. It never navigates away.
 
 ## 5. S2 — Intelligence: Sigtoc
 
-**[TONIGHT] — placeholder.** A handful of synthetic threat markers near real locations, so the COP reads as blue *and* red. Each has a title, severity, radius, source, observed time, and a confidence. They're fake and labeled as such in the data.
+> [!NOTE]
+> Sigtoc is a **standalone module with its own API and its own screen, embedded in the wall as the S2 panel.**
+> The wall is one consumer of Sigtoc's contract; nothing in Sigtoc depends on the wall. (Decision 3a.)
 
-**[NEXT] — the real thing.** The full S2 spec was written and is preserved in `docs/archive/PRD-v2-trust-safety.md` §4 and `docs/archive/PRD-v1-travel-risk.md` §6.5. What carries forward unchanged:
+### 5.1 Two missions, one engine
 
-- **Three confidence axes** — source reliability (A–F), information credibility (1–6), analytic confidence (ICD 203) — always stated separately
-- **Confidence is not probability** — estimative language from a fixed seven-term list with numeric bands
-- **Refuse to assess** — no conclusion without evidence; the gap is published instead
-- **Evidence traceability** — every judgment links to dated, graded source material
+| Mission | The question | Where the requirement comes from | Status |
+| :--- | :--- | :--- | :--- |
+| **Force protection** | What threatens *our* people, sites, and events, now and in the near term? | **The blue force picture.** Every site, trip, and event on the wall generates standing requirements automatically. | Partly **[BUILT]** — threats filtered against blue force, per-subject assessments, refuse-to-assess. Auto-generated requirements **[NEXT]**. |
+| **Decision support** | What is the environment in a place we are *considering* — an offsite, a conference, a new office — for a given window? | **A person asks.** A directed requirement names a place, a window, and a purpose; the place need not be on the wall. | **[NEXT]** |
 
-**How S2 gets built:** as an agent, not a platform. Anthropic's CLUE is the reference shape — Claude with tool access to the sources, doing collection and first-pass assessment, with the confidence discipline enforced in code around it. S2's output lands on the wall as threats on the map, assessments in the panel, and open PIRs that haven't been answered yet.
+Same machinery, two triggers. Everything after the requirement — collection plan, sources, grading, drafting, refusal — is identical.
+
+### 5.2 Requirements are first-class
+
+A requirement is the unit of work. Nothing is collected and nothing is assessed without one.
+
+| Field | Meaning |
+| :--- | :--- |
+| `kind` | `standing` (generated from the wall) or `directed` (a person asked) |
+| `subject` | a wall entity (site, trip, event, person) **or** an ad-hoc place: name, coordinates, and a time window |
+| `question` | the PIR in plain words — generated for standing requirements, written for directed ones |
+| `purpose` | why it matters: "CEO board meeting", "candidate offsite venue" — drives which indicators weigh |
+| `priority` | 1–3, human-set for directed; standing requirements inherit from the subject (VIP travel outranks a routine site) |
+| `window` | when it matters; standing requirements track the subject's window, directed ones are explicit |
+| `status` | `active` → `answered` → `expired`; a requirement with no decision or window is not a requirement |
+| `owner` | who asked, or "S1/S3" when generated |
+
+**Standing requirements write themselves.** A new trip on the wall creates one; a new event creates one per venue window; a site has one that never expires. When the trip ends, the requirement expires. The S2 analyst never types "is Riyadh safe for the CEO" — the S3 entry did that.
+
+**Directed requirements are a form.** Place, window, purpose, priority. That is the whole input for the Lisbon question.
+
+### 5.3 The collection plan — sources recommend themselves
+
+The requirement determines the sources, not the other way around. Each requirement is decomposed into **indicators** — observable facts that would answer it — and each indicator maps to the sources that can observe it. That mapping is the synchronization matrix, and it is generated, not hand-built.
+
+```
+Requirement:  "Threats to the CEO's Riyadh visit, 1–4 Oct"
+  ├── Indicator: hazardous weather / natural events in the window      → GDACS, NOAA        ✓ covered
+  ├── Indicator: advisory level and change                             → State Dept RSS     ✓ covered
+  ├── Indicator: civil unrest or political violence within 50 km       → ACLED, GDELT       ✗ no source connected
+  ├── Indicator: health notices for the country                        → WHO DON            ✓ covered
+  └── Indicator: targeted threat reporting against Western business    → commercial feed    ✗ not subscribed
+Coverage: 3 of 5 indicators. Gaps are visible before anyone asks for an assessment.
+```
+
+Rules:
+1. **Coverage is shown, always.** An indicator with no connected source is a collection gap on the plan — so refuse-to-assess (§5.5) is never a surprise.
+2. **Sources are recommended by indicator**, from the catalog in §5.8. Connecting one is an admin action; recommending it is automatic.
+3. **Cadence is per source, set by the analyst.** Defaults ship with each connector. **[NEEDS RULING]** the defaults — they should come from someone who has run collection, not be invented here.
+4. **Relevance is filtered against blue force and against directed subjects.** The world's events are collected; only those touching a requirement's subject reach the wall.
+
+### 5.4 Collection and processing **[BUILT for GDACS; pattern for all]**
+
+Connector → normalize → deduplicate (`origin_key`, so one wire story republished forty times is one source) → grade → store with provenance (`source`, `observed_at`, `url`). A broken source fails loudly. Absence of evidence is not evidence of safety.
+
+Every item carries the three confidence axes — source reliability (A–F, a property of the source, set by an analyst), information credibility (1–6, a property of the report), and, later, the analytic confidence of any judgment built on it (computed by code, never asserted by the model). Confidence is not probability; estimative terms come from the fixed ICD 203 list.
+
+### 5.5 Analysis — the boundary **[BUILT]**
+
+The machine collects, normalizes, filters, deduplicates, and **drafts**. A human grades sources, confirms threat links, and approves products. The drafter may only choose estimative terms from the fixed list; code attaches the band and computes confidence from the evidence chain. **When there is no qualifying evidence, the product is a collection gap, not a finding, and it cannot be approved.** This is what makes "as automated as possible" safe.
+
+### 5.6 Products
+
+| Product | Trigger | Answers | Status |
+| :--- | :--- | :--- | :--- |
+| **Threat** | collection | something happened near a subject — a ring on the map with source, severity, confidence | **[BUILT]** |
+| **Assessment** | a wall subject | the finding for one trip, event, or site: BLUF, judgments with term + band + confidence, evidence, gaps | **[BUILT]** |
+| **Area Assessment** | a directed requirement | the environment for a place and window that may not be on the wall; **several candidates compared side by side** | **[NEXT]** |
+| **INTSUM** | daily, standing | what changed in the last 24 h across every active requirement: new threats, changed scores, expired windows, open gaps | **[NEXT]** |
+| **Warning** | collection | an imminent, specific threat to a subject — FLASH to the floor | **[LATER]** with S6 alerting |
+
+**The Area Assessment compares; it does not score.** Candidates are laid side by side on what is known, how well it is known, and what is missing — bands, confidence, and gaps per indicator. Ranking is the human's. **[NEEDS RULING]** whether to add a numeric composite; the recommendation is no — v1's scoring model was invented and could not be defended.
+
+**The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. **[NEEDS RULING]** publication time and whether it is auto-published or reviewed first.
+
+### 5.7 Surfaces (Decision 3a)
+
+**Sigtoc API** — its own contract, versioned like the COP's:
+- requirements: create directed, list, expire; standing ones appear as the wall changes
+- plan: the collection matrix for a requirement, with coverage and gaps
+- collect: run connectors for a requirement or for everything
+- query: *"threats near <place> in <window>"*, *"what do we hold on <topic>"* — the standalone use
+- products: assessments, area assessments, INTSUMs; draft / review / approve
+
+**Sigtoc screen** — a small product UI: the requirements list with coverage bars, the query box, the products library. It is what an analyst lives in.
+
+**The wall's S2 panel** embeds the same thing: threats, assessments, open requirements. One codebase, two surfaces.
+
+### 5.8 Source catalog — recommended by indicator
+
+| Indicator | Source | Access | Status |
+| :--- | :--- | :--- | :--- |
+| Natural hazards | GDACS | free, keyless | **[BUILT]** |
+| Earthquakes | USGS | free, keyless | **[NEXT]** |
+| Severe weather (US) | NWS / NOAA alerts | free, keyless | **[NEXT]** |
+| Humanitarian / conflict situation | ReliefWeb API | free, keyless | **[NEXT]** |
+| Civil unrest, political violence | ACLED · GDELT | free key · free | **[NEXT]** |
+| Health notices | WHO Disease Outbreak News | free RSS | **[NEXT]** |
+| Travel advisories | State Dept per-country RSS · FCDO | free | **[NEXT]** — the State Dept JSON endpoint is dead |
+| Baseline for an unfamiliar place | Wikidata · Nager.Date holidays · NOAA climate normals | free | **[NEXT]** for Area Assessment |
+| Sanctions, entities | OpenSanctions | free | **[LATER]** |
+| Targeted threat reporting | OSAC · Flashpoint · Dataminr · Recorded Future | login / paid | **[LATER]** premium connectors |
+
+An indicator with no connected source shows as a gap on every plan that needs it. That is the honest state, and it is the prompt to connect one.
+
+### 5.9 Open decisions for §5
+
+1. **INTSUM publication** — auto-published at a fixed time, or drafted for review and released by the Battle Captain?
+2. **Who may create directed requirements** — analysts only, any security role, or anyone (an EA planning an offsite)?
+3. **Numeric composite on the Area Assessment** — none (recommended), or a single band per candidate derived by a rule you can defend?
+4. **Signal retention** — how long raw collected items are kept; the ledger is forever, but the feed is not.
 
 ---
 
