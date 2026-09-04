@@ -1,6 +1,7 @@
 """§5.10 #1–2 and §5.11: organic reports, cases, suggest-only extraction, the review queue, and the views' data."""
 import os, tempfile
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///" + os.path.join(tempfile.mkdtemp(), "cases.db"))
+os.environ["TOC_OFFLINE"] = "1"  # collectors and the holiday lookup never touch the network in tests
 os.environ.pop("ANTHROPIC_API_KEY", None); os.environ["TOC_DRAFTER"] = "heuristic"
 from fastapi.testclient import TestClient
 from sigtoc.api import standalone_app

@@ -64,8 +64,8 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
     threats = [t for t in (await session.execute(select(ThreatRow).where(ThreatRow.observed_at > period_from, ThreatRow.observed_at <= period_to))).scalars()]
     new_threats = []
     for t in sorted(threats, key=lambda t: ({"low": 0, "moderate": 1, "elevated": 2, "critical": 3}[t.severity]), reverse=True):
-        hits = [r for r in active if haversine_km(r.lat, r.lon, t.lat, t.lon) <= r.radius_km + t.radius_km]
-        new_threats.append({"id": t.id, "title": t.title, "severity": t.severity, "source": t.source, "confidence": t.confidence, "observed_at": R.iso(t.observed_at),
+        hits = [r for r in active if (getattr(t, "scope", "point") == "country" and t.country and r.country == t.country) or haversine_km(r.lat, r.lon, t.lat, t.lon) <= r.radius_km + t.radius_km]
+        new_threats.append({"id": t.id, "title": t.title, "severity": t.severity, "source": t.source, "confidence": t.confidence, "observed_at": R.iso(t.observed_at), "country": t.country, "scope": getattr(t, "scope", "point"),
                             "synthetic": t.synthetic, "requirements": [{"id": r.id, "subject": r.subject_name, "priority": r.priority} for r in sorted(hits, key=lambda r: r.priority)][:6]})
     # 3. What changed on the wall because of intel: confirmed links, posture, roll calls
     wall = {"links": T("cop.threat.link_confirmed", "cop.threat.link_removed"), "posture": T("cop.location.posture"),

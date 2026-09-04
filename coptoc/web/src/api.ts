@@ -21,7 +21,7 @@ export const setPosture = (locationId: string, posture: string, reason: string) 
 export const draftAssessment = (subject_type: string, subject_id: string) => req<{ id: string; refused: boolean; confidence: string }>('POST', '/v1/cop/assessments/draft', { subject_type, subject_id })
 export const setAssessmentStatus = (id: string, status: string) => req<unknown>('PATCH', `/v1/cop/assessments/${id}`, { status })
 export const setPirStatus = (id: string, status: string) => req<unknown>('PATCH', `/v1/cop/pirs/${id}`, { status })
-export const refreshIntel = () => req<{ collected: number; created: number; updated: number }>('POST', '/v1/cop/intel/refresh')
+export const refreshIntel = () => req<{ sources: { source: string; ok: boolean; collected?: number; created?: number; updated?: number; error?: string }[]; collected: number; created: number; updated: number; failed: string[] }>('POST', '/v1/cop/intel/refresh')
 export const openRollCall = (target: { location_id?: string; threat_id?: string; title?: string; notes?: string }) =>
   req<{ id: string; roster: number }>('POST', '/v1/cop/incidents', target)
 export const updateRoster = (incidentId: string, personId: string, status: string, note?: string) =>

@@ -106,6 +106,8 @@ class ThreatRow(Base):
     confidence: Mapped[str] = mapped_column(String)  # low | moderate | high
     observed_at: Mapped[datetime] = mapped_column(DateTime)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=True)
+    country: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # ISO code when the reporting names a country
+    scope: Mapped[str] = mapped_column(String, default="point")  # point | country — country-scoped items sit at our nearest site
 
 
 class ThreatLinkRow(Base):

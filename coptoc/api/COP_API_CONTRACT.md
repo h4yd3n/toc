@@ -148,7 +148,9 @@ Mounted in the COP app (the wall's S2 panel) **and** runnable standalone: `make 
 | `PATCH` | `/s2/sources/{id}` | `enabled, cadence, reliability` — Decision K | ledger `s2.source.updated` |
 | `GET` | `/s2/query?lat&lon&radius_km` | | the standalone use: threats held near a point and requirements whose subject is nearby |
 
-Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `req_evt_<event>`; a trip's requirement expires when the trip is cancelled or its window passes. Directed places count as blue-force points for collection relevance.
+Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `req_evt_<event>`; a trip's requirement expires when the trip is cancelled or its window passes. Directed places count as blue-force points for collection relevance. Every requirement carries a `country` (ISO) derived from the site, the destination, or the place name.
+
+**Collection** — `POST /cop/intel/refresh?source=` runs every enabled and configured collector (or one), in the registry `sigtoc.collectors.registry`: GDACS, USGS, NWS (point events, kept when near a blue-force point or big enough to matter anywhere); WHO DON, State Dept, FCDO (country-scoped: matched to the countries our requirements are in and placed at our first requirement there, `scope=country`); ACLED and CLSTR when keyed. Each source's outcome is written to its `last_collected_at` / `last_result` and to the ledger as `cop.intel.refresh` or `cop.intel.refresh_failed`; one failure does not stop the rest. Response: `{sources: [{source, ok, collected, created, updated | error}], created, updated, collected, failed[], countries[]}`. `TOC_SOURCES_CONFIGURED` pins which sources count as live; `TOC_OFFLINE=1` makes none live (tests).
 
 ## 3.3 Sigtoc — organic reports and cases (`/v1/s2`, PRD §5.10 #1–2, §5.11)
 
@@ -175,7 +177,7 @@ Extraction (Decision P) only suggests. Without `ANTHROPIC_API_KEY` it is a cited
 | `GET` | `/s2/area-assessments` · `/{id}` | | list (with `places`) or the full product |
 | `PATCH` | `/s2/area-assessments/{id}` | `status: draft/review/approved` — battle_captain / analyst | `409` on approve when `approvable` is false. Ledger `s2.area.status` |
 
-Product shape: `indicators[]` (rows), `candidates[]` (columns) each with `cells[]` — `state` is `reported` (`likelihood` from the ICD 203 list, `band`, code-computed `confidence` with `confidence_basis`, `evidence[]`), `quiet` (a tasked source, nothing reported; `confidence: low`), or `gap` (`recommended[]` sources) — plus `counts`, `worst`, `bluf`, `author`. No score, rank, or composite field exists (Decision I). Evidence is the wall's threat table within the requirement's radius (+5 km buffer) observed between 90 days before the window and its end; a threat's `event_type` maps to an indicator, unmapped ones are listed as `unclassified`. `refusal` is set and approval is refused when no candidate has a reported or quiet cell.
+Product shape: `indicators[]` (rows), `candidates[]` (columns) each with `cells[]` — `state` is `reported` (`likelihood` from the ICD 203 list, `band`, code-computed `confidence` with `confidence_basis`, `evidence[]`), `quiet` (a tasked source, nothing reported; `confidence: low`), `gap` (`recommended[]` sources), or — for the baseline row only — `facts` (`facts[]` public holidays in the window from Nager.Date; a failed lookup says so) — plus `counts`, `worst`, `bluf`, `author`. No score, rank, or composite field exists (Decision I). Evidence is the wall's threat table within the requirement's radius (+5 km buffer) observed between 90 days before the window and its end; a threat's `event_type` maps to an indicator, unmapped ones are listed as `unclassified`. `refusal` is set and approval is refused when no candidate has a reported or quiet cell.
 
 ## 3.5 Sigtoc — INTSUM (`/v1/s2/intsum`, PRD §5.6, Decision G)
 

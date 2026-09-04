@@ -50,16 +50,16 @@ PROFILE: Dict[str, List[str]] = {
 # `configured` is computed at runtime from environment/keys; `enabled` is the operator's switch.
 CATALOG: List[Dict[str, Any]] = [
     {"id": "gdacs",       "name": "GDACS",                       "indicators": ["natural_hazard"],              "access": "free, keyless", "reliability": "A", "cadence": "hourly",  "built": True},
-    {"id": "usgs",        "name": "USGS earthquakes",            "indicators": ["earthquake"],                  "access": "free, keyless", "reliability": "A", "cadence": "hourly",  "built": False},
-    {"id": "nws",         "name": "NWS / NOAA alerts (US)",      "indicators": ["natural_hazard"],              "access": "free, keyless", "reliability": "A", "cadence": "hourly",  "built": False},
+    {"id": "usgs",        "name": "USGS earthquakes",            "indicators": ["earthquake"],                  "access": "free, keyless", "reliability": "A", "cadence": "hourly",  "built": True},
+    {"id": "nws",         "name": "NWS / NOAA alerts (US)",      "indicators": ["natural_hazard"],              "access": "free, keyless", "reliability": "A", "cadence": "hourly",  "built": True},
     {"id": "reliefweb",   "name": "ReliefWeb",                   "indicators": ["natural_hazard", "civil_unrest"], "access": "free, keyless", "reliability": "B", "cadence": "daily", "built": False},
-    {"id": "acled",       "name": "ACLED",                       "indicators": ["civil_unrest"],                "access": "free key",      "reliability": "B", "cadence": "daily",   "built": False},
+    {"id": "acled",       "name": "ACLED",                       "indicators": ["civil_unrest"],                "access": "free key",      "reliability": "B", "cadence": "daily",   "built": True},
     {"id": "gdelt",       "name": "GDELT",                       "indicators": ["civil_unrest", "crowd"],       "access": "free",          "reliability": "C", "cadence": "hourly",  "built": False},
-    {"id": "clstr",       "name": "CLSTR news clusters",         "indicators": ["civil_unrest", "crowd", "targeted"], "access": "free key, 100/day", "reliability": "F", "cadence": "every few hours", "built": False},
-    {"id": "who_don",     "name": "WHO Disease Outbreak News",   "indicators": ["health"],                      "access": "free RSS",      "reliability": "A", "cadence": "daily",   "built": False},
-    {"id": "state_dept",  "name": "State Dept advisories (RSS)", "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": False},
-    {"id": "fcdo",        "name": "FCDO travel advice",          "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": False},
-    {"id": "wikidata",    "name": "Wikidata · Nager.Date · NOAA climate", "indicators": ["baseline"],           "access": "free",          "reliability": "B", "cadence": "on demand", "built": False},
+    {"id": "clstr",       "name": "CLSTR news clusters",         "indicators": ["civil_unrest", "crowd", "targeted"], "access": "free key, 100/day", "reliability": "F", "cadence": "every few hours", "built": True},
+    {"id": "who_don",     "name": "WHO Disease Outbreak News",   "indicators": ["health"],                      "access": "free RSS",      "reliability": "A", "cadence": "daily",   "built": True},
+    {"id": "state_dept",  "name": "State Dept advisories (RSS)", "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": True},
+    {"id": "fcdo",        "name": "FCDO travel advice",          "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": True},
+    {"id": "wikidata",    "name": "Nager.Date holidays (baseline)", "indicators": ["baseline"],           "access": "free, keyless", "reliability": "B", "cadence": "on demand", "built": True},
     {"id": "opensanctions","name": "OpenSanctions",              "indicators": ["targeted"],                    "access": "free",          "reliability": "B", "cadence": "weekly",  "built": False},
     {"id": "osac",        "name": "OSAC",                        "indicators": ["crime", "advisory", "targeted"], "access": "login",       "reliability": "A", "cadence": "daily",   "built": False},
     {"id": "commercial",  "name": "Flashpoint · Dataminr · Recorded Future", "indicators": ["targeted", "crime", "civil_unrest"], "access": "paid", "reliability": "B", "cadence": "continuous", "built": False},
@@ -86,6 +86,7 @@ class RequirementRow(Base):
     status: Mapped[str] = mapped_column(String, default="active")  # active | answered | expired
     owner: Mapped[str] = mapped_column(String, default="S2")
     indicators_json: Mapped[str] = mapped_column(Text, default="[]")  # the analyst may add/drop
+    country: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # ISO — country-scoped reporting attaches here
     created_at: Mapped[datetime] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime)
 
@@ -103,14 +104,8 @@ class SourceStateRow(Base):
 
 def _configured(source_id: str) -> bool:
     """Whether the source can actually be collected from right now — built, and keyed if it needs a key."""
-    import os
-    if source_id in ("gdacs", "ops"):
-        return True
-    if source_id == "clstr":
-        return bool(os.environ.get("CLSTR_API_KEY"))
-    if source_id == "acled":
-        return bool(os.environ.get("ACLED_API_KEY"))
-    return False
+    from .collectors.registry import configured
+    return configured(source_id)
 
 
 async def source_states(session: AsyncSession) -> Dict[str, SourceStateRow]:
@@ -153,7 +148,7 @@ def plan_for(req: RequirementRow, cat: List[Dict[str, Any]]) -> Dict[str, Any]:
 def to_dict(req: RequirementRow, plan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     d = {"id": req.id, "kind": req.kind, "subject_type": req.subject_type, "subject_id": req.subject_id, "subject_name": req.subject_name,
          "lat": req.lat, "lon": req.lon, "radius_km": req.radius_km, "question": req.question, "purpose": req.purpose, "priority": req.priority,
-         "window_from": iso(req.window_from), "window_to": iso(req.window_to), "status": req.status, "owner": req.owner,
+         "window_from": iso(req.window_from), "window_to": iso(req.window_to), "status": req.status, "owner": req.owner, "country": req.country,
          "indicators": json.loads(req.indicators_json or "[]"), "created_at": iso(req.created_at), "updated_at": iso(req.updated_at)}
     if plan:
         d["coverage"] = {"covered": plan["covered"], "total": plan["total"], "pct": plan["coverage_pct"], "gaps": plan["gaps"]}
@@ -164,20 +159,22 @@ def to_dict(req: RequirementRow, plan: Optional[Dict[str, Any]] = None) -> Dict[
 
 def _standing_from_snapshot(snap: Dict[str, Any]) -> List[Dict[str, Any]]:
     """What the wall implies. Called by Coptoc whenever S1/S3 changes."""
+    from .countries import country_from_place, to_iso
     out = []
+    loc_country = {l["id"]: to_iso(l.get("country")) for l in snap.get("locations", [])}
     for l in snap.get("locations", []):
-        out.append({"id": f"req_loc_{l['id']}", "subject_type": "location", "subject_id": l["id"], "subject_name": l["name"], "lat": l["lat"], "lon": l["lon"],
+        out.append({"id": f"req_loc_{l['id']}", "subject_type": "location", "subject_id": l["id"], "subject_name": l["name"], "lat": l["lat"], "lon": l["lon"], "country": loc_country[l["id"]],
                     "radius_km": 50.0, "question": f"What threatens {l['name']} and the people assigned there?", "purpose": f"{l['type']} — standing force protection",
                     "priority": 2 if l["type"] in ("hq", "datacenter") else 3, "window_from": None, "window_to": None})
     for t in snap.get("trips", []):
         out.append({"id": f"req_trip_{t['id']}", "subject_type": "trip", "subject_id": t["id"], "subject_name": f"{t['person_name']} — {t['dest_name']}",
-                    "lat": t["dest_lat"], "lon": t["dest_lon"], "radius_km": 50.0,
+                    "lat": t["dest_lat"], "lon": t["dest_lon"], "radius_km": 50.0, "country": loc_country.get(t.get("dest_location_id") or "") or country_from_place(t["dest_name"]),
                     "question": f"What threatens {t['person_name']} in {t['dest_name']} between {t['depart_at'][:10]} and {t['return_at'][:10]}?",
                     "purpose": t["purpose"], "priority": 1 if t["is_vip"] else 2,
                     "window_from": datetime.fromisoformat(t["depart_at"].replace("Z", "")), "window_to": datetime.fromisoformat(t["return_at"].replace("Z", ""))})
     for e in snap.get("events", []):
         out.append({"id": f"req_evt_{e['id']}", "subject_type": "event", "subject_id": e["id"], "subject_name": f"{e['name']} — {e['venue_name']}",
-                    "lat": e["venue_lat"], "lon": e["venue_lon"], "radius_km": 30.0,
+                    "lat": e["venue_lat"], "lon": e["venue_lon"], "radius_km": 30.0, "country": loc_country.get(e.get("venue_location_id") or "") or country_from_place(e["venue_name"]),
                     "question": f"What threatens {e['name']} at {e['venue_name']} ({e['attendee_count']} attending, {e['vip_count']} VIP)?",
                     "purpose": e["event_type"], "priority": 1 if e["vip_count"] else 2,
                     "window_from": datetime.fromisoformat(e["start_at"].replace("Z", "")), "window_to": datetime.fromisoformat(e["end_at"].replace("Z", ""))})
@@ -211,7 +208,8 @@ async def sync_standing(session: AsyncSession, snap: Dict[str, Any]) -> Dict[str
 async def create_directed(session: AsyncSession, *, place: str, lat: float, lon: float, window_from: Optional[datetime], window_to: Optional[datetime],
                           purpose: str, priority: int, owner: str, radius_km: float = 50.0, question: Optional[str] = None) -> RequirementRow:
     now = now_utc()
-    row = RequirementRow(id=f"req_dir_{uuid.uuid4().hex[:8]}", kind="directed", subject_type="place", subject_id=None, subject_name=place, lat=lat, lon=lon,
+    from .countries import country_from_place
+    row = RequirementRow(id=f"req_dir_{uuid.uuid4().hex[:8]}", kind="directed", subject_type="place", subject_id=None, subject_name=place, lat=lat, lon=lon, country=country_from_place(place),
                          radius_km=radius_km, question=question or f"What is the environment in {place} for {purpose}?", purpose=purpose, priority=priority,
                          window_from=window_from, window_to=window_to, status="active", owner=owner, created_at=now, updated_at=now)
     session.add(row)

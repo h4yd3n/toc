@@ -31,6 +31,7 @@ export function AreaPanel({ id, role, busy, act, onClose, reload }: { id: string
               return <td key={c.requirement_id} className={`cell st-${x.state} ${on ? 'on' : ''}`} onClick={() => setOpen(on ? null : { c: ci, i: i.id })}>
                 {x.state === 'reported' && <><div className="term">{x.likelihood}</div><div className="dim small">{x.band} · {x.confidence} conf</div></>}
                 {x.state === 'quiet' && <><div className="term quiet">quiet</div><div className="dim small">{x.sources.join(', ')} watching</div></>}
+                {x.state === 'facts' && <><div className="term facts">{x.note === 'failed' ? 'lookup failed' : `${(x.facts ?? []).length} holiday${(x.facts ?? []).length === 1 ? '' : 's'} in window`}</div><div className="dim small">{(x.facts ?? []).slice(0, 2).map(f => f.name).join(' · ') || x.sources.join(', ')}</div></>}
                 {x.state === 'gap' && <><div className="term gap">not collected</div><div className="dim small">→ {(x.recommended ?? []).slice(0, 2).join(' · ') || 'no source'}</div></>}
               </td> })}
           </tr>)}
@@ -44,6 +45,8 @@ export function AreaPanel({ id, role, busy, act, onClose, reload }: { id: string
           {sel.evidence.map(e => <div key={e.threat_id} className="pline"><span className={`sev ${e.severity}`}>{e.severity.slice(0, 3).toUpperCase()}</span><span className="lbl">{e.title}</span><span className="src dim">{e.source} · {e.distance_km} km · {e.observed_at.slice(0, 10)}{e.synthetic ? ' · synthetic' : ''}</span></div>)}
         </>}
         {sel.state === 'quiet' && <div className="bluf">{sel.confidence_basis[0]}. Not a finding of safety: a tasked source has reported nothing, and its reliability caps what that is worth.</div>}
+        {sel.state === 'facts' && <><div className="bluf">{sel.confidence_basis[0]}. Facts, not a threat: a holiday changes what the venue, its transit, and its security look like.</div>
+          {(sel.facts ?? []).map(f => <div key={f.date} className="pline"><span className="mark">·</span><span className="lbl">{f.date} {f.name}</span><span className="src dim">{f.local_name}{f.national ? '' : ' · regional'}</span></div>)}</>}
         {sel.state === 'gap' && <div className="bluf">Nobody is collecting this. Recommended: {(sel.recommended ?? []).join(', ') || 'none in the catalog'}. Connect a source and re-draft.</div>}
       </div>}
       <div className="section-label">BLUF PER CANDIDATE</div>

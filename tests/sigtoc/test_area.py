@@ -3,6 +3,8 @@ import os, tempfile
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp.name}"
 os.environ["TOC_INTSUM_CLOCK"] = "off"  # the fixed-time INTSUM draft is tested directly, not on a timer
+os.environ["TOC_OFFLINE"] = "1"  # no network in tests
+os.environ["TOC_SOURCES_CONFIGURED"] = "gdacs,ops"  # these tests exercise the plan with GDACS as the only live feed
 os.environ.pop("ANTHROPIC_API_KEY", None); os.environ.pop("TOC_DRAFTER", None)
 
 import pytest
@@ -73,3 +75,22 @@ def test_lifecycle_and_ledger(client):
 
 def json_dumps(o):
     import json; return json.dumps(o)
+
+
+def test_country_scoped_reporting_reaches_a_place_by_country_however_old(client):
+    """A State Dept level is the country's current state, not an event: it answers `advisory` for Lisbon even if its last
+    update predates the 90-day lookback. It sits at our Lisbon point on the wall (scope=country) and is not near Porto by distance."""
+    import asyncio
+    from datetime import datetime, timedelta
+    from coptoc.routes import sessions
+    from coptoc.db_models import ThreatRow
+    async def add():
+        async with sessions()() as s:
+            s.add(ThreatRow(id="thr_pt_adv", external_id="state_dept:PT", title="Portugal — Level 1: Exercise Normal Precautions", summary="No changes.", lat=38.7223, lon=-9.1393, radius_km=0,
+                            severity="low", event_type="advisory", source="state_dept", confidence="high", observed_at=datetime.utcnow() - timedelta(days=200), synthetic=False, country="PT", scope="country"))
+            await s.commit()
+    asyncio.run(add())
+    a = client.post("/v1/s2/area-assessments", json={"requirement_ids": ["req_dir_seed_lisbon", "req_dir_seed_porto"]}, headers=AN).json()
+    for c in a["candidates"]:
+        adv = next(x for x in c["cells"] if x["indicator"] == "advisory")
+        assert adv["state"] == "reported" and adv["likelihood"] == "very unlikely" and adv["evidence"][0]["threat_id"] == "thr_pt_adv", c["place"]

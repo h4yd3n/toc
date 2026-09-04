@@ -65,8 +65,15 @@ async def _threats_near(session: AsyncSession, req: R.RequirementRow, now: datet
     start, end = _window(req, now)
     out = []
     for t in (await session.execute(select(ThreatRow))).scalars():
-        d = haversine_km(req.lat, req.lon, t.lat, t.lon)
-        if d > req.radius_km + t.radius_km + PROXIMITY_BUFFER_KM or not (start <= t.observed_at <= end):
+        by_country = getattr(t, "scope", "point") == "country" and t.country and req.country and t.country == req.country
+        # point events must fall in the window (with the lookback); country-scoped reporting — advisories, health notices —
+        # describes the current state of the country and counts however old its last update is
+        if not by_country and not (start <= t.observed_at <= end):
+            continue
+        if by_country and t.observed_at > end:
+            continue
+        d = 0.0 if by_country else haversine_km(req.lat, req.lon, t.lat, t.lon)
+        if not by_country and d > req.radius_km + t.radius_km + PROXIMITY_BUFFER_KM:
             continue
         out.append({"threat_id": t.id, "title": t.title, "source": t.source, "confidence": t.confidence, "severity": t.severity,
                     "distance_km": round(d, 1), "observed_at": t.observed_at.isoformat() + "Z", "synthetic": t.synthetic, "confirmed": False,
@@ -75,13 +82,18 @@ async def _threats_near(session: AsyncSession, req: R.RequirementRow, now: datet
     return out
 
 
-def assess_candidate(req: R.RequirementRow, plan: Dict[str, Any], threats: List[Dict[str, Any]], now: datetime) -> Dict[str, Any]:
+def assess_candidate(req: R.RequirementRow, plan: Dict[str, Any], threats: List[Dict[str, Any]], now: datetime, facts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """One column of the comparison. Terms come from the same fixed list as every other product; code attaches band
-    and confidence; a cell with nobody watching is a gap, not a low score."""
+    and confidence; a cell with nobody watching is a gap, not a low score. The baseline row holds facts, not threats."""
     cells = []
+    facts = facts or {}
     for ind in plan["indicators"]:
         ev = [e for e in threats if e["indicator"] == ind["indicator"]]
-        if ev:
+        if ind["indicator"] in facts:
+            f = facts[ind["indicator"]]
+            cells.append({"indicator": ind["indicator"], "label": ind["label"], "state": "facts", "likelihood": None, "band": None, "confidence": None,
+                          "confidence_basis": [f["basis"]], "evidence": [], "sources": [f["source"]], "facts": f["items"], "note": f.get("note")})
+        elif ev:
             worst = max(ev, key=lambda e: SEV_RANK[e["severity"]])
             term = SEVERITY_TO_TERM[worst["severity"]]
             conf, basis = compute_confidence(ev, now.replace(tzinfo=None) if now.tzinfo else now)
@@ -98,19 +110,22 @@ def assess_candidate(req: R.RequirementRow, plan: Dict[str, Any], threats: List[
                           "confidence_basis": ["no source connected"], "evidence": [], "sources": [],
                           "recommended": [s["name"] for s in ind["recommended"][:3]]})
     unclassified = [e for e in threats if e["indicator"] is None]
-    counts = {s: sum(1 for c in cells if c["state"] == s) for s in ("reported", "quiet", "gap")}
+    counts = {s: sum(1 for c in cells if c["state"] == s) for s in ("reported", "quiet", "gap", "facts")}
     worst_cell = max((c for c in cells if c["state"] == "reported"), key=lambda c: SEV_RANK[c["severity"]], default=None)
     return {"requirement_id": req.id, "place": req.subject_name, "lat": req.lat, "lon": req.lon, "radius_km": req.radius_km,
             "window_from": R.iso(req.window_from), "window_to": R.iso(req.window_to), "cells": cells, "counts": counts,
             "unclassified": [{k: v for k, v in e.items() if k not in ("summary", "indicator")} for e in unclassified],
             "worst": {"indicator": worst_cell["indicator"], "label": worst_cell["label"], "likelihood": worst_cell["likelihood"], "band": worst_cell["band"],
                       "confidence": worst_cell["confidence"], "title": worst_cell["worst"]} if worst_cell else None,
-            "known": counts["reported"] + counts["quiet"] > 0}
+            "known": counts["reported"] + counts["quiet"] + counts["facts"] > 0}
 
 
 def heuristic_bluf(c: Dict[str, Any]) -> str:
     n = len(c["cells"]); k = c["counts"]
-    head = f"{c['place']}: {k['reported']} of {n} indicators reported, {k['quiet']} watched and quiet, {k['gap']} not collected."
+    head = f"{c['place']}: {k['reported']} of {n} indicators reported, {k['quiet']} watched and quiet, {k['gap']} not collected" + (f", {k['facts']} baseline." if k["facts"] else ".")
+    hol = next((cell for cell in c["cells"] if cell["state"] == "facts" and cell["facts"]), None)
+    if hol:
+        head += f" {len(hol['facts'])} public holiday(s) in the window: " + ", ".join(f"{x['name']} ({x['date']})" for x in hol["facts"][:3]) + "."
     if c["worst"]:
         w = c["worst"]
         return head + f" The most serious reporting is {w['label'].lower()}: adverse impact is {w['likelihood']} ({w['band']}), {w['confidence']} confidence, from '{w['title']}'."
@@ -128,13 +143,26 @@ async def draft_bluf(c: Dict[str, Any], purpose: str) -> Dict[str, Any]:
     return {"bluf": heuristic_bluf(c), "author": "rule:heuristic-drafter"}
 
 
+async def _baseline_facts(req: R.RequirementRow, cat: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Holidays in the window from Nager.Date, when the source is live and the place has a country. A failed fetch is
+    reported as a failure, not as 'no holidays'."""
+    src = next((c for c in cat if c["id"] == "wikidata"), None)
+    if not src or not (src["enabled"] and src["configured"]) or not req.country: return {}
+    from .baseline import holidays
+    try:
+        items = await holidays(req.country, req.window_from, req.window_to)
+    except RuntimeError as e:
+        return {"baseline": {"source": src["name"], "items": [], "basis": f"lookup failed: {e}", "note": "failed"}}
+    return {"baseline": {"source": src["name"], "items": items, "basis": f"{src['name']} for {req.country}: {len(items)} public holiday(s) in the window", "note": None}}
+
+
 async def build_product(session: AsyncSession, reqs: List[R.RequirementRow], purpose: str, now: datetime) -> Dict[str, Any]:
     cat = await R.catalog(session)
     candidates = []
     for req in reqs:
         plan = R.plan_for(req, cat)
         threats = await _threats_near(session, req, now)
-        c = assess_candidate(req, plan, threats, now)
+        c = assess_candidate(req, plan, threats, now, await _baseline_facts(req, cat))
         c.update(await draft_bluf(c, purpose))
         candidates.append(c)
     indicators = []

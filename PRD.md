@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.13
+**Version:** 3.14
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -205,7 +205,7 @@ A requirement is the unit of work. Nothing is collected and nothing is assessed 
 
 **Directed requirements are a form.** Place, window, purpose, priority. That is the whole input for the Lisbon question.
 
-### 5.3 The collection plan — sources recommend themselves **[BUILT]** (one live source; the plan shows the gaps)
+### 5.3 The collection plan — sources recommend themselves **[BUILT]** (six keyless live sources, two more with keys; the plan shows the gaps)
 
 The requirement determines the sources, not the other way around. Each requirement is decomposed into **indicators** — observable facts that would answer it — and each indicator maps to the sources that can observe it. That mapping is the synchronization matrix, and it is generated, not hand-built.
 
@@ -269,14 +269,14 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | Natural hazards | GDACS | free, keyless | **[BUILT]** |
 
 Domains held for deployment: **coptoc.com**, **sigtoc.com**, **modtoc.com** — one per module, matching Decision 3a's standalone-plus-embedded shape.
-| Earthquakes | USGS | free, keyless | **[NEXT]** |
-| Severe weather (US) | NWS / NOAA alerts | free, keyless | **[NEXT]** |
-| Humanitarian / conflict situation | ReliefWeb API | free, keyless | **[NEXT]** |
-| Civil unrest, political violence | ACLED · GDELT | free key · free | **[NEXT]** |
-| Clustered news events by country, with timelines | CLSTR (clstr.news) — a new, single-maintainer service; multi-source clusters and "situations", ~30–90 min behind the wires by design | free key, 100 req/day, 7-day history | **[NEXT]** trial — source reliability **F** until it earns a grade; its significance score is theirs, never ours |
-| Health notices | WHO Disease Outbreak News | free RSS | **[NEXT]** |
-| Travel advisories | State Dept per-country RSS · FCDO | free | **[NEXT]** — the State Dept JSON endpoint is dead |
-| Baseline for an unfamiliar place | Wikidata · Nager.Date holidays · NOAA climate normals | free | **[NEXT]** for Area Assessment |
+| Earthquakes | USGS | free, keyless | **[BUILT]** live — M6+ anywhere, anything within 400 km of a blue-force point |
+| Severe weather (US) | NWS / NOAA alerts | free, keyless | **[BUILT]** live — polygon alerts within 150 km; zone-only alerts skipped **[NEXT]** |
+| Humanitarian / conflict situation | ReliefWeb API | free, needs an approved `appname` | **[LATER]** — v1 is decommissioned and v2 refuses unregistered app names |
+| Civil unrest, political violence | ACLED · GDELT | free key + email · free | ACLED **[BUILT]**, live when `ACLED_API_KEY` + `ACLED_EMAIL` are set (parser follows the documented shape; untested live). GDELT **[LATER]** — the GEO API is gone and the DOC API is rate-limited and has no coordinates |
+| Clustered news events by country, with timelines | CLSTR (clstr.news) — a new, single-maintainer service; multi-source clusters and "situations", ~30–90 min behind the wires by design | free key, 100 req/day, 7-day history | **[BUILT]** trial, live when `CLSTR_API_KEY` is set; country-scoped; source reliability **F** until it earns a grade; its significance score is theirs, never ours |
+| Health notices | WHO Disease Outbreak News | free JSON (the RSS is gone) | **[BUILT]** live — country-scoped |
+| Travel advisories | State Dept RSS · FCDO Atom | free | **[BUILT]** live — country-scoped; level 3–4 / advise-against draw a ring at our site in that country, lower levels a marker only |
+| Baseline for an unfamiliar place | Nager.Date holidays (Wikidata · NOAA climate **[LATER]**) | free, keyless | **[BUILT]** — public holidays in the window appear as a `facts` cell on the Area Assessment |
 | Sanctions, entities | OpenSanctions | free | **[LATER]** |
 | Targeted threat reporting | OSAC · Flashpoint · Dataminr · Recorded Future | login / paid | **[LATER]** premium connectors |
 
@@ -499,9 +499,9 @@ COP never writes back to a source system.
 | S3 | Executive travel | Travel management system (Concur, Egencia, Navan), executive calendars | seed tagged `travel_system:concur` / `calendar:google` — connector **[NEXT]** |
 | S3 | Corporate events and attendees | Calendar, event platform, EA entry | write API **[BUILT]** — calendar connector **[NEXT]** |
 | S2 | Natural hazards | GDACS (UN OCHA / EC JRC) — free, keyless | **[BUILT]** live |
-| S2 | Earthquakes, severe weather | USGS earthquake feed, NWS/NOAA alerts, national met services | **[NEXT]** — same collector shape as GDACS |
-| S2 | Country and city advisories | State Dept, FCDO, OSAC | **[NEXT]** |
-| S2 | Civil unrest, crime, conflict events | ACLED, GDELT, news RSS | **[NEXT]** |
+| S2 | Earthquakes, severe weather | USGS earthquake feed, NWS/NOAA alerts, national met services | USGS + NWS **[BUILT]** live |
+| S2 | Country and city advisories | State Dept, FCDO, OSAC | State Dept + FCDO **[BUILT]** live, country-scoped; OSAC **[LATER]** (login) |
+| S2 | Civil unrest, crime, conflict events | ACLED, GDELT, news RSS | ACLED **[BUILT]** (key); CLSTR **[BUILT]** (key); GDELT **[LATER]** |
 | S2 | Targeted threats, online chatter | Commercial intel (Flashpoint, Recorded Future, Dataminr) | **[LATER]** premium connectors |
 | S6 | Contact channel | Phone/SMS (Twilio), Slack, mass-notification (Everbridge) | tel: links **[BUILT]** — outbound **[LATER]** |
 
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.14** — collectors: USGS, NWS, WHO DON, State Dept, FCDO live and keyless; ACLED and CLSTR behind keys; Nager.Date holiday baseline; country-scoped reporting attaches to requirements by country. ReliefWeb and GDELT deferred with reasons.
 - **v3.13** — INTSUM built (§5.6, Decision G): a fixed-order diff since the last one, fixed-hour draft, Battle Captain release.
 - **v3.12** — Area Assessment built (§5.6): candidates side by side, reported / quiet / gap cells, refuse-to-approve; stale rulings in §5.6 replaced with G and I.
 - **v3.11** — `Report`/`Case` and the case graph built (§5.10 #1–2, §5.11); the review queue is the v1 workbench.

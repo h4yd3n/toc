@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xml:lang="en-US" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://www.gov.uk/foreign-travel-advice</id>
+  <link rel="alternate" type="text/html" href="https://www.gov.uk/foreign-travel-advice"/>
+  <link rel="self" type="application/atom+xml" href="https://www.gov.uk/foreign-travel-advice.atom"/>
+  <title>Travel Advice Summary</title>
+  <updated>2026-09-04T00:25:51+01:00</updated>
+  <author>
+    <name>GOV.UK</name>
+  </author>
+  <entry>
+    <id>https://www.gov.uk/foreign-travel-advice/mexico#2026-09-04T00:25:51+01:00</id>
+    <updated>2026-09-04T00:25:51+01:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.gov.uk/foreign-travel-advice/mexico"/>
+    <title>Mexico</title>
+    <link rel="self" type="application/atom+xml" href="https://www.gov.uk/foreign-travel-advice/mexico.atom"/>
+    <summary type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml">
+<p>Information about Hurricane Marie causing intense rain across state of Baja California Sur ('Warnings and insurance' page)</p>      </div>
+    </summary>
+  </entry><entry>
+    <id>https://www.gov.uk/foreign-travel-advice/colombia#2026-09-03T15:30:31+01:00</id>
+    <updated>2026-09-03T15:30:31+01:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.gov.uk/foreign-travel-advice/colombia"/>
+    <title>Colombia</title>
+    <link rel="self" type="application/atom+xml" href="https://www.gov.uk/foreign-travel-advice/colombia.atom"/>
+    <summary type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml">
+<p>Updated information on earthquake response and removal of information about the closure of Matecaña International Airport ('Warnings and insurance' page).</p>      </div>
+    </summary>
+  </entry><entry>
+    <id>https://www.gov.uk/foreign-travel-advice/uganda#2026-09-02T16:45:31+01:00</id>
+    <updated>2026-09-02T16:45:31+01:00</updated>
+    <link rel="alternate" type="text/html" href="https://www.gov.uk/foreign-travel-advice/uganda"/>
+    <title>Uganda</title>
+    <link rel="self" type="application/atom+xml" href="https://www.gov.uk/foreign-travel-advice/uganda.atom"/>
+    <summary type="xhtml">
+      <div xmlns="http://www.w3.org/1999/xhtml">
+<p>Updated information that, on 27 August 2026, the World Health Organisation declared the Uganda Ebola outbreak over ('Entry requirements' and ‘Health’ pages).</p>      </div>
+    </summary>
+  </entry></feed>

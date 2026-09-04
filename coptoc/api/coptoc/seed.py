@@ -248,7 +248,7 @@ async def _seed_directed(session: AsyncSession, now: datetime) -> None:
         await session.delete(row)
     for rid, place, lat, lon in (("req_dir_seed_lisbon", "Lisbon, Portugal", 38.7223, -9.1393), ("req_dir_seed_porto", "Porto, Portugal", 41.1579, -8.6291)):
         if not await session.get(RequirementRow, rid):
-            session.add(RequirementRow(id=rid, kind="directed", subject_type="place", subject_id=None, subject_name=place, lat=lat, lon=lon, radius_km=50.0,
+            session.add(RequirementRow(id=rid, kind="directed", subject_type="place", subject_id=None, subject_name=place, lat=lat, lon=lon, radius_km=50.0, country="PT",
                                        question=f"What is the environment in {place} for the Q1 leadership offsite?", purpose="Q1 leadership offsite — candidate venue", priority=2,
                                        window_from=now + timedelta(days=40), window_to=now + timedelta(days=43), status="active", owner="EA - Office of the CEO", created_at=now, updated_at=now))
     await session.flush()

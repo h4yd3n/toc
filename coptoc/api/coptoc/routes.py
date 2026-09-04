@@ -4,7 +4,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Tuple, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select
@@ -797,33 +797,53 @@ def iso_(dt):
 # ---------------------------------------------------------------- S2 collection
 
 @router.post("/intel/refresh")
-async def intel_refresh(session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
-    """Run the real Sigtoc collectors and upsert what they find. GDACS today."""
-    from sigtoc.collectors.gdacs import collect_gdacs
+async def intel_refresh(session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), source: Optional[str] = None):
+    """Run every enabled, configured Sigtoc collector and upsert what they find. One broken source is reported, not hidden,
+    and does not stop the others. Country-scoped reporting is placed at our first requirement in that country."""
+    from sigtoc.collectors.registry import COLLECTORS, run as run_collector
+    from sigtoc.requirements import RequirementRow, catalog, source_states
     snap = await build_snapshot(session, include_restricted=True)
-    from sigtoc.requirements import RequirementRow
-    directed = (await session.execute(select(RequirementRow).where(RequirementRow.status == "active", RequirementRow.kind == "directed"))).scalars().all()
+    reqs = (await session.execute(select(RequirementRow).where(RequirementRow.status == "active"))).scalars().all()
+    directed = [r for r in reqs if r.kind == "directed"]
     points = [(l["lat"], l["lon"]) for l in snap["locations"]] + [(p["lat"], p["lon"]) for p in snap["people"] if p["status"] == "traveling"] \
              + [(e["venue_lat"], e["venue_lon"]) for e in snap["events"]] + [(r.lat, r.lon) for r in directed]
-    try:
-        found = await collect_gdacs(points)
-    except RuntimeError as e:
-        await get_ledger().append_event(content_id="sigtoc", event_type="cop.intel.refresh_failed", actor_type="collector", actor_id="gdacs", reason=str(e))
-        raise HTTPException(502, str(e))
-    created = updated = 0
-    for f in found:
-        row = (await session.execute(select(ThreatRow).where(ThreatRow.external_id == f["external_id"]))).scalar_one_or_none()
-        if row:
-            for k in ("title", "summary", "lat", "lon", "radius_km", "severity", "observed_at", "url"):
-                setattr(row, k, f[k])
-            updated += 1
-        else:
-            session.add(ThreatRow(id=f"thr_{uuid.uuid4().hex[:8]}", synthetic=False, confidence="high", **f))
-            created += 1
-    await session.commit()
-    await get_ledger().append_event(content_id="sigtoc", event_type="cop.intel.refresh", actor_type="collector", actor_id="gdacs",
-                                    reason=f"GDACS: {created} new, {updated} updated", metadata={"created": created, "updated": updated, "collected": len(found)})
-    return {"source": "gdacs", "collected": len(found), "created": created, "updated": updated}
+    countries: Dict[str, Tuple[float, float]] = {}
+    for r in sorted(reqs, key=lambda r: r.priority):
+        if r.country and r.country not in countries: countries[r.country] = (r.lat, r.lon)
+    cat = {c["id"]: c for c in await catalog(session)}
+    states = await source_states(session)
+    ids = [source] if source else [sid for sid in COLLECTORS if cat.get(sid, {}).get("enabled") and cat.get(sid, {}).get("configured")]
+    results, total_created, total_updated = [], 0, 0
+    for sid in ids:
+        if sid not in COLLECTORS:
+            raise HTTPException(404, f"no collector {sid}")
+        now = now_utc()
+        try:
+            found = await run_collector(sid, points, countries)
+        except RuntimeError as e:
+            states[sid].last_collected_at, states[sid].last_result = now, f"FAILED: {e}"
+            await session.commit()
+            await get_ledger().append_event(content_id="sigtoc", event_type="cop.intel.refresh_failed", actor_type="collector", actor_id=sid, reason=str(e))
+            results.append({"source": sid, "ok": False, "error": str(e)})
+            continue
+        created = updated = 0
+        for f in found:
+            row = (await session.execute(select(ThreatRow).where(ThreatRow.external_id == f["external_id"]))).scalar_one_or_none()
+            if row:
+                for k in ("title", "summary", "lat", "lon", "radius_km", "severity", "observed_at", "url", "event_type", "country", "scope"):
+                    setattr(row, k, f[k])
+                updated += 1
+            else:
+                session.add(ThreatRow(id=f"thr_{uuid.uuid4().hex[:8]}", synthetic=False, confidence="high" if cat[sid]["reliability"] in ("A", "B") else "moderate" if cat[sid]["reliability"] == "C" else "low", **f))
+                created += 1
+        states[sid].last_collected_at, states[sid].last_result = now, f"{len(found)} relevant, {created} new, {updated} updated"
+        await session.commit()
+        await get_ledger().append_event(content_id="sigtoc", event_type="cop.intel.refresh", actor_type="collector", actor_id=sid,
+                                        reason=f"{cat[sid]['name']}: {created} new, {updated} updated", metadata={"created": created, "updated": updated, "collected": len(found)})
+        results.append({"source": sid, "ok": True, "collected": len(found), "created": created, "updated": updated})
+        total_created += created; total_updated += updated
+    return {"sources": results, "created": total_created, "updated": total_updated, "collected": sum(r.get("collected", 0) for r in results),
+            "failed": [r["source"] for r in results if not r["ok"]], "countries": sorted(countries)}
 
 
 @router.post("/seed")

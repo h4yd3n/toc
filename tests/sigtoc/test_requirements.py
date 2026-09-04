@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp.name}"
 os.environ["TOC_INTSUM_CLOCK"] = "off"  # the fixed-time INTSUM draft is tested directly, not on a timer
+os.environ["TOC_OFFLINE"] = "1"  # no network in tests
+os.environ["TOC_SOURCES_CONFIGURED"] = "gdacs,ops"  # these tests exercise the plan with GDACS as the only live feed
 os.environ.pop("ANTHROPIC_API_KEY", None); os.environ.pop("CLSTR_API_KEY", None)
 
 import pytest

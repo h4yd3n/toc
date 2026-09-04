@@ -141,7 +141,7 @@ export default function App() {
       <aside className="right">
         <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc">
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
-          <button className="mini" disabled={!!busy} onClick={() => act('collecting GDACS', api.refreshIntel)} title="Run live collectors (GDACS)">⟳ COLLECT</button>
+          <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
         <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
