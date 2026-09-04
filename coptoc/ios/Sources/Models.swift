@@ -38,7 +38,9 @@ struct Summary: Decodable {
     var openIncidents: Int, unaccounted: Int
     var posture: String
     var flash: Int?, warningsPending: Int?, offDuty: Int?, unreachable: Int?
+    var defcon: Int?, defconLevels: [DefconLevel]?
 }
+struct DefconLevel: Decodable, Identifiable, Hashable { var defcon: Int, posture: String, meaning: String, sites: Int; var id: Int { defcon } }
 
 struct Site: Decodable, Identifiable, Hashable {
     var id: String, name: String, type: String, lat: Double, lon: Double, city: String, country: String

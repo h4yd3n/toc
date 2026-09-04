@@ -1,4 +1,5 @@
-export type Posture = 'normal' | 'elevated' | 'critical'
+export type Posture = 'normal' | 'guarded' | 'elevated' | 'high' | 'critical'
+export interface DefconLevel { defcon: number; posture: Posture; meaning: string; sites: number }
 export type Severity = 'low' | 'moderate' | 'elevated' | 'critical'
 export type LocationType = 'hq' | 'office' | 'datacenter' | 'residence' | 'venue'
 export type Confidence = 'low' | 'moderate' | 'high' | 'insufficient'
@@ -66,7 +67,7 @@ export interface LogEntry { id: string; at: string; type: string; actor: string;
 export interface Summary {
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
-  open_incidents: number; unaccounted: number; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
+  open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
 }
 export type Role = 'battle_captain' | 'ep' | 'security' | 'analyst' | 'ea'
 export interface Watch {

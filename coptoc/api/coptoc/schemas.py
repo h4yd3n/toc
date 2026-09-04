@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-Posture = Literal["normal", "elevated", "critical"]
+Posture = Literal["normal", "guarded", "elevated", "high", "critical"]
 
 class TripCreate(BaseModel):
     person_id: str

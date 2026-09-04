@@ -49,6 +49,7 @@ export default function App() {
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
   const [openPanel, setOpenPanel] = useState<'left' | 'right' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showDefcon, setShowDefcon] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
   const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false })
   const [now, setNow] = useState(Date.now())
@@ -84,7 +85,13 @@ export default function App() {
     <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
-        <div className={`posture-chip ${s?.posture ?? ''}`}>POSTURE · {(s?.posture ?? '—').toUpperCase()}</div>
+        <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">DEFCON {s?.defcon ?? '—'}</button>
+        {showDefcon && s && <div className="defcon" onClick={e => e.stopPropagation()}>
+          <div className="dform-head">DEFCON <span className="dim">the wall reads the worst site · set a site's level from its card</span></div>
+          {[...(s.defcon_levels ?? [])].sort((x, y) => y.defcon - x.defcon).map(l => <div key={l.defcon} className={`dlevel ${l.posture} ${l.defcon === s.defcon ? 'now' : ''}`}>
+            <span className="dnum">{l.defcon}</span><span className="dname">{l.posture.toUpperCase()}</span><span className="dmean">{l.meaning}</span><span className="dsites dim">{l.sites ? `${l.sites} site${l.sites === 1 ? '' : 's'}` : ''}</span>
+          </div>)}
+        </div>}
         <WatchChip w={snap?.watch} onOpen={() => setShowBrief(v => !v)} />
         <div className="stats">
           <Stat label="PERSONNEL" v={s?.total_people} /><Stat label="PRESENT" v={s?.present} />
@@ -358,7 +365,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
         </div>
         <div className="d-stats">
           <span className="dim">posture</span>
-          {(['normal', 'elevated', 'critical'] as const).map(p => (
+          {(['normal', 'guarded', 'elevated', 'high', 'critical'] as const).map(p => (
             <button key={p} className={`chip btn ${p} ${l.posture === p ? 'on' : ''}`} disabled={!!busy} onClick={() => act('setting posture', () => api.setPosture(l.id, p, 'Set from the wall'))}>{p.toUpperCase()}</button>))}
           {l.effective_posture !== l.posture && <span className={`chip ${l.effective_posture}`} title="raised by a confirmed threat link">EFFECTIVE {l.effective_posture.toUpperCase()}</span>}
         </div>

@@ -143,8 +143,9 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
         div.onclick = ev => { ev.stopPropagation(); onSelect({ type: 'event', id: e.id }) }
       } else {
         const present = locs.reduce((a, x) => a + x.loc!.present, 0) + ppl.length
-        const worst = locs.reduce((a, x) => Math.max(a, ['normal', 'elevated', 'critical'].indexOf(x.loc!.effective_posture)), 0)
-        div.className = `mk mk-cluster posture-${['normal', 'elevated', 'critical'][worst]}${selected ? ' selected' : ''}`
+        const LEVELS = ['normal', 'guarded', 'elevated', 'high', 'critical']
+        const worst = locs.reduce((a, x) => Math.max(a, LEVELS.indexOf(x.loc!.effective_posture)), 0)
+        div.className = `mk mk-cluster posture-${LEVELS[worst]}${selected ? ' selected' : ''}`
         div.innerHTML = `<span class="count">${present}</span><span class="sub">${locs.length} site${locs.length === 1 ? '' : 's'}${ppl.length ? ` · ${ppl.length} tvl` : ''}${evs.length ? ` · ${evs.length} evt` : ''}</span>`
         div.title = c.members.map(x => x.loc?.name ?? x.person?.name ?? x.event?.name).join('\n')
         div.onclick = e => { e.stopPropagation(); m.flyTo({ center: [c.lon, c.lat], zoom: Math.min(m.getZoom() + 2.5, 12), speed: 1.4 }) }

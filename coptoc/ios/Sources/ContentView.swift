@@ -38,11 +38,19 @@ struct PostureBar: View {
         VStack(spacing: 6) {
             HStack(spacing: 10) {
                 Text("TOC").font(.system(size: 18, weight: .heavy, design: .monospaced)).tracking(3)
-                if store.postureHeader {
-                    Text("POSTURE · \(posture.uppercased())").font(.system(size: 13, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
-                        .padding(.horizontal, 12).padding(.vertical, 6).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.posture(posture), lineWidth: 2))
-                } else {
-                    Chip(text: "POSTURE · \(posture.uppercased())", color: Theme.posture(posture))
+                Menu {
+                    ForEach((s?.defconLevels ?? []).sorted { $0.defcon > $1.defcon }) { l in
+                        Button { } label: { Label("DEFCON \(l.defcon) · \(l.posture.uppercased())" + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
+                    }
+                    Divider()
+                    Text("The wall reads the worst site. Set a site's level from its card.")
+                } label: {
+                    if store.postureHeader {
+                        Text("DEFCON \(s?.defcon.map(String.init) ?? "—")").font(.system(size: 14, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
+                            .padding(.horizontal, 12).padding(.vertical, 6).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.posture(posture), lineWidth: 2))
+                    } else {
+                        Chip(text: "DEFCON \(s?.defcon.map(String.init) ?? "—")", color: Theme.posture(posture))
+                    }
                 }
                 Spacer()
                 Menu {

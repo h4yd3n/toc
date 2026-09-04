@@ -15,7 +15,7 @@ class LocationRow(Base):
     lon: Mapped[float] = mapped_column(Float)
     city: Mapped[str] = mapped_column(String)
     country: Mapped[str] = mapped_column(String)
-    posture: Mapped[str] = mapped_column(String, default="normal")  # normal | elevated | critical — set by a human
+    posture: Mapped[str] = mapped_column(String, default="normal")  # normal | guarded | elevated | high | critical (DEFCON 5 → 1) — set by a human
     sensitivity: Mapped[str] = mapped_column(String, default="standard")  # standard | restricted
 
 

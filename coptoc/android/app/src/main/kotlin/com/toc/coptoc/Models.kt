@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Estimate(val section: String, val assessment: String = "", val recommendation: String = "", val updatedBy: String? = null, val updatedAt: String? = null)
 @Serializable data class Summary(val totalPeople: Int = 0, val present: Int = 0, val traveling: Int = 0, val vipsTraveling: Int = 0, val securityOnShift: Int = 0, val activeThreats: Int = 0,
                                  val realThreats: Int = 0, val confirmedLinks: Int = 0, val checkedInFresh: Int = 0, val openPirs: Int = 0, val upcomingEvents: Int = 0, val openIncidents: Int = 0,
-                                 val unaccounted: Int = 0, val posture: String = "normal", val flash: Int = 0, val warningsPending: Int = 0, val offDuty: Int = 0, val unreachable: Int = 0)
+                                 val unaccounted: Int = 0, val posture: String = "normal", val defcon: Int = 5, val defconLevels: List<DefconLevel> = emptyList(), val flash: Int = 0, val warningsPending: Int = 0, val offDuty: Int = 0, val unreachable: Int = 0)
 @Serializable data class Site(val id: String, val name: String, val type: String = "", val lat: Double, val lon: Double, val city: String = "", val country: String = "", val posture: String = "normal",
                               val effectivePosture: String = "normal", val sensitivity: String = "standard", val assigned: Int = 0, val present: Int = 0, val securityOnShift: Int = 0, val vipsPresent: Int = 0,
                               val threatIdsInArea: List<String> = emptyList(), val confirmedThreatIds: List<String> = emptyList())
@@ -68,3 +68,5 @@ sealed interface Selection {
 @Serializable data class OpTask(val id: String, val title: String = "", val section: String = "", val owner: String = "", val status: String = "todo")
 @Serializable data class OpResource(val id: String, val item: String = "", val qty: Int = 1, val status: String = "requested")
 @Serializable data class Operation(val id: String, val title: String = "", val status: String = "planned", val subjectName: String = "", val fromProductId: String? = null, val notes: String = "", val tasks: List<OpTask> = emptyList(), val resources: List<OpResource> = emptyList(), val tasksTotal: Int = 0, val tasksDone: Int = 0, val pct: Int = 0)
+
+@Serializable data class DefconLevel(val defcon: Int, val posture: String = "", val meaning: String = "", val sites: Int = 0)

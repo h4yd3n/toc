@@ -112,7 +112,7 @@ struct DetailView: View {
         HStack(spacing: 14) { stat(s.present, "present"); stat(s.assigned, "assigned"); stat(s.securityOnShift, "sec on shift"); stat(s.vipsPresent, "VIP") }
         HStack(spacing: 6) {
             Text("posture").font(.system(size: 12)).foregroundStyle(Theme.dim)
-            ForEach(["normal", "elevated", "critical"], id: \.self) { p in
+            ForEach(["normal", "guarded", "elevated", "high", "critical"], id: \.self) { p in
                 Button(p.uppercased()) { store.act("setting posture") { try await store.client.setPosture(siteId: s.id, posture: p) } }
                     .font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.posture(p)).opacity(s.posture == p ? 1 : 0.5).disabled(store.busy != nil)
             }

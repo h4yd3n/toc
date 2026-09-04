@@ -13,7 +13,8 @@ enum Theme {
     static let red = Color(red: 0.94, green: 0.27, blue: 0.27)
     static let purple = Color(red: 0.75, green: 0.52, blue: 0.99)
 
-    static func posture(_ p: String) -> Color { p == "critical" ? red : p == "elevated" ? amber : green }
+    static let lime = Color(red: 0.64, green: 0.90, blue: 0.21)
+    static func posture(_ p: String) -> Color { p == "critical" ? red : p == "high" ? orange : p == "elevated" ? amber : p == "guarded" ? lime : green }
     static func severity(_ s: String) -> Color { s == "critical" || s == "elevated" ? red : s == "moderate" ? orange : amber }
     static func confidence(_ c: String) -> Color { c == "high" ? green : c == "moderate" ? amber : c == "low" ? red : dim }
 }

@@ -14,8 +14,18 @@ from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAtte
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
 SEVERITY_RANK = {"low": 0, "moderate": 1, "elevated": 2, "critical": 3}
-POSTURE_RANK = {"normal": 0, "elevated": 1, "critical": 2}
-POSTURES = ["normal", "elevated", "critical"]
+# Five levels, read on the wall as DEFCON 5 → 1. The rule (Decision 3) forces normal / elevated / critical from confirmed
+# links; a human may also set the two in-between levels, guarded and high, by hand.
+POSTURE_RANK = {"normal": 0, "guarded": 1, "elevated": 2, "high": 3, "critical": 4}
+POSTURES = ["normal", "guarded", "elevated", "high", "critical"]
+DEFCON = {p: 5 - r for p, r in POSTURE_RANK.items()}
+DEFCON_MEANING = {  # the US military definitions, as the example (the author's call, 2026-09-04); exercise terms in brackets
+    "normal":   "DEFCON 5 — Normal readiness. Lowest state of readiness. [FADE OUT]",
+    "guarded":  "DEFCON 4 — Increased intelligence watch and strengthened security measures. Above normal readiness. [DOUBLE TAKE]",
+    "elevated": "DEFCON 3 — Increase in force readiness above that required for normal readiness. Air Force ready to mobilize in 15 minutes. [ROUND HOUSE]",
+    "high":     "DEFCON 2 — Next step to nuclear war. Armed forces ready to deploy and engage in less than 6 hours. [FAST PACE]",
+    "critical": "DEFCON 1 — Nuclear war is imminent or has already begun. Maximum readiness. [COCKED PISTOL]",
+}
 # Decision 3: only a *confirmed* link changes posture. Severity → posture it forces.
 SEVERITY_TO_POSTURE = {"low": "normal", "moderate": "elevated", "elevated": "critical", "critical": "critical"}
 # Decision 2: a check-in this recent overrides the derived position.
@@ -153,7 +163,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         effective = POSTURES[max(POSTURE_RANK[l.posture], forced)]
         locations_out.append({
             "id": l.id, "name": l.name, "type": l.type, "lat": l.lat, "lon": l.lon, "city": l.city,
-            "country": l.country, "posture": l.posture, "effective_posture": effective, "sensitivity": l.sensitivity,
+            "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity,
             "threat_ids_in_area": in_area, "confirmed_threat_ids": [lk.threat_id for lk in my_links],
             **counts[l.id],
         })
@@ -317,7 +327,8 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "open_incidents": sum(1 for i in incidents_out if i["status"] == "open"),
         "unaccounted": sum(i["counts"]["unaccounted"] + i["counts"]["unreachable"] for i in incidents_out if i["status"] == "open"),
         "upcoming_events": len(events_out),
-        "posture": POSTURES[worst_loc],
+        "posture": POSTURES[worst_loc], "defcon": 5 - worst_loc,
+        "defcon_levels": [{"defcon": DEFCON[p], "posture": p, "meaning": DEFCON_MEANING[p], "sites": sum(1 for l in locations_out if l["effective_posture"] == p)} for p in POSTURES],
     }
     cfg = await get_config(session)
     wrow = await current_watch(session, now)

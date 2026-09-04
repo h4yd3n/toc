@@ -73,8 +73,13 @@ fun Header(st: WallState, store: Store) {
         Text("TOC", color = Palette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
         Text("  COMMON OPERATING PICTURE", color = Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
         Spacer(Modifier.width(12.dp))
-        s?.let { if (Ui.posture) Text("POSTURE · ${it.posture.uppercase()}", Modifier.border(2.dp, Palette.posture(it.posture).copy(alpha = .8f), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 5.dp), color = Palette.posture(it.posture), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
-                 else Chip("POSTURE · ${it.posture.uppercase()}", Palette.posture(it.posture), filled = true) }
+        var defconMenu by remember { mutableStateOf(false) }
+        s?.let { Box {
+            if (Ui.posture) Text("DEFCON ${it.defcon}", Modifier.clickable { defconMenu = true }.border(2.dp, Palette.posture(it.posture).copy(alpha = .8f), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 5.dp), color = Palette.posture(it.posture), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+            else Chip("DEFCON ${it.defcon}", Palette.posture(it.posture), filled = true, onClick = { defconMenu = true })
+            DropdownMenu(defconMenu, { defconMenu = false }) {
+                it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}" + (if (l.sites > 0) "  (${l.sites})" else ""), color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) }
+                DropdownMenuItem({ Text("The wall reads the worst site. Set a site's level from its card.", color = Palette.dim, fontSize = 10.sp) }, { defconMenu = false }) } } }
         Spacer(Modifier.width(8.dp))
         w?.let { Chip("${it.name.uppercase()} WATCH ${it.battleCaptain ?: "UNASSIGNED"} · ${"%.0f".format(it.remainingH)}h left", if (it.overdue) Palette.red else if (it.inOverlap) Palette.amber else Palette.blue2, filled = true,
             onClick = if (it.battleCaptain == null && st.role == "battle_captain") ({ store.act("taking the watch") { takeWatch("Battle Captain (Android)") } }) else null) }
