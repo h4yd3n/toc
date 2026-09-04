@@ -372,7 +372,10 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .brand .glyph { width: 30px; height: 30px; margin-right: 4px; align-self: center; }
 
 /* ---- density: WALL vs FOCUS (option A), top rows (B), lean labels (C), posture header (D) ---- */
-.gear { font-size: 15px; color: var(--dim); padding: 0 6px; } .gear:hover { color: var(--text); }
+.modeswitch { display: flex; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden; margin-left: 10px; }
+.modeswitch button { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; padding: 5px 10px; color: var(--dim); }
+.modeswitch button.on { background: var(--blue); color: #fff; }
+.gear { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--dim); padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 4px; margin-left: 8px; } .gear:hover { color: var(--text); }
 .settings { position: absolute; top: 56px; right: 14px; z-index: 30; background: var(--panel); border: 1px solid var(--line-2); border-radius: 5px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
 .s-row { display: flex; align-items: center; gap: 6px; } .s-row > span:first-child { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--dim); width: 58px; }
 .s-row .small { margin-left: 6px; }

@@ -36,7 +36,7 @@ type ById = { loc: Map<string, Location>; person: Map<string, Person>; threat: M
 const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreachable: 'amber', assist: 'red', injured: 'red', contacted: 'green', safe: 'green' }
 
 type UiPrefs = { mode: 'wall' | 'focus'; labels: 'full' | 'lean'; header: 'counters' | 'posture' }
-const UI_DEFAULTS: UiPrefs = { mode: 'wall', labels: 'full', header: 'counters' }
+const UI_DEFAULTS: UiPrefs = { mode: 'focus', labels: 'lean', header: 'posture' }  // the quieter wall is the default; WALL is the display mode
 
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
@@ -103,10 +103,12 @@ export default function App() {
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option>
         </select>
-        <button className="gear" title="Wall density and labels" onClick={() => setShowSettings(v => !v)}>⚙</button>
+        <div className="modeswitch" title="WALL keeps every panel on screen (the wall display). FOCUS gives the map the room and slides panels out from the rails.">
+          {(['wall', 'focus'] as const).map(m => <button key={m} className={ui.mode === m ? 'on' : ''} onClick={() => { setUi({ ...ui, mode: m }); setOpenPanel(null) }}>{m.toUpperCase()}</button>)}
+        </div>
+        <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
-          <div className="s-row"><span>MODE</span>{(['wall', 'focus'] as const).map(m => <button key={m} className={`chip btn ${ui.mode === m ? 'on' : ''}`} onClick={() => { setUi({ ...ui, mode: m }); setOpenPanel(null) }}>{m.toUpperCase()}</button>)}<span className="dim small">WALL keeps every panel; FOCUS gives the map the room</span></div>
           <div className="s-row"><span>LABELS</span>{(['full', 'lean'] as const).map(m => <button key={m} className={`chip btn ${ui.labels === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, labels: m })}>{m.toUpperCase()}</button>)}<span className="dim small">LEAN drops hints, empty lines, second lines</span></div>
           <div className="s-row"><span>HEADER</span>{(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}<span className="dim small">POSTURE: one big posture tile, five counters</span></div>
         </div>}
