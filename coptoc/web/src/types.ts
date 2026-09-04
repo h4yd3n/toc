@@ -10,7 +10,7 @@ export interface Location {
   threat_ids_in_area: string[]; confirmed_threat_ids: string[]
 }
 export interface Team { id: string; name: string; location_id: string; function: string; is_security: boolean }
-export interface Person {
+export interface Person { availability: 'on_shift' | 'off_duty' | 'available' | 'unreachable';
   id: string; name: string; role: string; team_id: string; team_name: string
   home_location_id: string; location_id: string | null; is_vip: boolean
   on_shift: boolean; shift_role: string | null; status: 'at_post' | 'traveling'
@@ -66,7 +66,7 @@ export interface LogEntry { id: string; at: string; type: string; actor: string;
 export interface Summary {
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
-  open_incidents: number; unaccounted: number; flash: number; warnings_pending: number; posture: Posture
+  open_incidents: number; unaccounted: number; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
 }
 export type Role = 'battle_captain' | 'ep' | 'security' | 'analyst' | 'ea'
 export interface Watch {

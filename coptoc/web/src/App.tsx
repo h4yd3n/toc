@@ -81,6 +81,7 @@ export default function App() {
           <Stat label="THREATS" v={s?.active_threats} accent="red" /><Stat label="CONFIRMED" v={s?.confirmed_links} accent="red" />
           {(s?.unaccounted ?? 0) > 0 && <Stat label="UNACCOUNTED" v={s?.unaccounted} accent="red" />}
           {(s?.flash ?? 0) > 0 && <Stat label="FLASH" v={s?.flash} accent="red" />}
+          {(s?.unreachable ?? 0) > 0 && <Stat label="UNREACHABLE" v={s?.unreachable} accent="red" />}
           <Stat label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat label="EVENTS" v={s?.upcoming_events} />
         </div>
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
@@ -366,7 +367,8 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
           {p.on_shift && <span className="chip green">ON SHIFT · {p.shift_role}</span>}
           {p.position_source === 'checkin' ? <span className="chip green">CHECKED IN {p.checkin_age_h}h ago</span> : p.checkin_stale ? <span className="chip elevated">CHECK-IN STALE {Math.round(p.checkin_age_h ?? 0)}h</span> : <span className="chip">POSITION DERIVED</span>}
         </div>
-        {p.incident_status && <div className="d-stats"><span className={`chip ${ROSTER_COLOR[p.incident_status]}`}>ROLL CALL · {p.incident_status.toUpperCase()}</span></div>}
+        <div className="d-stats"><span className={`chip ${p.availability === 'unreachable' ? 'red' : p.availability === 'off_duty' ? 'dim' : 'green'}`} title="§4: on shift / off duty for security; unreachable when a roll call cannot reach you or a check-in went stale on the road">{p.availability.replace('_', ' ').toUpperCase()}</span>
+          {p.incident_status && <span className={`chip ${ROSTER_COLOR[p.incident_status]}`}>ROLL CALL · {p.incident_status.toUpperCase()}</span>}</div>
         {p.last_checkin_note && <div className="kv"><span>Check-in</span>{p.last_checkin_note}</div>}
         {p.phone && <div className="kv"><span>Phone</span><a href={`tel:${p.phone.replace(/\s/g, '')}`}>{p.phone}</a></div>}
         {p.email && <div className="kv"><span>Email</span>{p.email}</div>}

@@ -127,6 +127,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "position_source": position_source, "checkin_age_h": checkin_age_h, "checkin_stale": checkin_stale,
             "last_checkin_at": iso(p.last_checkin_at), "last_checkin_note": p.last_checkin_note,
             "phone": p.phone, "email": p.email, "source": p.source, "incident_status": None,
+            "availability": ("on_shift" if p.on_shift else "off_duty") if team.is_security else "available",  # refined below: an open roll call can make anyone unreachable
             "threat_ids_in_area": [], "confirmed_threat_ids": [lk.threat_id for lk in my_links],
         })
 
@@ -279,6 +280,9 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
                 "meta": json.loads(r.metadata_json or "{}")} for r in log_rows]
 
     worst_loc = max((POSTURE_RANK[l["effective_posture"]] for l in locations_out), default=0)
+    for pp in people_out:  # §4: unreachable is a state of its own — a roll call that cannot reach you, or a stale check-in while traveling
+        if pp["incident_status"] == "unreachable" or (pp["status"] == "traveling" and pp["checkin_stale"] and pp["last_checkin_at"]):
+            pp["availability"] = "unreachable"
     summary = {
         "total_people": len(people_out),
         "present": sum(1 for p in people_out if p["status"] == "at_post"),
@@ -290,6 +294,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "confirmed_links": len(links),
         "checked_in_fresh": sum(1 for p in people_out if p["position_source"] == "checkin"),
         "open_pirs": sum(1 for p in pirs_out if p["status"] in ("OPEN", "COLLECTING")),
+        "off_duty": sum(1 for p in people_out if p["availability"] == "off_duty"), "unreachable": sum(1 for p in people_out if p["availability"] == "unreachable"),
         "flash": sum(1 for w in warnings_out if w["status"] == "released"), "warnings_pending": sum(1 for w in warnings_out if w["status"] in ("suggested", "draft")),
         "open_incidents": sum(1 for i in incidents_out if i["status"] == "open"),
         "unaccounted": sum(i["counts"]["unaccounted"] + i["counts"]["unreachable"] for i in incidents_out if i["status"] == "open"),

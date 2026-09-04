@@ -1,6 +1,6 @@
 """NWS / NOAA active alerts (US) — free, keyless GeoJSON. Source reliability A. Alerts carry a polygon or only zone
-references; zone-only alerts are skipped (resolving zones is one more call per alert — [NEXT])."""
-from typing import Any, Dict, List, Sequence, Tuple
+references; zone-only alerts are resolved through the zone endpoint (one call per distinct zone, cached for the process)."""
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .common import fetch, haversine_km, item, near, parse_iso
 
@@ -18,11 +18,28 @@ def _centroid_and_radius(geom: Dict[str, Any]):
     return lat, lon, max(radius, 15.0)
 
 
-def parse_nws(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+ZONE_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+MAX_ZONE_FETCHES = 25
+
+
+def zone_geometry(zones: Sequence[str], resolved: Dict[str, Optional[Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
+    """The union of an alert's zones, approximated as one polygon ring made of every zone's ring points."""
+    pts = []
+    for z in zones:
+        g = resolved.get(z)
+        if not g: continue
+        rings = g.get("coordinates") or []
+        if g.get("type") == "MultiPolygon": rings = [r for poly in rings for r in poly[:1]]
+        for ring in rings[:1]: pts += list(ring)
+    return {"type": "Polygon", "coordinates": [pts]} if pts else None
+
+
+def parse_nws(data: Dict[str, Any], zones: Optional[Dict[str, Optional[Dict[str, Any]]]] = None) -> List[Dict[str, Any]]:
     out = []
     for f in data.get("features", []):
         p = f.get("properties", {})
-        cr = _centroid_and_radius(f.get("geometry") or {}) if f.get("geometry") else None
+        geom = f.get("geometry") or (zone_geometry(p.get("affectedZones") or [], zones) if zones else None)
+        cr = _centroid_and_radius(geom) if geom else None
         if not cr: continue
         lat, lon, radius = cr
         out.append(item(external_id=f"nws:{p.get('id')}", title=f"{p.get('event', 'Weather alert')} — {(p.get('areaDesc') or '')[:80]}",
@@ -38,4 +55,13 @@ def filter_relevant(items: List[Dict[str, Any]], points: Sequence[Tuple[float, f
 
 async def collect_nws(points: Sequence[Tuple[float, float]], countries=None, max_km: float = 150.0) -> List[Dict[str, Any]]:
     r = await fetch(FEED_URL, params={"status": "actual", "message_type": "alert", "severity": "Severe,Extreme,Moderate"}, headers={"Accept": "application/geo+json"}, name="NWS")
-    return filter_relevant(parse_nws(r.json()), points, max_km)
+    data = r.json()
+    # zone-only alerts: resolve their zones (cached), a bounded number per run so one busy day cannot stall collection
+    wanted = [z for f in data.get("features", []) if not f.get("geometry") for z in (f.get("properties", {}).get("affectedZones") or []) if z not in ZONE_CACHE]
+    for url in list(dict.fromkeys(wanted))[:MAX_ZONE_FETCHES]:
+        try:
+            zr = await fetch(url, headers={"Accept": "application/geo+json"}, name="NWS zone", timeout=15)
+            ZONE_CACHE[url] = zr.json().get("geometry")
+        except RuntimeError:
+            ZONE_CACHE[url] = None
+    return filter_relevant(parse_nws(data, ZONE_CACHE), points, max_km)

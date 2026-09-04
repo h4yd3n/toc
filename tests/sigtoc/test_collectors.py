@@ -27,9 +27,17 @@ def test_usgs_parses_and_keeps_big_or_near():
     assert usgs.filter_relevant(items, [(texas["lat"], texas["lon"])])[0]["title"] == texas["title"]
 
 
-def test_nws_uses_polygon_centroids_and_skips_zone_only_alerts():
-    items = nws.parse_nws(json.loads((FX / "nws.json").read_text()))
-    assert len(items) == 2  # the zone-only Red Flag Warning has no polygon and is skipped, honestly
+def test_nws_uses_polygon_centroids_and_resolves_zone_only_alerts():
+    data = json.loads((FX / "nws.json").read_text())
+    items = nws.parse_nws(data)
+    assert len(items) == 2  # without zone geometry the zone-only Red Flag Warning is skipped, honestly
+    red = next(f for f in data["features"] if not f.get("geometry"))
+    zone = json.loads((FX / "nws_zone.json").read_text())["geometry"]
+    resolved = {z: zone for z in red["properties"]["affectedZones"]}
+    resolved_items = nws.parse_nws(data, resolved)
+    assert len(resolved_items) == 3 and any("Red Flag" in i["title"] for i in resolved_items)  # a resolved zone places the alert
+    red_item = next(i for i in resolved_items if "Red Flag" in i["title"])
+    assert red_item["radius_km"] >= 15 and nws.filter_relevant(resolved_items, [SF]) == [red_item]  # the SF zone is near SF HQ
     a = items[0]
     assert a["country"] == "US" and a["event_type"] == "natural_hazard:NWS" and a["severity"] == "elevated" and a["radius_km"] >= 15
     assert nws.filter_relevant(items, [SF]) == [] and nws.filter_relevant(items, [(a["lat"], a["lon"])])
