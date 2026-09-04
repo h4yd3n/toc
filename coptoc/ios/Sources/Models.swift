@@ -3,11 +3,20 @@ import CoreLocation
 
 // Mirrors apps/coptoc/COP_API_CONTRACT.md. Decoded with .convertFromSnakeCase.
 
+struct Watch: Decodable {
+    var id: String, name: String, battleCaptain: String?, status: String, startedAt: String, endsAt: String
+    var elapsedH: Double, remainingH: Double, overdue: Bool, inOverlap: Bool, overlapMinutes: Int, nextWatch: String, pattern: String
+    var nstr: Bool, outgoingNotes: String?, handedOverAt: String?, acknowledgedBy: String?, acknowledgedAt: String?
+}
+struct Estimate: Decodable, Identifiable { var section: String, assessment: String, recommendation: String, updatedBy: String?, updatedAt: String?; var id: String { section } }
+
 struct Snapshot: Decodable {
     var generatedAt: String
     var restrictedIncluded: Bool
     var restrictedDenied: Bool?
     var role: String?
+    var watch: Watch?
+    var estimates: [Estimate]?
     var summary: Summary
     var locations: [Site]
     var teams: [Team]

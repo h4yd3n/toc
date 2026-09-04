@@ -252,3 +252,87 @@ def test_provenance_is_exposed(client):
     assert next(p for p in snap["people"] if p["id"] == "p_ceo")["source"] == "hris:workday"
     assert {t["source"] for t in snap["trips"]} >= {"travel_system:concur", "calendar:google", "manual:ea", "event"}
     assert all(e["source"] == "calendar:google" for e in snap["events"])
+
+
+# ---- §3.1 the watch ----
+BC = {"X-TOC-Role": "battle_captain", "X-TOC-Actor": "Battle Captain"}
+
+def test_watch_is_derived_and_on_the_snapshot(client):
+    w = client.get("/v1/cop/watch").json()
+    assert w["name"] in ("Singapore", "Dublin", "San Francisco") and w["pattern"] == "follow_the_sun" and 0 <= w["elapsed_h"] <= 8
+    assert w["next_watch"] != w["name"] and w["overlap_minutes"] == 30
+    snap = client.get("/v1/cop/snapshot").json()
+    assert snap["watch"]["id"] == w["id"] and [e["section"] for e in snap["estimates"]] == ["S1", "S2", "S3", "S6"]
+
+def test_estimates_are_owned_per_section(client):
+    assert client.patch("/v1/cop/watch/estimate/S2", json={"assessment": "x"}, headers={"X-TOC-Role": "ea"}).status_code == 403
+    r = client.patch("/v1/cop/watch/estimate/S2", json={"assessment": "Threat picture stable; DC-East single-source rhetoric only", "recommendation": "Hold DC-East at elevated"},
+                     headers={"X-TOC-Role": "analyst", "X-TOC-Actor": "S2 duty analyst"})
+    assert r.status_code == 200 and r.json()["updated_by"] == "S2 duty analyst"
+    assert client.patch("/v1/cop/watch/estimate/S3", json={"assessment": "Two VIP moves tomorrow"}, headers={"X-TOC-Role": "ea"}).status_code == 200
+    assert client.patch("/v1/cop/watch/estimate/S9", json={"assessment": "x"}, headers=BC).status_code == 404
+    est = {e["section"]: e for e in client.get("/v1/cop/snapshot").json()["estimates"]}
+    assert est["S2"]["assessment"].startswith("Threat picture") and est["S2"]["recommendation"].startswith("Hold")
+
+def test_take_handover_acknowledge_transfers_the_watch(client):
+    assert client.post("/v1/cop/watch/take", json={"battle_captain": "Anyone"}, headers={"X-TOC-Role": "security"}).status_code == 403
+    w = client.post("/v1/cop/watch/take", json={"battle_captain": "R. Kovac"}, headers=BC).json()
+    assert w["battle_captain"] == "R. Kovac" and w["status"] == "open"
+    assert client.post("/v1/cop/watch/take", json={"battle_captain": "Someone Else"}, headers=BC).status_code == 409
+    # The brief is generated live, in briefing order, from the wall's own data
+    b = client.get("/v1/cop/watch/brief").json()
+    for k in ("significant_events", "current_status", "next_shift", "handover_items", "acknowledgement"):
+        assert k in b
+    assert b["current_status"]["posture"] in ("normal", "elevated", "critical") and isinstance(b["current_status"]["estimates"], list)
+    assert "estimates" not in b["significant_events"]  # estimate edits are context, not events to brief
+    # Outgoing hands over with notes; the watch is now pending and the brief is frozen
+    b2 = client.post("/v1/cop/watch/handover", json={"notes": "Watch the Vegas kickoff planning thread; EP still short two agents."}, headers=BC).json()
+    assert b2["outgoing_notes"].startswith("Watch the Vegas") and b2["nstr"] is False
+    assert b2["watch"]["status"] == "pending_ack" and b2["watch"]["handed_over_at"]  # the frozen brief describes a pending watch
+    assert client.get("/v1/cop/watch/brief").json()["watch"]["status"] == "pending_ack"
+    assert client.get("/v1/cop/watch").json()["status"] == "pending_ack"
+    assert client.post("/v1/cop/watch/handover", json={}, headers=BC).status_code == 409
+    # Incoming acknowledges → the watch transfers, both names on the ledger, the next slot is now held
+    r = client.post("/v1/cop/watch/acknowledge", json={"battle_captain": "T. Whitfield"}, headers=BC)
+    assert r.status_code == 200, r.text
+    assert r.json()["now_holding"]["battle_captain"] == "T. Whitfield" and r.json()["now_holding"]["status"] == "open"
+    log = client.get("/v1/cop/log", params={"limit": 20}).json()
+    types = [e["type"] for e in log[:3]]
+    assert types[0] == "cop.watch.taken" and types[1] == "cop.watch.acknowledged"
+    assert "R. Kovac → T. Whitfield" in log[1]["summary"]
+    assert client.post("/v1/cop/watch/acknowledge", json={"battle_captain": "X"}, headers=BC).status_code == 409
+
+def test_overlap_items_must_be_acknowledged_individually_and_nstr_is_affirmed(client):
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+    from coptoc.routes import sessions
+    from coptoc.watch import WatchRow
+    from sqlalchemy import select
+    # Pull the current watch's end to 10 minutes from now so the overlap window is live
+    async def shorten():
+        async with sessions()() as s:
+            row = (await s.execute(select(WatchRow).where(WatchRow.status == "open").order_by(WatchRow.started_at.desc()))).scalars().first()
+            row.ends_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10); await s.commit(); return row.id
+    wid = asyncio.run(shorten())
+    # Something happens inside the overlap
+    client.patch("/v1/cop/locations/loc_sgp/posture", json={"posture": "elevated", "reason": "Regional advisory during handover"}, headers=BC)
+    b = client.post("/v1/cop/watch/handover", json={"nstr": True}, headers=BC).json()
+    assert b["nstr"] is True and b["watch"]["in_overlap"] is True
+    required = b["acknowledgement"]["required_item_ids"]
+    assert len(required) >= 1 and all(e["during_handover"] for e in b["significant_events"]["posture"])
+    # Acknowledging without the overlap items is refused; with them, the watch transfers
+    assert client.post("/v1/cop/watch/acknowledge", json={"battle_captain": "N. Haddad"}, headers=BC).status_code == 409
+    r = client.post("/v1/cop/watch/acknowledge", json={"battle_captain": "N. Haddad", "acknowledged_item_ids": required}, headers=BC)
+    assert r.status_code == 200
+    log = client.get("/v1/cop/log", params={"limit": 10}).json()
+    ho = next(e for e in log if e["type"] == "cop.watch.handover" and e["subject"] == wid)
+    assert "NSTR" in ho["summary"] and "affirmed" in ho["summary"]
+    client.patch("/v1/cop/locations/loc_sgp/posture", json={"posture": "normal"}, headers=BC)
+
+def test_shift_pattern_is_configurable(client):
+    assert client.patch("/v1/cop/watch/config", json={"pattern": "day_night"}, headers={"X-TOC-Role": "security"}).status_code == 403
+    r = client.patch("/v1/cop/watch/config", json={"pattern": "day_night", "overlap_minutes": 45}, headers=BC)
+    assert r.json() == {"pattern": "day_night", "overlap_minutes": 45}
+    w = client.get("/v1/cop/watch").json()
+    assert w["overlap_minutes"] == 45
+    client.patch("/v1/cop/watch/config", json={"pattern": "follow_the_sun", "overlap_minutes": 30}, headers=BC)

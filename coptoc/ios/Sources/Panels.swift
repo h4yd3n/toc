@@ -4,7 +4,7 @@ struct PersonnelScreen: View {
     @Environment(COPStore.self) private var store
     var body: some View {
         List {
-            Section { PanelHead(code: "S1", title: "PERSONNEL", hint: "Blue Force") }.listRowBackground(Theme.panel)
+            Section { PanelHead(code: "S1", title: "PERSONNEL", hint: "Blue Force"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
             if !store.openIncidents.isEmpty {
                 Section(header: SectionLabel(text: "S6 · ROLL CALLS")) {
                     ForEach(store.openIncidents) { inc in
@@ -68,6 +68,7 @@ struct IntelScreen: View {
                 HStack { PanelHead(code: "S2", title: "INTELLIGENCE", hint: "Sigtoc")
                     Button("⟳ COLLECT") { store.act("collecting GDACS") { try await store.client.refreshIntel() } }
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }
+                EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S2" })
             }.listRowBackground(Theme.panel)
             Section(header: SectionLabel(text: "THREATS \(store.snapshot?.threats.count ?? 0) · \(store.snapshot?.summary.realThreats ?? 0) LIVE")) {
                 ForEach(store.snapshot?.threats ?? []) { t in
@@ -125,7 +126,7 @@ struct OpsScreen: View {
     @Environment(COPStore.self) private var store
     var body: some View {
         List {
-            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Events · Travel") }.listRowBackground(Theme.panel)
+            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Events · Travel"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }) }.listRowBackground(Theme.panel)
             Section(header: SectionLabel(text: "EVENTS")) {
                 ForEach(store.snapshot?.events ?? []) { e in
                     Button { store.selection = .event(e.id) } label: {

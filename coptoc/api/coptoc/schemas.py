@@ -106,3 +106,23 @@ class RosterUpdate(BaseModel):
 
 class IncidentClose(BaseModel):
     notes: Optional[str] = None
+
+
+class EstimateUpdate(BaseModel):
+    assessment: str
+    recommendation: str = ""
+
+class WatchTake(BaseModel):
+    battle_captain: str
+
+class Handover(BaseModel):
+    notes: Optional[str] = None
+    nstr: bool = False
+
+class Acknowledge(BaseModel):
+    battle_captain: str
+    acknowledged_item_ids: List[str] = Field(default_factory=list)
+
+class WatchConfigUpdate(BaseModel):
+    pattern: Literal["follow_the_sun", "day_night"]
+    overlap_minutes: Optional[int] = None

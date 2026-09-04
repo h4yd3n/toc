@@ -46,3 +46,18 @@ struct PanelHead: View {
         }
     }
 }
+
+
+/// The running-estimate line under a panel head (§3.1). Read-only on the phone; edited from the wall.
+struct EstimateLine: View {
+    var e: Estimate?
+    var body: some View {
+        if let e {
+            VStack(alignment: .leading, spacing: 2) {
+                (Text("\(e.section) assesses: ").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundColor(Theme.blue)
+                 + Text(e.assessment.isEmpty ? "no assessment on record" : e.assessment).font(.system(size: 12)).foregroundColor(e.assessment.isEmpty ? Theme.dim : .primary))
+                if !e.recommendation.isEmpty { Text("↳ \(e.recommendation)").font(.system(size: 11)).foregroundStyle(.secondary) }
+            }
+        }
+    }
+}

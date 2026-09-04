@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db_models import LedgerEventRow
+from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
 from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
@@ -286,8 +287,11 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "upcoming_events": len(events_out),
         "posture": POSTURES[worst_loc],
     }
+    cfg = await get_config(session)
+    wrow = await current_watch(session, now)
     return {
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary,
+        "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
     }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
+import { BriefPanel, EstimateLine, WatchChip } from './Watch'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -8,6 +9,7 @@ const LOG_LABEL: Record<string, string> = {
   'cop.trip.created': 'TRIP', 'cop.trip.updated': 'TRIP', 'cop.trip.cancelled': 'TRIP', 'cop.event.created': 'EVENT', 'cop.event.updated': 'EVENT',
   'cop.event.attendees_added': 'EVENT', 'cop.event.attendee_removed': 'EVENT', 'cop.event.cancelled': 'EVENT', 'cop.person.checkin': 'CHECK-IN',
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
+  'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
   'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
 }
 
@@ -34,6 +36,8 @@ export default function App() {
   const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false })
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
+  const [showBrief, setShowBrief] = useState(false)
+  const [briefReload, setBriefReload] = useState(0)
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
@@ -48,7 +52,7 @@ export default function App() {
 
   const act = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label)
-    try { await fn(); await load() } catch (e) { setErr(String(e)) } finally { setBusy(null) }
+    try { await fn(); await load(); setBriefReload(n => n + 1) } catch (e) { setErr(String(e)) } finally { setBusy(null) }
   }
   const toggle = (k: keyof Layers) => setLayers(l => ({ ...l, [k]: !l[k] }))
   const s = snap?.summary
@@ -59,6 +63,7 @@ export default function App() {
       <header className="top">
         <div className="brand"><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         <div className={`posture-chip ${s?.posture ?? ''}`}>POSTURE · {(s?.posture ?? '—').toUpperCase()}</div>
+        <WatchChip w={snap?.watch} onOpen={() => setShowBrief(v => !v)} />
         <div className="stats">
           <Stat label="PERSONNEL" v={s?.total_people} /><Stat label="PRESENT" v={s?.present} />
           <Stat label="TRAVELING" v={s?.traveling} accent="blue" /><Stat label="VIP OUT" v={s?.vips_traveling} accent="gold" />
@@ -75,6 +80,7 @@ export default function App() {
 
       <aside className="left">
         <PanelHead code="S1" title="PERSONNEL" hint="Blue Force" />
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         <div className="layer-toggles">
           {(['locations', 'travelers', 'routes', 'threats', 'events'] as (keyof Layers)[]).map(k => (
             <button key={k} className={`tog ${layers[k] ? 'on' : ''}`} onClick={() => toggle(k)}>{k}</button>))}
@@ -82,6 +88,7 @@ export default function App() {
         </div>
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
           <SectionLabel><span className="s6">S6 · ROLL CALLS</span></SectionLabel>
+          <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
           <ul className="list">
             {snap.incidents.filter(i => i.status === 'open').map(i => (
               <li key={i.id} className={`row rollcall ${sel?.type === 'incident' && sel.id === i.id ? 'active' : ''}`} onClick={() => setSel({ type: 'incident', id: i.id })}>
@@ -115,7 +122,8 @@ export default function App() {
 
       <main className="center">
         <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
-        {sel && snap && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} />}
+        {sel && snap && !showBrief && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} />}
+        {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
@@ -125,6 +133,7 @@ export default function App() {
         <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc">
           <button className="mini" disabled={!!busy} onClick={() => act('collecting GDACS', api.refreshIntel)} title="Run live collectors (GDACS)">⟳ COLLECT</button>
         </PanelHead>
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
         <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>
         <ul className="list">
           {snap?.threats.map(t => (
@@ -161,6 +170,7 @@ export default function App() {
       <footer className="bottom">
         <div className="s3">
           <PanelHead code="S3" title="OPERATIONS" hint="Events · Travel" inline />
+          <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
           <div className="timeline">
             {snap?.events.map(e => (
               <div key={e.id} className={`trip event ${sel?.type === 'event' && sel.id === e.id ? 'active' : ''}`} onClick={() => setSel({ type: 'event', id: e.id })}>

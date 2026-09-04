@@ -69,8 +69,28 @@ export interface Summary {
   open_incidents: number; unaccounted: number; posture: Posture
 }
 export type Role = 'battle_captain' | 'ep' | 'security' | 'analyst' | 'ea'
+export interface Watch {
+  id: string; name: string; battle_captain: string | null; status: 'open' | 'pending_ack' | 'handed_over'
+  started_at: string; ends_at: string; elapsed_h: number; remaining_h: number; overdue: boolean; in_overlap: boolean; overlap_minutes: number
+  next_watch: string; next_starts_at: string; pattern: string; nstr: boolean; outgoing_notes: string | null
+  handed_over_at: string | null; acknowledged_by: string | null; acknowledged_at: string | null
+}
+export interface Estimate { section: 'S1' | 'S2' | 'S3' | 'S6'; assessment: string; recommendation: string; updated_by: string | null; updated_at: string | null }
+export interface BriefEvent { id: string; at: string; type: string; actor: string; subject: string; summary: string | null; old: string | null; new: string | null; during_handover: boolean }
+export interface Brief {
+  watch: Watch; window: { from: string; to: string; overlap_from: string }
+  significant_events: Record<string, BriefEvent[]>; event_count: number
+  current_status: { estimates: Estimate[]; posture: Posture; open_incidents: { id: string; title: string; accounted: number; total: number }[]; unaccounted: number
+    travelers: { id: string; name: string; where: string; checkin: boolean }[]; assessments_in_review: { id: string; title: string }[]
+    open_pirs: { id: string; question: string }[]; stale_checkins: { id: string; name: string }[] }
+  next_shift: { watch: string; from: string; to: string; events_starting: { id: string; name: string; venue: string; start_at: string }[]
+    trips_departing: { id: string; who: string; to: string; at: string }[]; trips_returning: { id: string; who: string; from: string; at: string }[]
+    pirs_expiring: { id: string; question: string; expires_at: string }[] }
+  handover_items: ({ kind: 'open_incident'; id: string; title: string; accounted: number; total: number } | { kind: 'during_handover'; id: string; summary: string; at: string })[]
+  outgoing_notes: string | null; nstr: boolean; acknowledgement: { required_item_ids: string[]; by: string | null; at: string | null }; generated_at: string
+}
 export interface Snapshot {
-  generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; summary: Summary; locations: Location[]; teams: Team[]
+  generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }
 export type Selection =

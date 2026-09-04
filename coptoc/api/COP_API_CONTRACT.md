@@ -122,6 +122,17 @@ contract — same endpoints, same shapes — so every client shares one backend 
 | `POST` | `/intel/refresh` | runs live collectors (GDACS) and upserts by `external_id`; `502` if the source is unreachable — a broken source must not look like a quiet one | `cop.intel.refresh` / `refresh_failed` |
 | `POST` | `/seed` | dev only — wipe and reload synthetic data | |
 
+## 3.1 The watch (§3.1 of the PRD)
+| Method | Path | Body | Notes |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/watch` | | who has the floor, elapsed/remaining, next watch, overlap state; also on `/snapshot.watch` |
+| `POST` | `/watch/take` | `battle_captain` — **role battle_captain** | first Battle Captain of a slot; `409` if held or a handover is pending |
+| `PATCH` | `/watch/estimate/{S1|S2|S3|S6}` | `assessment, recommendation` — owners: S1 security/BC · S2 analyst/BC · S3 ea/security/BC · S6 BC | the running-estimate line; on `/snapshot.estimates`; ledger `cop.watch.estimate` |
+| `GET` | `/watch/brief` | | the shift change brief: `significant_events` (bucketed), `current_status`, `next_shift`, `handover_items`, `acknowledgement.required_item_ids`; live until handover freezes it |
+| `POST` | `/watch/handover` | `notes?, nstr` — **role battle_captain** | freezes the brief; watch → `pending_ack`; NSTR affirmed is logged as such |
+| `POST` | `/watch/acknowledge` | `battle_captain, acknowledged_item_ids[]` — **role battle_captain** | `409` unless every `during_handover` item id is acknowledged; the watch transfers, both names on the ledger, the incoming BC holds the next slot from now |
+| `PATCH` | `/watch/config` | `pattern: follow_the_sun|day_night, overlap_minutes?` — **role battle_captain** | |
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.

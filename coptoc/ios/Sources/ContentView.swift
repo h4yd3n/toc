@@ -42,6 +42,15 @@ struct PostureBar: View {
                 Spacer()
                 Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
             }
+            if let w = store.snapshot?.watch {
+                HStack(spacing: 8) {
+                    Text("\(w.name.uppercased()) WATCH").font(.system(size: 10, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.blue)
+                    Text(w.battleCaptain.map { "BC \($0)" } ?? "UNASSIGNED").font(.system(size: 10, design: .monospaced))
+                    Spacer()
+                    Text(w.status == "pending_ack" ? "HANDOVER PENDING" : w.overdue ? "OVERDUE" : "\(hm(w.elapsedH)) · → \(w.nextWatch.split(separator: " ").first.map(String.init) ?? w.nextWatch) in \(hm(w.remainingH))")
+                        .font(.system(size: 10, design: .monospaced)).foregroundStyle(w.status == "pending_ack" || w.overdue ? Theme.red : w.inOverlap ? Theme.amber : Theme.dim)
+                }
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
                     Stat("PERSONNEL", s?.totalPeople); Stat("PRESENT", s?.present); Stat("TRAVELING", s?.traveling, Theme.blue)
@@ -56,6 +65,7 @@ struct PostureBar: View {
         .background(Theme.panel)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
+    func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
     func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
 }
 

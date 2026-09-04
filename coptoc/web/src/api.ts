@@ -1,6 +1,6 @@
 import type { Snapshot } from './types'
 
-import type { Role } from './types'
+import type { Brief, Role, Watch } from './types'
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
 export const session = { role: 'battle_captain' as Role }
@@ -30,3 +30,8 @@ export const closeIncident = (incidentId: string, notes?: string) => req<unknown
 export const requestCheckins = (incidentId: string) => req<{ requested: number; simulated: boolean }>('POST', `/v1/cop/incidents/${incidentId}/request-checkins`)
 export const checkInByToken = (token: string, note?: string) => req<{ cleared_rosters: string[] }>('POST', `/v1/cop/checkin/${token}`, note ? { note } : undefined)
 export const checkIn = (personId: string, lat: number, lon: number, note: string) => req<{ cleared_rosters: string[] }>('POST', `/v1/cop/people/${personId}/checkin`, { lat, lon, note })
+export const getBrief = () => req<Brief>('GET', '/v1/cop/watch/brief')
+export const takeWatch = (battle_captain: string) => req<Watch>('POST', '/v1/cop/watch/take', { battle_captain })
+export const handover = (notes: string, nstr: boolean) => req<Brief>('POST', '/v1/cop/watch/handover', { notes: notes || undefined, nstr })
+export const acknowledge = (battle_captain: string, acknowledged_item_ids: string[]) => req<{ now_holding: Watch }>('POST', '/v1/cop/watch/acknowledge', { battle_captain, acknowledged_item_ids })
+export const setEstimate = (section: string, assessment: string, recommendation: string) => req<unknown>('PATCH', `/v1/cop/watch/estimate/${section}`, { assessment, recommendation })

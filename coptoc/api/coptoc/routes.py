@@ -16,7 +16,8 @@ from . import db_models  # noqa: F401 — registers tables on Base.metadata
 from .comms import Dispatcher, public_url
 from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
-from .schemas import (AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
+from .schemas import (Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -643,6 +644,140 @@ async def close_incident(incident_id: str, body: IncidentClose, session: AsyncSe
     await get_ledger().append_event(content_id=inc.id, event_type="cop.incident.closed", actor_type="human", actor_id=actor_from(x_toc_actor), old_state="open", new_state="closed",
                                     reason=f"Closed with {len(rows) - open_count}/{len(rows)} accounted" + (f"; {open_count} still unaccounted" if open_count else ""), metadata={"unaccounted": open_count})
     return {"id": inc.id, "status": "closed", "unaccounted": open_count}
+
+
+# ---------------------------------------------------------------- §3.1 the watch
+
+ESTIMATE_OWNERS = {"S1": {"battle_captain", "security"}, "S2": {"battle_captain", "analyst"}, "S3": {"battle_captain", "security", "ea"}, "S6": {"battle_captain"}}
+
+
+@router.get("/watch")
+async def watch(session: AsyncSession = Depends(get_session)):
+    now = now_utc()
+    return watch_summary(await current_watch(session, now), now, await get_config(session))
+
+
+@router.patch("/watch/config")
+async def watch_config(body: WatchConfigUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    require_role(x_toc_role, {"battle_captain"}, "Changing the shift pattern")
+    cfg = await get_config(session)
+    old = cfg.pattern
+    cfg.pattern, cfg.watches_json = body.pattern, json.dumps(PATTERNS[body.pattern])
+    if body.overlap_minutes is not None:
+        cfg.overlap_minutes = body.overlap_minutes
+    await session.commit()
+    await get_ledger().append_event(content_id="watch", event_type="cop.watch.config", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    old_state=old, new_state=body.pattern, reason=f"Shift pattern {old} → {body.pattern}, overlap {cfg.overlap_minutes} min")
+    return {"pattern": cfg.pattern, "overlap_minutes": cfg.overlap_minutes}
+
+
+@router.post("/watch/take")
+async def take_watch(body: WatchTake, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None)):
+    """The first Battle Captain of a slot takes it without a handover (nothing to hand over). After that, the watch
+    only changes hands through /watch/handover → /watch/acknowledge."""
+    require_role(x_toc_role, {"battle_captain"}, "Taking the watch")
+    now = now_utc()
+    row = await current_watch(session, now)
+    if row.battle_captain and row.status == "open":
+        raise HTTPException(409, f"{row.name} watch is held by {row.battle_captain}; use handover")
+    if row.status == "pending_ack":
+        raise HTTPException(409, "a handover is pending; acknowledge it")
+    row.battle_captain = body.battle_captain
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.watch.taken", actor_type="human", actor_id=body.battle_captain, new_state="open",
+                                    reason=f"{body.battle_captain} has the {row.name} watch")
+    return watch_summary(row, now, await get_config(session))
+
+
+@router.patch("/watch/estimate/{section}")
+async def set_estimate(section: str, body: EstimateUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The running-estimate line at the top of a panel. Owned per section (§3.1)."""
+    section = section.upper()
+    if section not in SECTIONS:
+        raise HTTPException(404, "section must be one of S1, S2, S3, S6")
+    require_role(x_toc_role, ESTIMATE_OWNERS[section], f"Updating the {section} estimate")
+    actor = actor_from(x_toc_actor)
+    row = await session.get(SectionEstimateRow, section)
+    if not row:
+        row = SectionEstimateRow(section=section)
+        session.add(row)
+    old = row.assessment
+    row.assessment, row.recommendation, row.updated_by, row.updated_at = body.assessment.strip(), body.recommendation.strip(), actor, now_utc()
+    await session.commit()
+    await get_ledger().append_event(content_id=f"estimate:{section}", event_type="cop.watch.estimate", actor_type="human", actor_id=actor,
+                                    old_state=(old or "")[:80] or None, new_state=row.assessment[:80], reason=f"{section} assesses: {row.assessment[:120]}")
+    return {"section": section, "assessment": row.assessment, "recommendation": row.recommendation, "updated_by": actor}
+
+
+@router.get("/watch/brief")
+async def shift_change_brief(session: AsyncSession = Depends(get_session)):
+    """The shift change brief for the current watch — generated live until handover freezes it."""
+    now = now_utc()
+    row = await current_watch(session, now)
+    if row.brief_json:
+        return json.loads(row.brief_json)
+    snap = await build_snapshot(session, include_restricted=True)
+    return await build_brief(session, snap, row, await get_config(session), now)
+
+
+@router.post("/watch/handover")
+async def handover(body: Handover, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Outgoing Battle Captain: freeze the brief with notes, or affirm NSTR. The watch is now pending until acknowledged."""
+    require_role(x_toc_role, {"battle_captain"}, "Handing over the watch")
+    now = now_utc()
+    row = await current_watch(session, now)
+    if row.status == "pending_ack":
+        raise HTTPException(409, "handover already pending acknowledgement")
+    row.outgoing_notes, row.nstr = body.notes, 1 if body.nstr else 0
+    row.status, row.handed_over_at = "pending_ack", now  # flip first so the frozen brief describes a pending watch
+    snap = await build_snapshot(session, include_restricted=True)
+    brief = await build_brief(session, snap, row, await get_config(session), now)
+    row.brief_json = json.dumps(brief)
+    await session.commit()
+    actor = actor_from(x_toc_actor)
+    await get_ledger().append_event(content_id=row.id, event_type="cop.watch.handover", actor_type="human", actor_id=actor, old_state="open", new_state="pending_ack",
+                                    reason=("NSTR — nothing significant to report, affirmed" if body.nstr else f"{brief['event_count']} events this watch; {len(brief['handover_items'])} handover items") + (f". Notes: {body.notes}" if body.notes else ""),
+                                    metadata={"nstr": bool(body.nstr), "events": brief["event_count"], "handover_items": len(brief["handover_items"])})
+    return brief
+
+
+@router.post("/watch/acknowledge")
+async def acknowledge(body: Acknowledge, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None)):
+    """Incoming Battle Captain accepts the brief. Every item that arrived during the overlap must be acknowledged
+    by id (Decision U). Only then does the watch transfer — both names on the ledger (Decision T)."""
+    require_role(x_toc_role, {"battle_captain"}, "Acknowledging a handover")
+    now = now_utc()
+    row = await current_watch(session, now)
+    if row.status != "pending_ack" or not row.brief_json:
+        raise HTTPException(409, "no handover pending")
+    brief = json.loads(row.brief_json)
+    required = set(brief["acknowledgement"]["required_item_ids"])
+    missing = sorted(required - set(body.acknowledged_item_ids))
+    if missing:
+        raise HTTPException(409, f"{len(missing)} item(s) arrived during the overlap and must be acknowledged individually: {missing}")
+    row.status, row.acknowledged_by, row.acknowledged_at = "handed_over", body.battle_captain, now
+    brief["acknowledgement"].update({"by": body.battle_captain, "at": iso_(now)})
+    row.brief_json = json.dumps(brief)
+    cfg = await get_config(session)
+    nxt = next_slot(row.ends_at, json.loads(cfg.watches_json))
+    wid = f"{nxt['started_at'].strftime('%Y-%m-%dT%H')}_{nxt['name'].replace(' ', '')}"
+    new = await session.get(WatchRow, wid)
+    if not new:
+        new = WatchRow(id=wid, name=nxt["name"], started_at=now, ends_at=nxt["ends_at"])
+        session.add(new)
+    # The incoming Battle Captain holds the floor from the moment of acknowledgement, not from the nominal slot start.
+    new.started_at, new.battle_captain, new.status = now, body.battle_captain, "open"
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.watch.acknowledged", actor_type="human", actor_id=body.battle_captain, old_state="pending_ack", new_state="handed_over",
+                                    reason=f"{row.battle_captain or 'unassigned'} → {body.battle_captain}: {row.name} watch handed over" + (" (NSTR)" if row.nstr else ""),
+                                    metadata={"outgoing": row.battle_captain, "incoming": body.battle_captain, "acknowledged_items": len(body.acknowledged_item_ids)})
+    await get_ledger().append_event(content_id=new.id, event_type="cop.watch.taken", actor_type="human", actor_id=body.battle_captain, new_state="open",
+                                    reason=f"{body.battle_captain} has the {new.name} watch")
+    return {"handed_over": row.id, "now_holding": watch_summary(new, now, cfg)}
+
+
+def iso_(dt):
+    return dt.isoformat() + "Z"
 
 
 # ---------------------------------------------------------------- S2 collection

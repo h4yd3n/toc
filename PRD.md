@@ -102,7 +102,7 @@ The COP is one screen. It never navigates away.
 
 ---
 
-### 3.1 The watch — shifts, running estimates, and handover **[NEXT]**
+### 3.1 The watch — shifts, running estimates, and handover **[BUILT]**
 
 The wall has a Battle Captain but, until now, no concept of a *watch*. A TOC runs twenty-four seven and one human
 cannot; the floor changes hands, and the moment it changes hands is where information is lost. This section is the
@@ -535,10 +535,10 @@ COP never writes back to a source system.
 | P | Extracted links | **Suggested until an analyst confirms**; source grade visible on every edge; no line without a citation | §5.11 |
 | Q | Case access | **Battle Captain or S2 lead opens a case on a person**; viewing role-gated; **every read on the ledger** | §5.11 |
 | R | Which views first | **All three together** — link chart, timeline, time wheel — one model, three renderings | §5.11 |
-| S | Shift pattern | **Follow-the-sun, three 8 h watches (Singapore · Dublin · San Francisco)** by default; 12 h day/night as the alternative; configurable | §3.1 — not yet built |
-| T | Handover | **Generated brief → outgoing annotates → incoming acknowledges on the ledger; the watch does not transfer until acknowledged** | §3.1 — not yet built |
-| U | Overlap window | **30 minutes**; items arriving inside it are flagged and must be acknowledged by the incoming shift | §3.1 — not yet built |
-| V | NSTR | **Explicit** — the outgoing Battle Captain affirms "nothing significant"; the affirmation is logged | §3.1 — not yet built |
+| S | Shift pattern | **Follow-the-sun, three 8 h watches (Singapore · Dublin · San Francisco)** by default; 12 h day/night as the alternative; configurable | `watch.PATTERNS`, `PATCH /watch/config` |
+| T | Handover | **Generated brief → outgoing annotates → incoming acknowledges on the ledger; the watch does not transfer until acknowledged** | `/watch/handover`, `/watch/acknowledge` |
+| U | Overlap window | **30 minutes**; items arriving inside it are flagged and must be acknowledged by the incoming shift | `build_brief` → `required_item_ids`; `409` on acknowledge |
+| V | NSTR | **Explicit** — the outgoing Battle Captain affirms "nothing significant"; the affirmation is logged | `Handover.nstr` → ledger |
 
 ---
 
@@ -554,6 +554,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.9** — the watch built: shift model, estimate lines on every panel, the brief, handover/acknowledge on the ledger (web + API; iOS read-only).
 - **v3.8** — the watch (§3.1): shift model, panels as running estimates with owned assessment lines, the shift change brief, handover on the ledger; decisions S–V.
 - **v3.7** — the analyst's workbench (§5.11): case graph with provenance, suggest→confirm extraction, link chart / timeline / time wheel; decisions O–R.
 - **v3.6** — the origin in the author's words (§1.1); the ops↔intel loop and the four requirements it adds (§5.10).
