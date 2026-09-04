@@ -193,6 +193,12 @@ The native apps are native for a reason: the map has to be fluid and the animati
 
 ---
 
+## 11.0 Priorities (2026-09-02)
+
+1. **Coptoc** — the COP is the product and the thing the author can defend from experience.
+2. **Sigtoc** — S2 exists to feed the wall; more collectors and a real drafter path come after the wall is solid.
+3. **Modtoc** — last. ROOST (osprey: rules engine used by Discord/Bluesky/Matrix; coop: review console used by Notion) covers most of this ground. Modtoc stays as-is; evaluate adopting ROOST before investing further.
+
 ## 11.1 Repository Layout
 
 | Folder | Module | Role |
