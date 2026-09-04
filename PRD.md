@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.17
+**Version:** 3.18
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -65,40 +65,50 @@ S1 and S3 feed each other: S3 says who is going where and when; S1 shows where t
 
 ---
 
-## 3. The Common Operating Picture — The Wall **[TONIGHT]**
+## 3. The Common Operating Picture — The Wall **[BUILT]**
 
 The COP is one screen. It never navigates away.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  POSTURE BAR   people · present · traveling · on shift · threats     │
-├────────────┬────────────────────────────────────────┬────────────────┤
-│            │                                        │                │
-│  S1        │                                        │  S2            │
-│  PERSONNEL │              THE MAP                   │  INTEL         │
-│            │                                        │                │
-│  locations │      blue: locations & people          │  threats       │
-│  by count  │      red: threats                      │  assessments   │
-│  travelers │      click anything → fly to it        │  open PIRs     │
-│  on shift  │                                        │                │
-│            │                                        │                │
-├────────────┴────────────────────────────────────────┴────────────────┤
-│  S3 OPERATIONS   ── timeline: active travel · upcoming events ──      │
+│ ◇ TOC  DEFCON 3  DUBLIN WATCH · R. Kovac · 5h left   97 5 4 7 3  BC ▾ │
+│ FLASH  Online threats against data center operators — DC-East   ACK  │
+├──┬────────────────────────────────────────────────────────────────┬──┤
+│S1│                                                                │S2│
+│  │                         THE MAP                                │  │
+│  │      blue: sites by posture, travelers, events                 │  │
+│  │      amber/red rings: threats by severity                      │  │
+│  │      a rail button slides its panel out over the map           │  │
+│  │      clicking the map puts it away                             │  │
+├──┴────────────────────────────────────────────────────────────────┴──┤
+│  S3 OPERATIONS  events · trips (OP, COVER)     │  LOG  battle log    │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+**The layout (decided 2026-09-04, replacing the three-column wall).** The map has the width. S1 and S2 live on
+rails at the left and right edges and slide out over the map on demand — an open roll call lights S6 on the left
+rail, pending warnings badge S2 on the right. They cover the map only: the S3 strip and the battle log run the full
+width beneath and are never covered. A released Warning is a red FLASH row under the header. Every list shows every
+row (a top-three cap was tried and rejected).
 
 **The map:**
 - Global by default. Dark basemap. Smooth fly-to on every interaction.
 - **Blue force:** locations (HQ, offices, data centers, residences, venues) as pins with a count badge. Travelers as distinct moving-person pins at their current location.
 - **Red force:** threats as translucent radius circles, colored by severity.
-- **Zoom behavior:** zoomed out, nearby locations cluster into one pin with an aggregate count. Zoomed in, each location stands alone. Click a location → side panel lists every team and every person assigned there, with on-shift status. That's the "zoom in far enough to see every person" behavior.
+- **Zoom behavior:** zoomed out, nearby locations cluster into one pin with an aggregate count. Zoomed in, each location stands alone. Click a location → its card lists every team and every person assigned there, with on-shift status. That's the "zoom in far enough to see every person" behavior.
 
 **The panels:**
 - Every row in every panel is clickable and flies the map to that thing.
-- Selecting anything on the map opens its detail in the nearest panel.
+- Selecting anything on the map opens its card over the map.
 - Panels are compact — counts, status colors, short names. Detail lives one click deeper.
+- **DISPLAY toggles**, per browser or device: *lean labels* (drop panel hints, empty running-estimate lines, second lines) and *posture header* (posture first, five counters; FLASH, unaccounted, unreachable only when non-zero). Both default on.
 
-**Posture bar:** the numbers a Battle Captain wants at a glance. Total people, present at a location, traveling, security on shift, active threats. Overall posture color.
+**Posture reads as DEFCON.** Five levels — normal, guarded, elevated, high, critical — shown as **DEFCON 5 → 1**.
+The wall's level is the worst site's effective level. The header chip reads "DEFCON X"; clicking it opens the list
+of every level, lowest to highest, the current one highlighted with the number of sites at each. The confirmation
+rule (Decision 3) forces 5, 3, or 1 from confirmed links; a Battle Captain may set 4 or 2 by hand from a site's card.
+The level meanings shown are the US military DEFCON definitions, as the example the author chose; the words are one
+table on the API. Counters beside it: personnel, traveling, VIP out, threats, confirmed.
 
 ---
 
@@ -154,7 +164,7 @@ is drawn from the same picture the INTSUM summarizes.
 
 ## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
 
-**Locations.** HQ, offices, data centers, executive residences, event venues. Each has a position, a type, a posture (normal / elevated / critical), and a sensitivity tier. Residences are restricted-tier: they exist because the security team needs them, and they are never shown to a general audience.
+**Locations.** HQ, offices, data centers, executive residences, event venues. Each has a position, a type, a posture (five levels, read as DEFCON 5 → 1; see §3), and a sensitivity tier. Residences are restricted-tier: they exist because the security team needs them, and they are never shown to a general audience.
 
 **Teams.** Every team belongs to a location. Security teams are a special kind: they have shifts.
 
@@ -464,7 +474,7 @@ The native apps are native for a reason: the map has to be fluid and the animati
 
 | Entity | Key fields |
 | :--- | :--- |
-| `Location` | `id`, `name`, `type` (hq / office / datacenter / residence / venue), `lat`, `lon`, `city`, `country`, `posture`, `sensitivity` |
+| `Location` | `id`, `name`, `type` (hq / office / datacenter / residence / venue), `lat`, `lon`, `city`, `country`, `posture` (normal / guarded / elevated / high / critical), `sensitivity` |
 | `Team` | `id`, `name`, `location_id`, `function`, `is_security` |
 | `Person` | `id`, `name`, `role`, `team_id`, `is_vip`, `on_shift`, `shift_role` |
 
@@ -557,6 +567,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.18** — the wall's layout decided: rails and slide-out panels over the map only, S3 and the log full width; posture as five levels read as DEFCON 5 → 1 with the levels menu; DISPLAY toggles. The recon-diamond identity.
 - **v3.17** — the rest of the document: the Warning product with S6 alerting, S1 availability states, NWS zone resolution, export adapters for HRIS / scheduling / travel / calendar / badge, long-range planning with coverage, Wikidata baseline; S2 panels and FLASH on iOS and Android. S4 dropped by the author.
 - **v3.16** — §5.10 #3 `Operation` (target package → OPORD) and #4 dissemination tracking built.
 - **v3.15** — S6 decisions L–N built: inbound SMS webhook, 15-minute escalation rule, manual roster adds.

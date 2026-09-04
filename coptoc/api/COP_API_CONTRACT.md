@@ -33,10 +33,11 @@ contract — same endpoints, same shapes — so every client shares one backend 
   "generated_at": "…Z", "restricted_included": false, "restricted_denied": false, "role": "battle_captain",
   "summary": { "total_people": 97, "present": 92, "traveling": 5, "vips_traveling": 4, "security_on_shift": 7,
                "active_threats": 18, "real_threats": 12, "confirmed_links": 2, "checked_in_fresh": 1,
-               "open_pirs": 4, "upcoming_events": 3, "open_incidents": 0, "unaccounted": 0, "posture": "elevated" },
+               "open_pirs": 4, "upcoming_events": 3, "open_incidents": 0, "unaccounted": 0, "posture": "elevated",
+               "defcon": 3, "defcon_levels": [{"defcon": 5, "posture": "normal", "meaning": "…", "sites": 6}, ...] },
   "locations":   [ { "id", "name", "type",                       // hq | office | datacenter | residence | venue
                      "lat", "lon", "city", "country",
-                     "posture", "effective_posture",             // human-set; raised by confirmed links
+                     "posture", "effective_posture", "defcon",   // human-set; raised by confirmed links; defcon = 5 − rank of effective_posture
                      "sensitivity",                              // standard | restricted
                      "assigned", "present", "security_on_shift", "vips_present",
                      "threat_ids_in_area": [], "confirmed_threat_ids": [] } ],
@@ -109,7 +110,7 @@ contract — same endpoints, same shapes — so every client shares one backend 
 | `POST` / `DELETE` | `/events/{id}/attendees[/{person_id}]` | `person_ids[], generate_trips` | `cop.event.attendees_added` / `attendee_removed` |
 | `POST` | `/people/{id}/checkin` | `lat, lon, note, at?` — if the person is on an open roster, their row becomes `safe` via `app` (Decision B); response lists `cleared_rosters` | `cop.person.checkin` + `cop.incident.contact` |
 | `PATCH` | `/people/{id}/shift` | `on_shift, shift_role` | `cop.person.shift` |
-| `PATCH` | `/locations/{id}/posture` | `posture, reason` | `cop.location.posture` |
+| `PATCH` | `/locations/{id}/posture` | `posture (normal / guarded / elevated / high / critical), reason` | `cop.location.posture`. Levels read as DEFCON 5 → 1; the rule forces normal / elevated / critical, the two in-between are human-set |
 | `POST` / `DELETE` | `/threats/{id}/links[/{link_id}]` | `target_type, target_id, note` | `cop.threat.link_confirmed` / `link_removed` |
 | `POST` / `PATCH` | `/pirs[/{id}]` | `question, priority, subject_type, subject_id, expires_at` / `status` | `cop.pir.created` / `updated` |
 | `POST` | `/assessments/draft` | `subject_type (trip|event|location|pir), subject_id` → see §4 | `cop.assessment.drafted` |
