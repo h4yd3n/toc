@@ -35,12 +35,25 @@ const short = (s: string) => s.split(',')[0]
 type ById = { loc: Map<string, Location>; person: Map<string, Person>; threat: Map<string, Threat>; trip: Map<string, Trip>; event: Map<string, CopEvent>; incident: Map<string, Incident> }
 const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreachable: 'amber', assist: 'red', injured: 'red', contacted: 'green', safe: 'green' }
 
+type UiPrefs = { mode: 'wall' | 'focus'; labels: 'full' | 'lean'; header: 'counters' | 'posture' }
+const UI_DEFAULTS: UiPrefs = { mode: 'wall', labels: 'full', header: 'counters' }
+
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection>(null)
   // Decision 1: restricted layer is OFF by default. Toggling it re-fetches with restricted=true.
+  // The wall's density: WALL keeps every panel visible (the 1920×1080 display); FOCUS gives the map the room and
+  // slides panels out from rails. Labels and the header are separate toggles. Persisted per browser.
+  const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
+  const [openPanel, setOpenPanel] = useState<'left' | 'right' | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
+  useEffect(() => {  // FOCUS: a list shows its top rows; clicking the "+ more" line (the list's own padding) expands it
+    const h = (e: MouseEvent) => { const t = e.target as HTMLElement; if (t.classList?.contains('list') || t.classList?.contains('timeline') || t.classList?.contains('logs')) t.classList.toggle('expanded') }
+    document.addEventListener('click', h); return () => document.removeEventListener('click', h)
+  }, [])
   const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false })
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
@@ -72,7 +85,7 @@ export default function App() {
   const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
 
   return (
-    <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''}`}>
+    <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} mode-${ui.mode} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         <div className={`posture-chip ${s?.posture ?? ''}`}>POSTURE · {(s?.posture ?? '—').toUpperCase()}</div>
@@ -90,11 +103,24 @@ export default function App() {
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option>
         </select>
+        <button className="gear" title="Wall density and labels" onClick={() => setShowSettings(v => !v)}>⚙</button>
         <div className="clock">{clock(new Date(now))}</div>
+        {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
+          <div className="s-row"><span>MODE</span>{(['wall', 'focus'] as const).map(m => <button key={m} className={`chip btn ${ui.mode === m ? 'on' : ''}`} onClick={() => { setUi({ ...ui, mode: m }); setOpenPanel(null) }}>{m.toUpperCase()}</button>)}<span className="dim small">WALL keeps every panel; FOCUS gives the map the room</span></div>
+          <div className="s-row"><span>LABELS</span>{(['full', 'lean'] as const).map(m => <button key={m} className={`chip btn ${ui.labels === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, labels: m })}>{m.toUpperCase()}</button>)}<span className="dim small">LEAN drops hints, empty lines, second lines</span></div>
+          <div className="s-row"><span>HEADER</span>{(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}<span className="dim small">POSTURE: one big posture tile, five counters</span></div>
+        </div>}
       </header>
       <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
-      <aside className="left">
+      {ui.mode === 'focus' && <nav className="rail rail-left">
+        <button className={`rail-btn ${openPanel === 'left' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'left' ? null : 'left')} title="S1 Personnel">S1</button>
+        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setOpenPanel('left')} title="open roll calls">S6</button>}
+      </nav>}
+      {ui.mode === 'focus' && <nav className="rail rail-right">
+        <button className={`rail-btn ${openPanel === 'right' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'right' ? null : 'right')} title="S2 Intelligence">S2{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
+      </nav>}
+      <aside className={`left ${openPanel === 'left' ? 'open' : ''}`}>
         <PanelHead code="S1" title="PERSONNEL" hint="Blue Force">{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
         {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
@@ -137,7 +163,7 @@ export default function App() {
         </ul>
       </aside>
 
-      <main className="center">
+      <main className="center" onClick={() => { setOpenPanel(null); setShowSettings(false) }}>
         <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
         {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} />}
         {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
@@ -150,7 +176,7 @@ export default function App() {
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
-      <aside className="right">
+      <aside className={`right ${openPanel === 'right' ? 'open' : ''}`}>
         <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc">
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
@@ -249,7 +275,8 @@ function AssessmentActions({ a, busy, act }: { a: Assessment; busy: string | nul
     </div>)
 }
 function Stat({ label, v, accent }: { label: string; v?: number; accent?: string }) {
-  return <div className={`stat ${accent ?? ''}`}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
+  // data-k lets the header toggle keep five counters without changing the markup order
+  return <div className={`stat ${accent ?? ''}`} data-k={label}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
 }
 function PanelHead({ code, title, hint, inline, children }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode }) {
   return <div className={`panel-head ${inline ? 'inline' : ''}`}><span className="code">{code}</span><span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}</div>
