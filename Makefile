@@ -27,7 +27,7 @@ diff:
 	PYTHONPATH=shared:modtoc $(PYTHON) modtoc/evals/harness.py --policy modtoc/policies/hate_speech.yaml --golden modtoc/evals/golden_sets/hate_speech_golden.json
 
 run-api:
-	PYTHONPATH=shared:coptoc/api:sigtoc $(UVICORN) coptoc.app:app --reload --port 8000
+	PYTHONPATH=shared:coptoc/api:sigtoc $(UVICORN) coptoc.app:app --reload --host 0.0.0.0 --port 8000
 
 run-mod:
 	PYTHONPATH=shared:modtoc $(UVICORN) modtoc.api:app --reload --port 8001
