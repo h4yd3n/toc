@@ -134,3 +134,41 @@ class Acknowledge(BaseModel):
 class WatchConfigUpdate(BaseModel):
     pattern: Literal["follow_the_sun", "day_night"]
     overlap_minutes: Optional[int] = None
+
+
+# §5.10 #3 — operations
+class TaskCreate(BaseModel):
+    title: str
+    section: Literal["S1", "S2", "S3", "S4", "S6"] = "S3"
+    owner: str = ""
+    due_at: Optional[datetime] = None
+    note: str = ""
+
+class OperationCreate(BaseModel):
+    subject_type: Literal["event", "trip", "location"]
+    subject_id: str
+    title: Optional[str] = None
+    from_assessment_id: Optional[str] = None
+    from_area_id: Optional[str] = None
+    notes: str = ""
+    tasks: Optional[List[TaskCreate]] = None  # None → the standard skeleton for the subject kind
+
+class OperationUpdate(BaseModel):
+    status: Optional[Literal["planned", "active", "complete", "cancelled"]] = None
+    notes: Optional[str] = None
+
+class TaskUpdate(BaseModel):
+    status: Optional[Literal["todo", "doing", "done", "blocked"]] = None
+    owner: Optional[str] = None
+    due_at: Optional[datetime] = None
+    note: Optional[str] = None
+    title: Optional[str] = None
+
+class ResourceCreate(BaseModel):
+    item: str
+    qty: int = Field(1, ge=1)
+    note: str = ""
+
+class ResourceUpdate(BaseModel):
+    status: Literal["requested", "approved", "issued", "denied"]
+    note: Optional[str] = None

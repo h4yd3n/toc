@@ -5,6 +5,7 @@ import { RequirementsPanel } from './Requirements'
 import { CasesPanel } from './Cases'
 import { AreaPanel } from './Area'
 import { IntsumPanel } from './Intsum'
+import { DistributionBox, OperationPanel } from './Operation'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -44,6 +45,7 @@ export default function App() {
   const [showBrief, setShowBrief] = useState(false)
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
+  const [opId, setOpId] = useState<string | null>(null)
   const [briefReload, setBriefReload] = useState(0)
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
@@ -129,9 +131,10 @@ export default function App() {
 
       <main className="center">
         <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
-        {showIntsum && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
-        {areaId && !showIntsum && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
-        {sel && snap && !showBrief && !areaId && !showIntsum && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} />}
+        {opId && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
+        {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
+        {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
+        {sel && snap && !showBrief && !areaId && !showIntsum && !opId && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} onOp={setOpId} role={role} />}
         {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
@@ -187,7 +190,8 @@ export default function App() {
             {snap?.events.map(e => (
               <div key={e.id} className={`trip event ${sel?.type === 'event' && sel.id === e.id ? 'active' : ''}`} onClick={() => setSel({ type: 'event', id: e.id })}>
                 <div className="trip-head"><span className="chip event">{e.status === 'active' ? 'LIVE' : `T-${e.days_until}d`}</span><span className="who">★ {e.name}</span>
-                  {e.threat_ids_in_area.length > 0 && <span className="tbadge">△{e.threat_ids_in_area.length}</span>}</div>
+                  {e.threat_ids_in_area.length > 0 && <span className="tbadge">△{e.threat_ids_in_area.length}</span>}
+                  {e.operation && <span className={`chip small op ${e.operation.status}`} title={e.operation.title} onClick={ev => { ev.stopPropagation(); setOpId(e.operation!.id) }}>OP {e.operation.tasks_done}/{e.operation.tasks_total}</span>}</div>
                 <div className="route">{short(e.venue_name)}</div>
                 <div className="when dim">{new Date(e.start_at).toUTCString().slice(5, 16)} → {new Date(e.end_at).toUTCString().slice(5, 16)}</div>
                 <div className="purpose">{e.attendee_count} attending · {e.vip_count} VIP · {e.security_count} sec · {e.trips_generated} trips</div>
@@ -195,7 +199,8 @@ export default function App() {
             {snap?.trips.map(t => (
               <div key={t.id} className={`trip ${t.status} ${sel?.type === 'person' && sel.id === t.person_id ? 'active' : ''}`} onClick={() => setSel({ type: 'person', id: t.person_id })}>
                 <div className="trip-head"><span className={`chip ${t.status}`}>{t.status.toUpperCase()}</span><span className="who">{t.is_vip && <span className="vipstar">★</span>}{t.person_name}</span>
-                  {t.event_id && <span className="chip event small">EVT</span>}</div>
+                  {t.event_id && <span className="chip event small">EVT</span>}
+                  {t.operation && <span className={`chip small op ${t.operation.status}`} title={t.operation.title} onClick={ev => { ev.stopPropagation(); setOpId(t.operation!.id) }}>OP {t.operation.tasks_done}/{t.operation.tasks_total}</span>}</div>
                 <div className="route">{t.origin_name.split(' ')[0]} <span className="arrow">→</span> {short(t.dest_name)}</div>
                 <div className="when dim">dep {rel(t.depart_at, now)} · ret {rel(t.return_at, now)}</div>
                 <div className="purpose">{t.purpose}</div>
@@ -395,7 +400,10 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
         {e.threat_ids_in_area.length > 0 && <><div className="section-label">THREATS IN AREA</div>
           <ul className="people">{e.threat_ids_in_area.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
             <li key={t!.id} className="tline" onClick={ev => { ev.stopPropagation(); onSelect({ type: 'threat', id: t!.id }) }}><span className={`sev ${t!.severity}`}>{t!.severity.slice(0, 3).toUpperCase()}</span><span className="pname">{t!.title}</span></li>))}</ul></>}
-        <div className="d-actions">{draftBtn('event', e.id)}</div>
+        <div className="d-actions">{draftBtn('event', e.id)}
+          {e.operation ? <button className="mini" onClick={() => onOp(e.operation!.id)}>OP · {e.operation.status.toUpperCase()} · {e.operation.tasks_done}/{e.operation.tasks_total}</button>
+            : role === 'battle_captain' && <button className="mini" disabled={!!busy} title="Opens the standard task skeleton; cite an approved assessment from the S2 card to hand off a target package" onClick={() => act('opening operation', () => api.openOperation({ subject_type: 'event', subject_id: e.id }).then(o => onOp(o.id)))}>+ OPERATION</button>}</div>
+        {(snap.assessments.filter(a => a.subject_type === 'event' && a.subject_id === e.id && a.status === 'approved')).map(a => <DistributionBox key={a.id} ptype="assessment" pid={a.id} role={role} busy={busy} act={act} releasable />)}
         <div className="section-label">ATTENDEES</div>
         <ul className="people">{att.map(p => <PersonRow key={p.id} p={p} onClick={() => onSelect({ type: 'person', id: p.id })} />)}</ul>
       </div>)

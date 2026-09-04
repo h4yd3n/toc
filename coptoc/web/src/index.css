@@ -341,3 +341,12 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .detail.intsum { border-color: rgba(34,197,94,.45); }
 .detail.intsum .bluf.nstr { color: var(--green); }
 .detail.intsum li .sev { margin-right: 4px; }
+
+/* §5.10 operations + dissemination */
+.detail.op { width: 520px; border-color: rgba(192,132,252,.5); }
+.chip.op { color: #c084fc; border-color: rgba(192,132,252,.5); cursor: pointer; } .chip.op.active { background: rgba(192,132,252,.12); }
+.chip.planned { color: var(--dim); } .chip.complete { color: var(--green); } .chip.cancelled { color: var(--dim); text-decoration: line-through; }
+.tasks { list-style: none; padding: 0; margin: 0; } .task { display: flex; align-items: center; gap: 6px; padding: 4px 0; border-top: 1px solid var(--line-2); font-size: 11.5px; }
+.task .ttitle { flex: 1; } .task.done .ttitle { color: var(--dim); text-decoration: line-through; } .task.blocked .ttitle { color: var(--red); }
+.dist { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 4px; }
+.detail .row-btns input, .detail .row-btns select { font: inherit; font-size: 11px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; padding: 3px 6px; }

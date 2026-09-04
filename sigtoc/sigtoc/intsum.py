@@ -78,6 +78,8 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
     # 5. Products
     products = {"assessments": T("cop.assessment.drafted", "cop.assessment.status"), "area_assessments": T("s2.area.drafted", "s2.area.status")}
     pending_area = [{"id": a.id, "title": a.title, "status": a.status} for a in (await session.execute(select(AreaAssessmentRow).where(AreaAssessmentRow.status != "approved"))).scalars()]
+    from .dissemination import unacknowledged
+    unread = await unacknowledged(session, period_to)  # a warning nobody read is a failure the INTSUM shows (§5.10 #4)
     # 6. Collection — who reported, who is broken, where the gaps are
     collection = {"runs": T("cop.intel.refresh", "cop.intel.refresh_failed"), "source_changes": T("s2.source.updated"),
                   "sources": [{"id": c["id"], "name": c["name"], "last_collected_at": c.get("last_collected_at"), "last_result": c.get("last_result")} for c in cat if c["enabled"] and c["configured"]]}
@@ -95,7 +97,9 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
     return {"period": {"from": R.iso(period_from), "to": R.iso(period_to), "hours": round((period_to - period_from).total_seconds() / 3600, 1)},
             "headline": headline, "nstr": nstr, "requirements": {"active": len(active), "standing": sum(1 for r in active if r.kind == "standing"), "directed": sum(1 for r in active if r.kind == "directed"), **req_changes},
             "new_threats": new_threats, "wall": wall, "reports": reports, "cases": {**cases, "open": len(open_cases)},
-            "products": {**products, "pending_area_assessments": pending_area}, "collection": {**collection, "gaps": gaps_ranked, "coverage": cov},
+            "products": {**products, "pending_area_assessments": pending_area, "disseminated": T("s2.product.disseminated"), "acknowledged": T("s2.product.acknowledged"),
+                         "unacknowledged": [{"product": u["product_title"], "recipient": u["recipient"], "outstanding_min": u["latency"]["outstanding_min"]} for u in unread]},
+            "collection": {**collection, "gaps": gaps_ranked, "coverage": cov},
             "event_count": len(ev), "structure": ["headline", "requirements", "new_threats", "wall", "reports_and_cases", "products", "collection"]}
 
 

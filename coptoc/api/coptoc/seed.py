@@ -254,9 +254,31 @@ async def _seed_directed(session: AsyncSession, now: datetime) -> None:
     await session.flush()
 
 
+async def _seed_operation(session: AsyncSession, now: datetime) -> None:
+    """§5.10 #3: the approved Riyadh assessment (ASMT-014) became an operation — the target package handed to S3."""
+    from .operations import DEFAULT_TASKS, OperationRow, OpResourceRow, OpTaskRow, new_task
+    for model in (OpResourceRow, OpTaskRow, OperationRow):
+        for row in (await session.execute(select(model))).scalars():
+            await session.delete(row)
+    await session.flush()
+    op = OperationRow(id="op_seed_riyadh", title="OP — CEO Riyadh visit", subject_type="trip", subject_id="trip_001", subject_name="Alex Ventura — Riyadh, Saudi Arabia",
+                      from_product_type="assessment", from_product_id="ASMT-014", status="active", opened_by="Battle Captain", opened_at=now - timedelta(hours=18),
+                      notes="Enhanced protocols per ASMT-014. EP detail of two; embassy RSO informed.")
+    session.add(op); await session.flush()
+    owners = ["EP detail lead", "S2 duty analyst", "EP detail lead", "S6 watch floor"]
+    states = ["done", "done", "doing", "todo"]
+    for i, t in enumerate(DEFAULT_TASKS["trip"]):
+        row = new_task(op.id, t["title"], t["section"], owners[i], i); row.status = states[i]; row.updated_by = owners[i]; row.updated_at = now - timedelta(hours=12 - i)
+        session.add(row)
+    session.add(OpResourceRow(id="res_seed_1", operation_id=op.id, item="Armored SUV with local driver", qty=2, status="approved", note="Vendor confirmed", updated_by="S4", updated_at=now - timedelta(hours=10)))
+    session.add(OpResourceRow(id="res_seed_2", operation_id=op.id, item="Satellite messenger", qty=1, status="requested", updated_by="EP detail lead", updated_at=now - timedelta(hours=3)))
+    await session.flush()
+
+
 async def reseed(session: AsyncSession) -> None:
     await _seed_case(session, now_utc())
     await _seed_directed(session, now_utc())
+    await _seed_operation(session, now_utc())
     for model in (AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)

@@ -33,14 +33,14 @@ export interface Incident {
   total: number; accounted: number; pct: number; counts: Record<RosterStatus, number>; checkins_requested: number
   channels: string[]; delivery_summary: Record<string, { sent: number; simulated: number; failed: number }>; roster: RosterEntry[]
 }
-export interface Trip {
+export interface Trip { operation?: OperationSummary | null;
   id: string; person_id: string; person_name: string; is_vip: boolean
   origin_location_id: string; origin_name: string; origin_lat: number; origin_lon: number
   dest_location_id: string | null; dest_name: string; dest_lat: number; dest_lon: number
   depart_at: string; return_at: string; purpose: string; status: 'planned' | 'active' | 'complete'
   event_id: string | null; created_by: string; source: string
 }
-export interface CopEvent {
+export interface CopEvent { operation?: OperationSummary | null;
   id: string; name: string; event_type: string; venue_location_id: string | null
   venue_name: string; venue_lat: number; venue_lon: number; start_at: string; end_at: string
   status: 'upcoming' | 'active' | 'past'; days_until: number; description: string; security_plan: string | null
@@ -140,3 +140,10 @@ export interface Intsum { id: string; status: 'draft' | 'released'; drafted_by: 
   products: { assessments: LogEv[]; area_assessments: LogEv[]; pending_area_assessments: { id: string; title: string; status: string }[] }
   collection: { runs: LogEv[]; source_changes: LogEv[]; sources: { id: string; name: string; last_collected_at: string | null; last_result: string | null }[]; gaps: { indicator: string; label: string; requirements_affected: number }[] } }
 export interface IntsumHead { id: string; status: 'draft' | 'released'; period: { from: string; to: string; hours: number }; headline: string; nstr: boolean; released_by: string | null }
+
+// §5.10 #3 operations, #4 dissemination
+export interface OpTask { id: string; title: string; section: string; owner: string; status: 'todo' | 'doing' | 'done' | 'blocked'; due_at: string | null; order: number; updated_by: string | null; updated_at: string | null; note: string }
+export interface OpResource { id: string; item: string; qty: number; status: 'requested' | 'approved' | 'issued' | 'denied'; note: string; updated_by: string | null; updated_at: string | null }
+export interface OperationSummary { id: string; title: string; subject_type: string; subject_id: string; subject_name: string; status: 'planned' | 'active' | 'complete' | 'cancelled'; tasks_total: number; tasks_done: number; blocked: number; resources_open: number; pct: number; from_product_type: string | null; from_product_id: string | null; opened_by: string }
+export interface Operation extends OperationSummary { opened_at: string; closed_at: string | null; notes: string; tasks: OpTask[]; resources: OpResource[] }
+export interface Distribution { product_type: string; product_id: string; recipients: { id: string; recipient: string; channel: string; delivery: string; sent_at: string; sent_by: string; acknowledged_at: string | null; acknowledged_by: string | null; latency: { created_to_sent_min: number | null; sent_to_ack_min: number | null; outstanding_min: number | null }; stale: boolean; note: string }[]; sent: number; acknowledged: number; unacknowledged: string[]; stale: string[] }

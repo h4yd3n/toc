@@ -1,9 +1,9 @@
-import type { AreaAssessment, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { AreaAssessment, Distribution, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
-export const session = { role: 'battle_captain' as Role }
+export const session = { role: 'battle_captain' as Role, actor: '' }
 const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant' }
 const actor = () => `${ROLE_LABEL[session.role]} (web)`
 
@@ -61,3 +61,14 @@ export const getIntsum = (id: string) => req<Intsum>('GET', `/v1/s2/intsum/${id}
 export const draftIntsum = () => req<Intsum>('POST', '/v1/s2/intsum/draft')
 export const releaseIntsum = (id: string, notes?: string) => req<Intsum>('POST', `/v1/s2/intsum/${id}/release`, { notes })
 export const addToRoster = (incidentId: string, body: { person_id?: string; name?: string; phone?: string; role?: string; note?: string }) => req<{ person_id: string; name: string }>('POST', `/v1/cop/incidents/${incidentId}/roster`, body)
+export const listOperations = () => req<Operation[]>('GET', '/v1/cop/operations')
+export const getOperation = (id: string) => req<Operation>('GET', `/v1/cop/operations/${id}`)
+export const openOperation = (body: { subject_type: string; subject_id: string; title?: string; from_assessment_id?: string; from_area_id?: string; notes?: string }) => req<Operation>('POST', '/v1/cop/operations', body)
+export const setOperationStatus = (id: string, status: string, notes?: string) => req<Operation>('PATCH', `/v1/cop/operations/${id}`, { status, notes })
+export const addTask = (opId: string, body: { title: string; section: string; owner?: string }) => req<unknown>('POST', `/v1/cop/operations/${opId}/tasks`, body)
+export const updateTask = (opId: string, taskId: string, body: { status?: string; owner?: string; note?: string }) => req<unknown>('PATCH', `/v1/cop/operations/${opId}/tasks/${taskId}`, body)
+export const requestResource = (opId: string, body: { item: string; qty: number; note?: string }) => req<unknown>('POST', `/v1/cop/operations/${opId}/resources`, body)
+export const answerResource = (opId: string, resId: string, status: string, note?: string) => req<unknown>('PATCH', `/v1/cop/operations/${opId}/resources/${resId}`, { status, note })
+export const getDistribution = (ptype: string, pid: string) => req<Distribution>('GET', `/v1/s2/products/${ptype}/${pid}/distribution`)
+export const disseminate = (ptype: string, pid: string, recipients: string[], channel: 'wall' | 'chat' = 'wall') => req<Distribution>('POST', `/v1/s2/products/${ptype}/${pid}/disseminate`, { recipients, channel })
+export const ackProduct = (ptype: string, pid: string) => req<Distribution>('POST', `/v1/s2/products/${ptype}/${pid}/ack`)

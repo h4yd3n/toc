@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.15
+**Version:** 3.16
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -293,8 +293,8 @@ follow from that, none of which the wall has yet.
 | :-- | :--- | :--- | :--- | :--- | :--- |
 | 1 | **Organic reporting is a first-class source.** Our own people report what they see, and S2 treats it as reporting from the most reliable source there is. | SPOTREP / SITREP from the unit | A security officer in the SF lobby reports a crowd forming; an EP agent reports the route is blocked; a traveler's check-in note. Each is a `Report` with who, where, when, what — and it is a Sigtoc source (`source: ops`, reliability graded like any other, typically A). | S3 → S2 | **[BUILT]** — `Report` (SPOTREP / SITREP / note) filed from the wall by security, EP, EA, analyst, or Battle Captain; `source: ops`, reliability A, credibility 2 until corroborated; filed into a case it runs extraction |
 | 2 | **Cases that live for months.** S2 tracks a thing over time, accumulating evidence, with assessments that version rather than replace. | The target folder | A recurring protest group at HQ; a persistent online threat actor naming the company; a fixation case against an executive. A `Case` holds evidence and every assessment ever made on it. Threats are events; a case is the thread through them. | S2 | **[BUILT]** — `Case` (general / person / site / actor) holding reports, the graph, and the review queue; person cases need the Battle Captain or S2; every read on the ledger |
-| 3 | **A product hands off to an operation.** When an assessment is strong enough, Ops plans the response and resources it. | Target package → OPORD | An approved assessment on the Vegas keynote becomes an `Operation`: tasks (advance the venue, vet transport, brief the principal), assignments (EP team, local vendor), and resource asks (S4: vehicles, kit). The wall shows the operation's status against the event. | S2 → S3 (S4 for resources) | **[LATER]** — the wall has events and trips, not plans |
-| 4 | **Dissemination is tracked.** "Right people, right time" is a measurable: who a product went to, when, and whether they acknowledged it. | Distribution list and read-back | Every product carries recipients and acknowledgements; latency from `observed_at` → published → acknowledged is on the record. A warning nobody read is a failure the ledger should show. | S2 → S6 | **[NEXT]** — products exist; recipients and acknowledgements do not |
+| 3 | **A product hands off to an operation.** When an assessment is strong enough, Ops plans the response and resources it. | Target package → OPORD | An approved assessment on the Vegas keynote becomes an `Operation`: tasks (advance the venue, vet transport, brief the principal), assignments (EP team, local vendor), and resource asks (S4: vehicles, kit). The wall shows the operation's status against the event. | S2 → S3 (S4 for resources) | **[BUILT]** — `Operation` opened by the Battle Captain from an *approved* assessment or area assessment (a draft is refused) or directly on a subject; starts with the standard task skeleton by staff section; S4 asks are requested by S3 and answered by S4; the event or trip card shows OP done/total |
+| 4 | **Dissemination is tracked.** "Right people, right time" is a measurable: who a product went to, when, and whether they acknowledged it. | Distribution list and read-back | Every product carries recipients and acknowledgements; latency from `observed_at` → published → acknowledged is on the record. A warning nobody read is a failure the ledger should show. | S2 → S6 | **[BUILT]** — approved or released products are disseminated to roles or people (wall, or chat when Slack is configured); each recipient's acknowledgement and the latencies created → sent → acknowledged are on the ledger; unread past two hours is on the INTSUM as a failure |
 
 The loop, closed: **Ops reports → S2 grades and files into cases → S2 assesses → the product is disseminated and
 acknowledged → Ops plans the operation → the floor watches it → Ops reports.** The wall is where all of it is visible
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.16** — §5.10 #3 `Operation` (target package → OPORD) and #4 dissemination tracking built.
 - **v3.15** — S6 decisions L–N built: inbound SMS webhook, 15-minute escalation rule, manual roster adds.
 - **v3.14** — collectors: USGS, NWS, WHO DON, State Dept, FCDO live and keyless; ACLED and CLSTR behind keys; Nager.Date holiday baseline; country-scoped reporting attaches to requirements by country. ReliefWeb and GDELT deferred with reasons.
 - **v3.13** — INTSUM built (§5.6, Decision G): a fixed-order diff since the last one, fixed-hour draft, Battle Captain release.

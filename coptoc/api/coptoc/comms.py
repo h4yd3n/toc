@@ -67,6 +67,17 @@ class ChatChannel:
     def configured(self) -> bool:
         return bool(self.webhook)
 
+    async def post(self, text: str) -> Delivery:
+        """One message to the ops channel — used to disseminate a product (§5.10 #4)."""
+        if not self.configured:
+            return Delivery("chat", "simulated")
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                r = await client.post(self.webhook, json={"text": text})
+            return Delivery("chat", "sent") if r.status_code == 200 else Delivery("chat", "failed", error=f"slack {r.status_code}: {r.text[:120]}")
+        except Exception as e:  # noqa: BLE001
+            return Delivery("chat", "failed", error=f"{type(e).__name__}: {e}")
+
     async def broadcast(self, incident_title: str, names_and_links: List[tuple]) -> Delivery:
         if not self.configured:
             return Delivery("chat", "simulated")

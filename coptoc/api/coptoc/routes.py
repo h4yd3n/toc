@@ -17,8 +17,9 @@ from . import db_models  # noqa: F401 — registers tables on Base.metadata
 from .comms import Dispatcher, public_url
 from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
+from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -964,6 +965,142 @@ async def intel_refresh(session: AsyncSession = Depends(get_session), x_toc_acto
         total_created += created; total_updated += updated
     return {"sources": results, "created": total_created, "updated": total_updated, "collected": sum(r.get("collected", 0) for r in results),
             "failed": [r["source"] for r in results if not r["ok"]], "countries": sorted(countries)}
+
+
+# ---------------------------------------------------------------- §5.10 #3 operations (target package → OPORD)
+
+OPERATION_OPENERS = {"battle_captain"}  # S3 plans; the Battle Captain owns the floor
+
+
+async def _subject_name(session: AsyncSession, subject_type: str, subject_id: str) -> str:
+    model = {"event": EventRow, "trip": TripRow, "location": LocationRow}[subject_type]
+    row = await one_or_404(session, model, subject_id, subject_type)
+    if subject_type == "event": return f"{row.name} — {row.venue_name}"
+    if subject_type == "trip":
+        p = await session.get(PersonRow, row.person_id)
+        return f"{p.name if p else row.person_id} — {row.dest_name}"
+    return row.name
+
+
+@router.post("/operations", status_code=201)
+async def open_operation(body: OperationCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """A product hands off to an operation. Opened from an approved assessment or area assessment (a draft is not a
+    target package), or directly on a subject. Starts with the standard task skeleton for the subject kind."""
+    from .operations import DEFAULT_TASKS, OperationRow, load_all, new_task, op_dict
+    require_role(x_toc_role, OPERATION_OPENERS, "Opening an operation")
+    actor = actor_from(x_toc_actor)
+    from_type = from_id = None
+    if body.from_assessment_id:
+        a = await one_or_404(session, AssessmentRow, body.from_assessment_id, "assessment")
+        if a.status != "approved": raise HTTPException(409, f"{a.id} is {a.status}; only an approved assessment becomes an operation")
+        from_type, from_id = "assessment", a.id
+    elif body.from_area_id:
+        from sigtoc.area import AreaAssessmentRow
+        a = await one_or_404(session, AreaAssessmentRow, body.from_area_id, "area assessment")
+        if a.status != "approved": raise HTTPException(409, f"{a.id} is {a.status}; only an approved area assessment becomes an operation")
+        from_type, from_id = "area", a.id
+    name = await _subject_name(session, body.subject_type, body.subject_id)
+    now = now_utc()
+    op = OperationRow(id=f"op_{uuid.uuid4().hex[:8]}", title=body.title or f"OP — {name}", subject_type=body.subject_type, subject_id=body.subject_id, subject_name=name,
+                      from_product_type=from_type, from_product_id=from_id, opened_by=actor, opened_at=now, notes=body.notes)
+    session.add(op); await session.flush()
+    specs = body.tasks if body.tasks is not None else [TaskCreate(**t) for t in DEFAULT_TASKS[body.subject_type]]
+    tasks = [new_task(op.id, t.title, t.section, t.owner, i, naive_dt(t.due_at)) for i, t in enumerate(specs)]
+    for t, spec in zip(tasks, specs): t.note = spec.note
+    session.add_all(tasks); await session.commit()
+    await get_ledger().append_event(content_id=op.id, event_type="cop.operation.opened", actor_type="human", actor_id=actor, new_state="planned",
+                                    reason=f"{op.title}: {len(tasks)} tasks" + (f", from {from_type} {from_id}" if from_id else ", opened directly"),
+                                    metadata={"subject_type": body.subject_type, "subject_id": body.subject_id, "from": from_id, "tasks": len(tasks)})
+    return op_dict(op, tasks, [])
+
+
+def naive_dt(dt: Optional[datetime]) -> Optional[datetime]:
+    return dt.astimezone(timezone.utc).replace(tzinfo=None) if (dt and dt.tzinfo) else dt
+
+
+@router.get("/operations")
+async def list_operations(session: AsyncSession = Depends(get_session)):
+    from .operations import load_all
+    return await load_all(session)
+
+
+@router.get("/operations/{op_id}")
+async def get_operation(op_id: str, session: AsyncSession = Depends(get_session)):
+    from .operations import OperationRow, OpResourceRow, OpTaskRow, op_dict
+    op = await one_or_404(session, OperationRow, op_id, "operation")
+    tasks = (await session.execute(select(OpTaskRow).where(OpTaskRow.operation_id == op_id))).scalars().all()
+    res = (await session.execute(select(OpResourceRow).where(OpResourceRow.operation_id == op_id))).scalars().all()
+    return op_dict(op, tasks, res)
+
+
+@router.patch("/operations/{op_id}")
+async def update_operation(op_id: str, body: OperationUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    from .operations import OperationRow
+    require_role(x_toc_role, OPERATION_OPENERS, "Changing an operation's status")
+    op = await one_or_404(session, OperationRow, op_id, "operation")
+    old = op.status
+    if body.notes is not None: op.notes = body.notes
+    if body.status:
+        op.status = body.status
+        if body.status in ("complete", "cancelled"): op.closed_at = now_utc()
+    await session.commit()
+    if body.status and body.status != old:
+        await get_ledger().append_event(content_id=op.id, event_type="cop.operation.status", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=body.status, reason=f"{op.title} → {body.status}")
+    return await get_operation(op_id, session)
+
+
+@router.post("/operations/{op_id}/tasks", status_code=201)
+async def add_task(op_id: str, body: TaskCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    from .operations import OperationRow, OpTaskRow, new_task, task_dict
+    op = await one_or_404(session, OperationRow, op_id, "operation")
+    n = len((await session.execute(select(OpTaskRow.id).where(OpTaskRow.operation_id == op_id))).scalars().all())
+    t = new_task(op.id, body.title, body.section, body.owner, n, naive_dt(body.due_at)); t.note = body.note
+    session.add(t); await session.commit()
+    await get_ledger().append_event(content_id=op.id, event_type="cop.operation.task", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="todo", reason=f"Task added ({body.section}): {body.title}")
+    return task_dict(t)
+
+
+@router.patch("/operations/{op_id}/tasks/{task_id}")
+async def update_task(op_id: str, task_id: str, body: TaskUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    """Anyone on the floor works a task — the section that owns it is on the task, the actor is on the ledger."""
+    from .operations import OpTaskRow, task_dict
+    t = await one_or_404(session, OpTaskRow, task_id, "task")
+    if t.operation_id != op_id: raise HTTPException(404, "task not in this operation")
+    old = t.status
+    for k in ("status", "owner", "note", "title"):
+        v = getattr(body, k)
+        if v is not None: setattr(t, k, v)
+    if body.due_at is not None: t.due_at = naive_dt(body.due_at)
+    t.updated_by, t.updated_at = actor_from(x_toc_actor), now_utc()
+    await session.commit()
+    if body.status and body.status != old:
+        await get_ledger().append_event(content_id=op_id, event_type="cop.operation.task", actor_type="human", actor_id=t.updated_by, old_state=old, new_state=body.status,
+                                        reason=f"{t.title}: {body.status.upper()}" + (f" ({t.owner})" if t.owner else "") + (f" — {body.note}" if body.note else ""))
+    return task_dict(t)
+
+
+@router.post("/operations/{op_id}/resources", status_code=201)
+async def request_resource(op_id: str, body: ResourceCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    from .operations import OperationRow, OpResourceRow, resource_dict
+    op = await one_or_404(session, OperationRow, op_id, "operation")
+    r = OpResourceRow(id=f"res_{uuid.uuid4().hex[:8]}", operation_id=op.id, item=body.item, qty=body.qty, note=body.note, updated_by=actor_from(x_toc_actor), updated_at=now_utc())
+    session.add(r); await session.commit()
+    await get_ledger().append_event(content_id=op.id, event_type="cop.operation.resource", actor_type="human", actor_id=r.updated_by, new_state="requested", reason=f"S4 ask: {body.qty} × {body.item}")
+    return resource_dict(r)
+
+
+@router.patch("/operations/{op_id}/resources/{res_id}")
+async def answer_resource(op_id: str, res_id: str, body: ResourceUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    """S4 answers the ask: approved, issued, denied."""
+    from .operations import OpResourceRow, resource_dict
+    r = await one_or_404(session, OpResourceRow, res_id, "resource")
+    if r.operation_id != op_id: raise HTTPException(404, "resource not in this operation")
+    old = r.status
+    r.status, r.updated_by, r.updated_at = body.status, actor_from(x_toc_actor), now_utc()
+    if body.note is not None: r.note = body.note
+    await session.commit()
+    await get_ledger().append_event(content_id=op_id, event_type="cop.operation.resource", actor_type="human", actor_id=r.updated_by, old_state=old, new_state=body.status, reason=f"S4: {r.qty} × {r.item} {body.status.upper()}" + (f" — {body.note}" if body.note else ""))
+    return resource_dict(r)
 
 
 @router.post("/seed")

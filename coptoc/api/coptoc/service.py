@@ -230,6 +230,12 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     deliveries: Dict[tuple, List[Dict[str, Any]]] = {}
     for d in delivery_rows:
         deliveries.setdefault((d.incident_id, d.person_id), []).append({"channel": d.channel, "status": d.status, "at": iso(d.at), "error": d.error})
+    from .operations import load_all as load_operations
+    operations_out = [{k: o[k] for k in ("id", "title", "subject_type", "subject_id", "subject_name", "status", "tasks_total", "tasks_done", "blocked", "resources_open", "pct", "from_product_type", "from_product_id", "opened_by")}
+                      for o in await load_operations(session) if o["status"] in ("planned", "active")]
+    op_by_subject = {(o["subject_type"], o["subject_id"]): o for o in operations_out}
+    for e in events_out: e["operation"] = op_by_subject.get(("event", e["id"]))
+    for t in trips_out: t["operation"] = op_by_subject.get(("trip", t["id"]))
     incidents_out = []
     for inc in sorted(incidents, key=lambda x: x.opened_at, reverse=True):
         if inc.status == "closed" and inc.closed_at and (now - inc.closed_at).total_seconds() > 86400:
@@ -294,6 +300,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
+        "operations": operations_out,
     }
 
 

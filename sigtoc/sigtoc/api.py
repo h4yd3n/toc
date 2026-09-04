@@ -19,6 +19,8 @@ from . import area as A
 from .area import AreaAssessmentRow
 from . import intsum as I
 from .intsum import IntsumRow
+from . import dissemination as D
+from .dissemination import DistributionRow
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
 
@@ -520,6 +522,91 @@ async def release_intsum(intsum_id: str, body: IntsumRelease, session: AsyncSess
     await ledger().append_event(content_id=row.id, event_type="s2.intsum.released", actor_type="human", actor_id=row.released_by, old_state="draft", new_state="released",
                                 reason=f"INTSUM released" + (f" — {body.notes}" if body.notes else ""))
     return I.to_dict(row)
+
+
+# ---------------------------------------------------------------- §5.10 #4 dissemination
+
+DISSEMINATORS = {"battle_captain", "analyst"}
+
+
+class Disseminate(BaseModel):
+    recipients: List[str] = Field(..., min_length=1, max_length=50)  # roles, person ids, or names
+    channel: Literal["wall", "chat"] = "wall"
+    note: str = ""
+
+
+async def _product(session: AsyncSession, ptype: str, pid: str):
+    """(title, status, created_at, releasable) for any product type. Only approved / released products go out."""
+    if ptype == "assessment":
+        from coptoc.db_models import AssessmentRow
+        a = await session.get(AssessmentRow, pid)
+        if not a: raise HTTPException(404, "assessment not found")
+        return a.title, a.status, a.created_at, a.status == "approved"
+    if ptype == "area":
+        a = await session.get(AreaAssessmentRow, pid)
+        if not a: raise HTTPException(404, "area assessment not found")
+        return a.title, a.status, a.created_at, a.status == "approved"
+    if ptype == "intsum":
+        a = await session.get(IntsumRow, pid)
+        if not a: raise HTTPException(404, "INTSUM not found")
+        return f"INTSUM {a.id}", a.status, a.drafted_at, a.status == "released"
+    raise HTTPException(404, f"unknown product type {ptype}")
+
+
+@router.post("/products/{ptype}/{pid}/disseminate", status_code=201)
+async def disseminate(ptype: str, pid: str, body: Disseminate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Send a released product to named recipients (roles, people) and start the clock on their acknowledgement.
+    `chat` posts one line to the ops channel when Slack is configured and records `simulated` otherwise."""
+    if (x_toc_role or "").lower() not in DISSEMINATORS:
+        raise HTTPException(403, "Disseminating is the analyst's or the Battle Captain's")
+    title, status, created_at, ok = await _product(session, ptype, pid)
+    if not ok:
+        raise HTTPException(409, f"{title} is {status}: only approved or released products are disseminated")
+    now = R.now_utc()
+    delivery = "recorded"
+    if body.channel == "chat":
+        from coptoc.comms import ChatChannel
+        d = await ChatChannel().post(f":clipboard: *TOC {ptype.upper()} released — {title}* → {', '.join(body.recipients)}. Acknowledge on the wall.")
+        delivery = d.status
+    rows = [D.new_row(ptype, pid, title, rcpt.strip(), body.channel, delivery, x_toc_actor or x_toc_role, now, created_at) for rcpt in body.recipients if rcpt.strip()]
+    for r in rows: r.note = body.note
+    session.add_all(rows); await session.commit()
+    lat = D._mins(created_at, now)
+    await ledger().append_event(content_id=pid, event_type="s2.product.disseminated", actor_type="human", actor_id=x_toc_actor or x_toc_role,
+                                reason=f"{title} → {len(rows)} recipient(s) via {body.channel}" + (f" ({delivery})" if delivery != "recorded" else "") + (f"; {lat} min after creation" if lat is not None else ""),
+                                metadata={"product_type": ptype, "recipients": [r.recipient for r in rows], "channel": body.channel, "delivery": delivery, "created_to_sent_min": lat})
+    return await D.for_product(session, ptype, pid, now)
+
+
+@router.post("/products/{ptype}/{pid}/ack")
+async def acknowledge_product(ptype: str, pid: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The read-back. Matches the caller to a recipient row by actor or role; an unlisted reader is recorded as an
+    unsolicited read so the record still shows who saw it."""
+    title, status, created_at, _ = await _product(session, ptype, pid)
+    now = R.now_utc()
+    actor, role = (x_toc_actor or "").strip(), (x_toc_role or "").lower().strip()
+    rows = (await session.execute(select(DistributionRow).where(DistributionRow.product_type == ptype, DistributionRow.product_id == pid, DistributionRow.acknowledged_at.is_(None)))).scalars().all()
+    hit = next((r for r in rows if actor and r.recipient.lower() == actor.lower()), None) or next((r for r in rows if role and r.recipient == role), None)
+    if hit is None:
+        hit = D.new_row(ptype, pid, title, actor or role or "unknown", "wall", "recorded", "self", now, created_at); hit.note = "unsolicited read"
+        session.add(hit)
+    hit.acknowledged_at, hit.acknowledged_by = now, actor or role or "unknown"
+    await session.commit()
+    await ledger().append_event(content_id=pid, event_type="s2.product.acknowledged", actor_type="human", actor_id=hit.acknowledged_by,
+                                reason=f"{title} acknowledged by {hit.acknowledged_by}" + (f" ({D._mins(hit.sent_at, now)} min after send)" if hit.note != "unsolicited read" else " (not on the distribution)"),
+                                metadata={"product_type": ptype, "recipient": hit.recipient, "sent_to_ack_min": D._mins(hit.sent_at, now)})
+    return await D.for_product(session, ptype, pid, now)
+
+
+@router.get("/products/{ptype}/{pid}/distribution")
+async def distribution(ptype: str, pid: str, session: AsyncSession = Depends(get_session)):
+    await _product(session, ptype, pid)
+    return await D.for_product(session, ptype, pid, R.now_utc())
+
+
+@router.get("/products/unacknowledged")
+async def products_unacknowledged(session: AsyncSession = Depends(get_session)):
+    return await D.unacknowledged(session, R.now_utc())
 
 
 def standalone_app() -> FastAPI:

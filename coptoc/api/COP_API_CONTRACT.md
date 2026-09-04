@@ -199,6 +199,21 @@ Product shape: `indicators[]` (rows), `candidates[]` (columns) each with `cells[
 
 The fixed-time draft: the COP app runs a ten-minute clock that drafts once per calendar day once `TOC_INTSUM_HOUR_UTC` (default 5) has passed — including at startup if the hour was missed. `TOC_INTSUM_CLOCK=off` disables it (tests). Product structure is fixed: `headline` (NSTR when nothing significant), `requirements` (active/standing/directed counts; created, expired, answered), `new_threats` (observed in the period, worst first, each attributed to the active requirements it falls inside, P1 first), `wall` (links, posture, roll calls), `reports` + `cases`, `products` (assessment and area-assessment events, pending area assessments), `collection` (live sources with last run, collector runs, gaps ranked by requirements affected).
 
+## 3.6 Operations (`/v1/cop/operations`, PRD §5.10 #3) and dissemination (`/v1/s2/products`, §5.10 #4)
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/cop/operations` | `subject_type (event/trip/location), subject_id, title?, from_assessment_id? \| from_area_id?, notes?, tasks?[]` — battle_captain | the cited product must be `approved` (409 otherwise); without `tasks` the standard skeleton for the subject kind is created. Ledger `cop.operation.opened` |
+| `GET` | `/cop/operations` · `/{id}` | | with `tasks[]`, `resources[]`, `tasks_done/total`, `pct`, `blocked`, `resources_open` |
+| `PATCH` | `/cop/operations/{id}` | `status (planned/active/complete/cancelled), notes?` — battle_captain | ledger `cop.operation.status`. Complete/cancelled operations leave the wall |
+| `POST` / `PATCH` | `/cop/operations/{id}/tasks` · `/{task_id}` | `title, section (S1/S2/S3/S4/S6), owner?, due_at?` · `status (todo/doing/done/blocked), owner?, note?` — any role | ledger `cop.operation.task` on status change |
+| `POST` / `PATCH` | `/cop/operations/{id}/resources` · `/{res_id}` | `item, qty, note?` · `status (requested/approved/issued/denied), note?` | the S4 ask and its answer; ledger `cop.operation.resource` |
+| `POST` | `/s2/products/{ptype}/{pid}/disseminate` | `recipients[] (roles, person ids, names), channel (wall/chat), note?` — battle_captain / analyst | `ptype` is `assessment`, `area`, or `intsum`; the product must be approved / released (409). `chat` posts one line to Slack when configured, else `simulated`. Ledger `s2.product.disseminated` with `created_to_sent_min` |
+| `POST` | `/s2/products/{ptype}/{pid}/ack` | — the caller's actor / role | acknowledges the caller's row (actor match first, then role); an unlisted reader is recorded as an unsolicited read. Ledger `s2.product.acknowledged` with `sent_to_ack_min` |
+| `GET` | `/s2/products/{ptype}/{pid}/distribution` · `/s2/products/unacknowledged` | | recipients with latencies and `stale` (unread > 2 h); the INTSUM's products section carries `unacknowledged` |
+
+The snapshot's `events[]` and `trips[]` carry `operation` (summary or null) and the snapshot has `operations[]` (planned and active).
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.
