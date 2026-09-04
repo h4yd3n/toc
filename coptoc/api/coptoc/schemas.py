@@ -107,6 +107,14 @@ class RosterUpdate(BaseModel):
 class IncidentClose(BaseModel):
     notes: Optional[str] = None
 
+class RosterAdd(BaseModel):
+    """Decision N: anyone on the floor may add a missed name — an existing person by id, or a visitor/contractor by name."""
+    person_id: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    role: Optional[str] = "Visitor"
+    note: Optional[str] = None
+
 
 class EstimateUpdate(BaseModel):
     assessment: str

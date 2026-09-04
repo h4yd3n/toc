@@ -15,7 +15,7 @@ const LOG_LABEL: Record<string, string> = {
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
-  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
+  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
 }
 
 function rel(iso: string | null, now: number): string {
@@ -242,6 +242,7 @@ function PanelHead({ code, title, hint, inline, children }: { code: string; titl
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
 function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
+  const [addOpen, setAddOpen] = useState(false)
   sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
   act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
 }) {
@@ -273,7 +274,8 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
             <button className="mini" disabled={!!busy} onClick={() => act('closing roll call', () => api.closeIncident(i.id))}>CLOSE ROLL CALL</button>
             {i.checkins_requested > 0 && <span className="dim">{i.checkins_requested} requested · work by exception{(i.delivery_summary.sms?.simulated || i.delivery_summary.chat?.simulated) ? <span className="chip amber small" title="No Twilio / Slack credentials configured — nothing actually left the building">SIMULATED</span> : null}</span>}</>
           : <span className="chip">CLOSED {rel(i.closed_at, now)}</span>}</div>
-        <div className="section-label">ROSTER <span className="dim">call every name — each attempt is logged</span></div>
+        <div className="section-label">ROSTER <span className="dim">call every name — each attempt is logged</span>{open && <button className="mini" onClick={() => setAddOpen(v => !v)} title="Decision N: anyone on the floor may add a missed name">+ NAME</button>}</div>
+        {open && addOpen && <RosterAddForm busy={busy} act={act} incidentId={i.id} people={[...byId.person.values()].filter(p => !i.roster.some(r => r.person_id === p.id))} onDone={() => setAddOpen(false)} />}
         <ul className="roster">
           {i.roster.map(r => (
             <li key={r.person_id} className={`rrow ${r.status}`}>
@@ -283,6 +285,8 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
                 <span className="prole dim">{r.role}</span>
                 {r.basis === 'assigned' && <span className="chip amber" title="assigned to this site but elsewhere right now">ASSIGNED · AWAY</span>}
                 {r.basis === 'in_area' && <span className="chip" title="not assigned here — inside the radius">NEARBY</span>}
+                {r.basis === 'manual' && <span className="chip amber" title="added by hand on the floor (Decision N)">ADDED</span>}
+                {r.updated_by === 'rule:escalation-15m' && r.status === 'unreachable' && <span className="chip red small" title="no response in 15 minutes — flagged by rule (Decision M)">AUTO · 15m</span>}
                 <span className={`chip ${ROSTER_COLOR[r.status]}`}>{r.status.toUpperCase()}</span>
               </div>
               <div className="rline sub">
@@ -427,4 +431,21 @@ function PersonRow({ p, onClick }: { p: Person; onClick: () => void }) {
       {p.incident_status && <span className={`chip ${ROSTER_COLOR[p.incident_status]}`}>{p.incident_status.toUpperCase()}</span>}
       <span className="prole dim">{p.status === 'traveling' ? 'away' : p.on_shift ? p.shift_role : p.role}</span>
     </li>)
+}
+
+
+function RosterAddForm({ busy, act, incidentId, people, onDone }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; incidentId: string; people: Person[]; onDone: () => void }) {
+  const [f, setF] = useState({ person_id: '', name: '', phone: '', role: 'Visitor', note: '' })
+  const ok = f.person_id || f.name.trim()
+  return (
+    <div className="dform" onClick={e => e.stopPropagation()}>
+      <div className="dform-head">ADD A MISSED NAME <span className="dim">visitor, contractor, or someone the picture missed · tagged manual · logged</span></div>
+      <select value={f.person_id} onChange={e => setF({ ...f, person_id: e.target.value, name: '' })}><option value="">— not in the directory —</option>{people.slice(0, 200).map(p => <option key={p.id} value={p.id}>{p.name} · {p.role}</option>)}</select>
+      {!f.person_id && <>
+        <div className="two"><input placeholder="Name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /><input placeholder="Phone" value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} /></div>
+        <input placeholder="Role (e.g. Contractor — HVAC)" value={f.role} onChange={e => setF({ ...f, role: e.target.value })} /></>}
+      <input placeholder="Note (where seen)" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} />
+      <div className="row-btns"><button className="mini ok" disabled={!!busy || !ok} onClick={() => { act('adding to roster', () => api.addToRoster(incidentId, f.person_id ? { person_id: f.person_id, note: f.note || undefined } : { name: f.name, phone: f.phone || undefined, role: f.role || undefined, note: f.note || undefined })); onDone() }}>ADD</button>
+        <button className="mini" onClick={onDone}>CANCEL</button></div>
+    </div>)
 }

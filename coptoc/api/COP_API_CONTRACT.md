@@ -122,6 +122,16 @@ contract — same endpoints, same shapes — so every client shares one backend 
 | `POST` | `/intel/refresh` | runs live collectors (GDACS) and upserts by `external_id`; `502` if the source is unreachable — a broken source must not look like a quiet one | `cop.intel.refresh` / `refresh_failed` |
 | `POST` | `/seed` | dev only — wipe and reload synthetic data | |
 
+### S6 — decisions L–N
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/cop/incidents/{id}/roster` | `person_id` **or** `name, phone?, role?`, `note?` — any role (Decision N) | adds a missed name with `basis: manual`; a visitor becomes a `source: manual` person on the site's team. Ledger `cop.incident.roster_added` |
+| `POST` | `/cop/incidents/escalate` | | runs the 15-minute rule now (the app runs it every minute — Decision M): `unaccounted` with a check-in request older than 15 min, or opened 15 min ago with no attempt, → `unreachable`, `updated_by: rule:escalation-15m`. Ledger `cop.incident.escalated` |
+| `POST` | `/cop/comms/sms/inbound` | Twilio form fields `From`, `Body` | Decision L. Matches the sender to a person by phone; first word SAFE/OK/YES → `safe`, HELP/SOS → `assist`, INJURED/HURT → `injured`, anything else → `contacted` with the text as the note. Replies TwiML. With `TWILIO_AUTH_TOKEN` set the `X-Twilio-Signature` must verify (403 otherwise); without it the endpoint is a simulator and the ledger says so |
+
+Roster order (Decision M): unreachable, assist, injured, unaccounted, contacted, safe; VIPs first within a status.
+
 ## 3.1 The watch (§3.1 of the PRD)
 | Method | Path | Body | Notes |
 | :--- | :--- | :--- | :--- |

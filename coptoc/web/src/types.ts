@@ -23,7 +23,7 @@ export interface Person {
 export type RosterStatus = 'unaccounted' | 'contacted' | 'safe' | 'injured' | 'assist' | 'unreachable'
 export interface RosterEntry {
   person_id: string; name: string; role: string; is_vip: boolean; phone: string | null; email: string | null
-  status: RosterStatus; basis: 'present' | 'in_area' | 'assigned'; checkin_requested_at: string | null
+  status: RosterStatus; basis: 'present' | 'in_area' | 'assigned' | 'manual'; checkin_requested_at: string | null
   deliveries: { channel: 'sms' | 'chat'; status: 'sent' | 'simulated' | 'failed'; at: string; error: string | null }[]
   method: string | null; attempts: number; last_attempt_at: string | null; updated_by: string | null; updated_at: string | null; note: string | null
 }

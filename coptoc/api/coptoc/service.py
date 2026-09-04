@@ -248,7 +248,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
                            "deliveries": deliveries.get((inc.id, r.person_id), []),
                            "method": r.method, "attempts": r.attempts, "last_attempt_at": iso(r.last_attempt_at),
                            "updated_by": r.updated_by, "updated_at": iso(r.updated_at), "note": r.note})
-        order = {"unaccounted": 0, "unreachable": 1, "assist": 2, "injured": 3, "contacted": 4, "safe": 5}
+        order = {"unreachable": 0, "assist": 1, "injured": 2, "unaccounted": 3, "contacted": 4, "safe": 5}  # Decision M: escalated names float to the top
         roster.sort(key=lambda r: (order[r["status"]], not r["is_vip"], r["name"]))
         accounted = rc["safe"] + rc["contacted"] + rc["injured"] + rc["assist"]
         requested = sum(1 for r in rows if r.checkin_requested_at)

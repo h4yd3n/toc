@@ -2,11 +2,12 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import timedelta, datetime, timezone
 from typing import Tuple, Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import Request, APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -17,7 +18,7 @@ from .comms import Dispatcher, public_url
 from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -644,6 +645,125 @@ async def checkin_by_token(token: str, body: Optional[CheckIn] = None, session: 
     else:
         lat, lon, note = body.lat, body.lon, body.note or "Confirmed safe via check-in link"
     return await checkin(person_id, CheckIn(lat=lat, lon=lon, note=note), session, x_toc_actor=p.name)
+
+
+ESCALATION_MINUTES = 15  # Decision M
+
+
+@router.post("/incidents/{incident_id}/roster", status_code=201)
+async def add_to_roster(incident_id: str, body: RosterAdd, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    """Decision N: anyone on the floor may add a missed name. A visitor or contractor becomes a `manual` person on the
+    site's team so the roster, the check-in link, and the ledger treat them like anyone else."""
+    inc = await one_or_404(session, IncidentRow, incident_id, "incident")
+    if inc.status != "open":
+        raise HTTPException(409, "incident is closed")
+    actor = actor_from(x_toc_actor)
+    if body.person_id:
+        person = await one_or_404(session, PersonRow, body.person_id, "person")
+    elif body.name:
+        team = None
+        if inc.location_id:
+            team = (await session.execute(select(TeamRow).where(TeamRow.location_id == inc.location_id))).scalars().first()
+        team = team or (await session.execute(select(TeamRow))).scalars().first()
+        if not team: raise HTTPException(422, "no team to attach a visitor to")
+        person = PersonRow(id=f"p_man_{uuid.uuid4().hex[:6]}", name=body.name.strip(), role=body.role or "Visitor", team_id=team.id, is_vip=False,
+                           phone=body.phone, email=None, source="manual")
+        session.add(person); await session.flush()
+    else:
+        raise HTTPException(422, "person_id or name required")
+    dup = (await session.execute(select(AccountabilityRow).where(AccountabilityRow.incident_id == incident_id, AccountabilityRow.person_id == person.id))).scalar_one_or_none()
+    if dup:
+        raise HTTPException(409, f"{person.name} is already on this roster ({dup.status})")
+    session.add(AccountabilityRow(incident_id=incident_id, person_id=person.id, status="unaccounted", basis="manual", note=body.note, updated_by=actor))
+    await session.commit()
+    await get_ledger().append_event(content_id=inc.id, event_type="cop.incident.roster_added", actor_type="human", actor_id=actor,
+                                    reason=f"{person.name} added to roster by hand" + (f" ({body.role})" if body.name else "") + (f" — {body.note}" if body.note else ""),
+                                    metadata={"person_id": person.id, "basis": "manual", "created_person": bool(body.name)})
+    return {"incident_id": incident_id, "person_id": person.id, "name": person.name, "basis": "manual", "status": "unaccounted"}
+
+
+async def escalate_due(session: AsyncSession, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    """Decision M: 15 minutes with no response — after a check-in request, or after opening with no attempt at all —
+    flags the name UNREACHABLE by rule and floats it to the top of the call list. Idempotent."""
+    now = now or now_utc()
+    cutoff = now - timedelta(minutes=ESCALATION_MINUTES)
+    out = []
+    incidents = {i.id: i for i in (await session.execute(select(IncidentRow).where(IncidentRow.status == "open"))).scalars()}
+    if not incidents: return out
+    rows = (await session.execute(select(AccountabilityRow).where(AccountabilityRow.incident_id.in_(list(incidents)), AccountabilityRow.status == "unaccounted"))).scalars().all()
+    for row in rows:
+        since = row.checkin_requested_at or (incidents[row.incident_id].opened_at if row.attempts == 0 else None)
+        if not since or since > cutoff: continue
+        row.status, row.updated_by, row.updated_at = "unreachable", "rule:escalation-15m", now
+        row.note = f"No response in {ESCALATION_MINUTES} min" + (" after check-in request" if row.checkin_requested_at else " since roll call opened, no attempt logged")
+        out.append({"incident_id": row.incident_id, "person_id": row.person_id})
+    if out:
+        await session.commit()
+        by_inc: Dict[str, int] = {}
+        for o in out: by_inc[o["incident_id"]] = by_inc.get(o["incident_id"], 0) + 1
+        for iid, n in by_inc.items():
+            await get_ledger().append_event(content_id=iid, event_type="cop.incident.escalated", actor_type="system", actor_id="rule:escalation-15m", old_state="unaccounted", new_state="unreachable",
+                                            reason=f"{n} name(s) unreachable after {ESCALATION_MINUTES} min with no response — floated to the top of the call list", metadata={"count": n})
+    return out
+
+
+@router.post("/incidents/escalate")
+async def escalate_now(session: AsyncSession = Depends(get_session)):
+    """Run the escalation rule now (the app also runs it every minute)."""
+    return {"escalated": await escalate_due(session)}
+
+
+def _twilio_signature_ok(url: str, form: Dict[str, str], signature: Optional[str]) -> bool:
+    """Twilio signs `url + sorted(key+value)` with the auth token, HMAC-SHA1, base64."""
+    import base64, hashlib, hmac
+    token = os.environ.get("TWILIO_AUTH_TOKEN")
+    if not token: return False
+    payload = url + "".join(k + form[k] for k in sorted(form))
+    digest = base64.b64encode(hmac.new(token.encode(), payload.encode(), hashlib.sha1).digest()).decode()
+    return bool(signature) and hmac.compare_digest(digest, signature)
+
+
+REPLY_STATUS = {"safe": "safe", "ok": "safe", "yes": "safe", "fine": "safe", "good": "safe", "help": "assist", "assist": "assist", "sos": "assist", "injured": "injured", "hurt": "injured"}
+
+
+@router.post("/comms/sms/inbound")
+async def sms_inbound(request: Request, session: AsyncSession = Depends(get_session)):
+    """Decision L: a Twilio inbound webhook. A text of SAFE clears the row; HELP or INJURED flags it. The sender's phone
+    is the credential; with Twilio configured the request signature must verify, without it the endpoint is a
+    simulator for the wall. Replies TwiML."""
+    from fastapi.responses import Response as RawResponse
+    form = {k: v for k, v in (await request.form()).items()}
+    sender, text = (form.get("From") or "").strip(), (form.get("Body") or "").strip()
+    configured = bool(os.environ.get("TWILIO_AUTH_TOKEN"))
+    if configured and not _twilio_signature_ok(str(request.url), form, request.headers.get("X-Twilio-Signature")):
+        raise HTTPException(403, "bad Twilio signature")
+    digits = re.sub(r"\D", "", sender)
+    people = [p for p in (await session.execute(select(PersonRow).where(PersonRow.phone.isnot(None)))).scalars() if re.sub(r"\D", "", p.phone or "").endswith(digits[-9:])] if digits else []
+    def twiml(msg: str) -> RawResponse:
+        return RawResponse(content=f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Message>{msg}</Message></Response>", media_type="application/xml")
+    if not people:
+        await get_ledger().append_event(content_id="s6", event_type="cop.comms.inbound_unmatched", actor_type="system", actor_id="twilio" if configured else "simulator", reason=f"Inbound SMS from an unknown number: {text[:80]}")
+        return twiml("TOC: this number is not on file. Call the watch floor.")
+    person = people[0]
+    word = (text.split() or [""])[0].lower().strip(".!,")
+    status = REPLY_STATUS.get(word)
+    rows = (await session.execute(select(AccountabilityRow).join(IncidentRow, AccountabilityRow.incident_id == IncidentRow.id)
+                                  .where(AccountabilityRow.person_id == person.id, IncidentRow.status == "open"))).scalars().all()
+    if not rows:
+        await get_ledger().append_event(content_id=person.id, event_type="cop.comms.inbound", actor_type="human", actor_id=person.name, reason=f"SMS with no open roll call: {text[:100]}", metadata={"simulated": not configured})
+        return twiml(f"TOC: thanks {person.name.split(' ')[0]}, no roll call is open for you right now.")
+    now = now_utc()
+    for row in rows:
+        old = row.status
+        row.status = status or ("contacted" if row.status in ("unaccounted", "unreachable") else row.status)
+        row.method, row.note, row.attempts, row.last_attempt_at, row.updated_at, row.updated_by = "sms", text[:200], row.attempts + 1, now, now, person.name
+        await get_ledger().append_event(content_id=row.incident_id, event_type="cop.incident.contact", actor_type="human", actor_id=person.name, old_state=old, new_state=row.status,
+                                        reason=f"{person.name}: {row.status.upper()} via SMS reply — \"{text[:80]}\"" + ("" if configured else " (simulated inbound)"),
+                                        metadata={"person_id": person.id, "attempt": row.attempts, "method": "sms", "simulated": not configured})
+    await session.commit()
+    if status == "safe": return twiml(f"TOC: got it {person.name.split(' ')[0]}, marked SAFE. Thank you.")
+    if status in ("assist", "injured"): return twiml("TOC: understood — the watch floor is calling you now.")
+    return twiml("TOC: received. Reply SAFE, HELP, or INJURED.")
 
 
 @router.patch("/incidents/{incident_id}/close")

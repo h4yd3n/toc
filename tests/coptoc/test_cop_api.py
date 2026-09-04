@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp.name}"
-os.environ["TOC_INTSUM_CLOCK"] = "off"  # the fixed-time INTSUM draft is tested directly, not on a timer
+os.environ["TOC_INTSUM_CLOCK"] = "off"; os.environ["TOC_ESCALATION_CLOCK"] = "off"  # the fixed-time INTSUM draft is tested directly, not on a timer
 os.environ["TOC_OFFLINE"] = "1"  # collectors and the holiday lookup never touch the network in tests
 os.environ.pop("ANTHROPIC_API_KEY", None)  # keep the drafter on the deterministic path in tests
 os.environ.pop("TOC_DRAFTER", None)
@@ -177,7 +177,7 @@ def test_accountability_roll_call(client):
     assert r2.json()["attempts"] == 2
     d = client.get(f"/v1/cop/incidents/{iid}").json()
     assert d["counts"]["safe"] == 1 and d["counts"]["assist"] == 1 and d["counts"]["unaccounted"] == present_sf - 2
-    assert d["roster"][0]["status"] == "unaccounted"  # unaccounted sort first; assist before safe
+    assert d["roster"][0]["status"] == "assist" and d["roster"][-1]["status"] == "safe"  # Decision M order: needs-assist and unreachable float above unaccounted; safe sinks
     assert [x["status"] for x in d["roster"]][-1] == "safe"
     # Every contact attempt is on the ledger, in order, hash-chained under the incident
     log = [e for e in client.get("/v1/cop/log", params={"limit": 200}).json() if e["subject"] == iid]
@@ -341,3 +341,68 @@ def test_shift_pattern_is_configurable(client):
     w = client.get("/v1/cop/watch").json()
     assert w["overlap_minutes"] == 45
     client.patch("/v1/cop/watch/config", json={"pattern": "follow_the_sun", "overlap_minutes": 30}, headers=BC)
+
+
+# ---------------------------------------------------------------- S6 decisions L–N
+
+def test_decision_n_anyone_adds_a_missed_name(client):
+    inc = client.post("/v1/cop/incidents", json={"location_id": "loc_sf"}, headers={"X-TOC-Role": "battle_captain", "X-TOC-Actor": "bc"}).json()
+    r = client.post(f"/v1/cop/incidents/{inc['id']}/roster", json={"name": "Jordan Blake", "phone": "+1 415 555 0199", "role": "Contractor — HVAC", "note": "seen on floor 3"},
+                    headers={"X-TOC-Role": "security", "X-TOC-Actor": "guard_07"})
+    assert r.status_code == 201, r.text
+    pid = r.json()["person_id"]
+    assert r.json()["basis"] == "manual" and pid.startswith("p_man_")
+    assert client.post(f"/v1/cop/incidents/{inc['id']}/roster", json={"person_id": pid}).status_code == 409  # already on it
+    i = next(x for x in client.get("/v1/cop/snapshot").json()["incidents"] if x["id"] == inc["id"])
+    row = next(x for x in i["roster"] if x["person_id"] == pid)
+    assert row["basis"] == "manual" and row["status"] == "unaccounted" and row["phone"] == "+1 415 555 0199"
+    assert any(e["type"] == "cop.incident.roster_added" for e in client.get("/v1/cop/log", params={"limit": 5}).json())
+    client.patch(f"/v1/cop/incidents/{inc['id']}/close", json={})
+
+
+def test_decision_m_fifteen_minutes_without_response_escalates_and_floats(client):
+    import asyncio
+    from coptoc.routes import escalate_due, sessions
+    inc = client.post("/v1/cop/incidents", json={"location_id": "loc_nyc"}, headers={"X-TOC-Role": "battle_captain"}).json()
+    client.post(f"/v1/cop/incidents/{inc['id']}/request-checkins")
+    async def run(minutes):
+        async with sessions()() as s:
+            return await escalate_due(s, datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=minutes))
+    assert asyncio.run(run(10)) == []  # too early
+    done = asyncio.run(run(16))
+    assert len(done) == inc["roster"] and all(d["incident_id"] == inc["id"] for d in done)
+    assert asyncio.run(run(17)) == []  # idempotent
+    i = next(x for x in client.get("/v1/cop/snapshot").json()["incidents"] if x["id"] == inc["id"])
+    assert i["counts"]["unreachable"] == inc["roster"] and i["roster"][0]["status"] == "unreachable" and i["roster"][0]["updated_by"] == "rule:escalation-15m"
+    # a name marked SAFE sorts below the escalated ones
+    client.patch(f"/v1/cop/incidents/{inc['id']}/roster/{i['roster'][-1]['person_id']}", json={"status": "safe"})
+    i = next(x for x in client.get("/v1/cop/snapshot").json()["incidents"] if x["id"] == inc["id"])
+    assert i["roster"][0]["status"] == "unreachable" and i["roster"][-1]["status"] == "safe"
+    assert any(e["type"] == "cop.incident.escalated" for e in client.get("/v1/cop/log", params={"limit": 10}).json())
+    client.patch(f"/v1/cop/incidents/{inc['id']}/close", json={})
+
+
+def test_decision_l_inbound_sms_clears_or_flags_by_phone(client):
+    os.environ.pop("TWILIO_AUTH_TOKEN", None)  # simulator mode: no signature required
+    inc = client.post("/v1/cop/incidents", json={"location_id": "loc_ldn"}, headers={"X-TOC-Role": "battle_captain"}).json()
+    i = next(x for x in client.get("/v1/cop/snapshot").json()["incidents"] if x["id"] == inc["id"])
+    with_phone = [r for r in i["roster"] if r["phone"]]
+    assert with_phone, "seed people need phones for this test"
+    a, b = with_phone[0], with_phone[1]
+    r = client.post("/v1/cop/comms/sms/inbound", data={"From": a["phone"], "Body": "SAFE, at the hotel"})
+    assert r.status_code == 200 and "marked SAFE" in r.text and r.headers["content-type"].startswith("application/xml")
+    r2 = client.post("/v1/cop/comms/sms/inbound", data={"From": b["phone"], "Body": "help — stuck in the lift"})
+    assert "calling you now" in r2.text
+    unknown = client.post("/v1/cop/comms/sms/inbound", data={"From": "+1 999 000 0000", "Body": "SAFE"})
+    assert "not on file" in unknown.text
+    i = next(x for x in client.get("/v1/cop/snapshot").json()["incidents"] if x["id"] == inc["id"])
+    st = {r["person_id"]: r for r in i["roster"]}
+    assert st[a["person_id"]]["status"] == "safe" and st[a["person_id"]]["method"] == "sms"
+    assert st[b["person_id"]]["status"] == "assist" and i["roster"][0]["status"] == "assist"  # needs-assist floats above unaccounted
+    # with Twilio configured, an unsigned request is refused
+    os.environ["TWILIO_AUTH_TOKEN"] = "test-token"
+    try:
+        assert client.post("/v1/cop/comms/sms/inbound", data={"From": a["phone"], "Body": "SAFE"}).status_code == 403
+    finally:
+        os.environ.pop("TWILIO_AUTH_TOKEN", None)
+    client.patch(f"/v1/cop/incidents/{inc['id']}/close", json={})

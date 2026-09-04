@@ -21,12 +21,28 @@ async def _intsum_clock() -> None:
         await asyncio.sleep(600)
 
 
+async def _escalation_clock() -> None:
+    """Decision M: every minute, names with no response for 15 minutes go UNREACHABLE by rule."""
+    from .routes import escalate_due, sessions
+    while True:
+        try:
+            async with sessions()() as session:
+                await escalate_due(session)
+        except Exception:  # noqa: BLE001
+            pass
+        await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await cop_startup()
-    clock = asyncio.create_task(_intsum_clock()) if os.environ.get("TOC_INTSUM_CLOCK", "on") != "off" else None
+    clocks = []
+    if os.environ.get("TOC_INTSUM_CLOCK", "on") != "off":
+        clocks.append(asyncio.create_task(_intsum_clock()))
+    if os.environ.get("TOC_ESCALATION_CLOCK", "on") != "off":
+        clocks.append(asyncio.create_task(_escalation_clock()))
     yield
-    if clock: clock.cancel()
+    for c in clocks: c.cancel()
 
 
 app = FastAPI(title="Coptoc — Common Operating Picture API", version="0.3.0",

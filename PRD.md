@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.14
+**Version:** 3.15
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -394,7 +394,7 @@ VIPs first within a status. The posture bar shows the unaccounted count until it
 after-action report.
 
 **Check-in** is the other direction: a person confirms where they are, which overrides their derived position for
-12 hours (Decision 2). **[LATER]:** push a check-in request to a roster, alerting from S2 to the floor, shift handover notes.
+12 hours (Decision 2). Check-in requests go out over SMS and chat at once (Decision 1) and a text back of SAFE, HELP, or INJURED works the roster by phone number (Decision L). Fifteen minutes with no response flags a name UNREACHABLE by rule and floats it to the top (Decision M). Anyone on the floor may add a missed name (Decision N). Shift handover notes live in the watch (§3.1). **[LATER]:** alerting from S2 to the floor (Warning product).
 
 ---
 
@@ -531,9 +531,9 @@ COP never writes back to a source system.
 | I | Area Assessment scoring | **No numeric composite.** Bands, confidence, and gaps per indicator; the human ranks | §5.6 — enforced: the product has no score field; three cell states |
 | J | Raw signal retention | **90 days**; anything cited by a product lives as long as the product; the ledger is forever | §5.4 — not yet built |
 | K | Collection cadence | **Per source, operator-adjustable**, all options exposed; shipped defaults are starting points, not rules | §5.3 — not yet built |
-| L | Inbound SMS replies | **The check-in link is enough for v1**; a Twilio inbound webhook (a "SAFE" text clears the row) comes with a public deploy | §8 — not yet built |
-| M | Escalation timer | **15 minutes** with no response → auto-flag UNREACHABLE and float the name to the top of the call list | §8 — not yet built |
-| N | Roster edits | **Anyone on the floor may add a missed name** (visitor, contractor); tagged `basis: manual` and logged | §8 — not yet built |
+| L | Inbound SMS replies | **The check-in link is enough for v1**; a Twilio inbound webhook (a "SAFE" text clears the row) comes with a public deploy | §8 — built: `POST /v1/cop/comms/sms/inbound` (SAFE / HELP / INJURED by phone; Twilio-signed when configured, a simulator otherwise) |
+| M | Escalation timer | **15 minutes** with no response → auto-flag UNREACHABLE and float the name to the top of the call list | §8 — enforced: a one-minute clock runs `escalate_due`; flagged rows carry `rule:escalation-15m`; unreachable and needs-assist sort first |
+| N | Roster edits | **Anyone on the floor may add a missed name** (visitor, contractor); tagged `basis: manual` and logged | §8 — built: `POST /v1/cop/incidents/{id}/roster`; a visitor becomes a `manual` person on the site's team |
 | O | Workbench build order | **Design the case graph now** (it shapes `Report`/`Case`); build the views after requirements, collection plan, Area Assessment | §5.11 |
 | P | Extracted links | **Suggested until an analyst confirms**; source grade visible on every edge; no line without a citation | §5.11 |
 | Q | Case access | **Battle Captain or S2 lead opens a case on a person**; viewing role-gated; **every read on the ledger** | §5.11 |
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.15** — S6 decisions L–N built: inbound SMS webhook, 15-minute escalation rule, manual roster adds.
 - **v3.14** — collectors: USGS, NWS, WHO DON, State Dept, FCDO live and keyless; ACLED and CLSTR behind keys; Nager.Date holiday baseline; country-scoped reporting attaches to requirements by country. ReliefWeb and GDELT deferred with reasons.
 - **v3.13** — INTSUM built (§5.6, Decision G): a fixed-order diff since the last one, fixed-hour draft, Battle Captain release.
 - **v3.12** — Area Assessment built (§5.6): candidates side by side, reported / quiet / gap cells, refuse-to-approve; stale rulings in §5.6 replaced with G and I.
