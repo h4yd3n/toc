@@ -107,3 +107,14 @@ export interface PlanRow { indicator: string; label: string; covered: boolean; s
 export interface Plan { requirement_id: string; indicators: PlanRow[]; covered: number; total: number; gaps: string[]; coverage_pct: number }
 export interface Coverage { requirements: number; fully_covered: number; avg_coverage_pct: number; gaps: { indicator: string; label: string; requirements_affected: number; recommended_sources: { id: string; name: string; access: string; built: boolean }[] }[] }
 export interface SourceInfo { id: string; name: string; indicators: string[]; access: string; reliability: string; cadence: string; built: boolean; enabled: boolean; configured: boolean; last_collected_at: string | null; last_result: string | null; cadences: string[] }
+
+// §5.10 / §5.11 — organic reports and the case graph
+export interface Evidence { report_id: string; quote: string; source: string; reliability: string; credibility: number; at: string | null }
+export interface CaseEntity { id: string; type: string; name: string; aliases: string[]; status: 'suggested' | 'confirmed' | 'rejected'; evidence: Evidence[]; decided_by: string | null }
+export interface CaseRel { id: string; from: string; to: string; type: string; status: 'suggested' | 'confirmed' | 'rejected'; grade: string; evidence: Evidence[]; from_name?: string; to_name?: string; first_seen: string | null; last_seen: string | null }
+export interface CaseEvent { id: string; at: string | null; place: string | null; type: string; summary: string; participants: string[]; status: 'suggested' | 'confirmed' | 'rejected'; evidence: Evidence[] }
+export interface Report { id: string; kind: string; reported_by: string; reporter_role: string; at: string; place: string | null; text: string; case_id: string | null; grade: string; source: string }
+export interface Case { id: string; title: string; kind: 'general' | 'person' | 'site' | 'actor'; subject_type: string | null; subject_id: string | null; summary: string; status: 'open' | 'closed'
+  opened_by: string; opened_at: string; closed_at: string | null; access_roles: string[]; entities?: number; relationships?: number; events?: number; pending_review?: number }
+export interface CaseDetail extends Case { graph: { entities: CaseEntity[]; relationships: CaseRel[]; events: CaseEvent[] }; reports: Report[]; analysis: { links: string[]; pattern: string } }
+export interface Queue { case_id: string; entities: CaseEntity[]; relationships: CaseRel[]; events: CaseEvent[]; total: number }

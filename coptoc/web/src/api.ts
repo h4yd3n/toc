@@ -1,4 +1,4 @@
-import type { Snapshot } from './types'
+import type { Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -42,3 +42,12 @@ export const createDirected = (body: { place: string; lat: number; lon: number; 
 export const updateRequirement = (id: string, body: { status?: string; priority?: number; indicators?: string[] }) => req<Requirement>('PATCH', `/v1/s2/requirements/${id}`, body)
 export const listSources = () => req<SourceInfo[]>('GET', '/v1/s2/sources')
 export const updateSource = (id: string, body: { enabled?: boolean; cadence?: string; reliability?: string }) => req<SourceInfo>('PATCH', `/v1/s2/sources/${id}`, body)
+export const listCases = () => req<Case[]>('GET', '/v1/s2/cases')
+export const openCase = (body: { title: string; kind: string; subject_type?: string; subject_id?: string; summary?: string }) => req<Case>('POST', '/v1/s2/cases', body)
+export const getCase = (id: string) => req<CaseDetail>('GET', `/v1/s2/cases/${id}`)
+export const getQueue = (id: string) => req<Queue>('GET', `/v1/s2/cases/${id}/queue`)
+export const decide = (caseId: string, kind: 'entity' | 'relationship' | 'event', id: string, decision: 'confirm' | 'reject', note?: string) => req<{ status: string }>('POST', `/v1/s2/cases/${caseId}/decide`, { kind, id, decision, note })
+export const mergeEntity = (caseId: string, id: string, into: string) => req<CaseEntity>('POST', `/v1/s2/cases/${caseId}/entities/${id}/merge`, { into })
+export const closeCase = (id: string) => req<Case>('PATCH', `/v1/s2/cases/${id}/close`)
+export const fileReport = (body: { text: string; kind: string; reported_by: string; reporter_role?: string; place?: string; case_id?: string; lat?: number; lon?: number }) => req<Report & { extracted: { entities: number; relationships: number; events: number } | null }>('POST', '/v1/s2/reports', body)
+export const listReports = (caseId?: string) => req<Report[]>('GET', caseId ? `/v1/s2/reports?case_id=${caseId}` : '/v1/s2/reports')

@@ -63,7 +63,7 @@ CATALOG: List[Dict[str, Any]] = [
     {"id": "opensanctions","name": "OpenSanctions",              "indicators": ["targeted"],                    "access": "free",          "reliability": "B", "cadence": "weekly",  "built": False},
     {"id": "osac",        "name": "OSAC",                        "indicators": ["crime", "advisory", "targeted"], "access": "login",       "reliability": "A", "cadence": "daily",   "built": False},
     {"id": "commercial",  "name": "Flashpoint · Dataminr · Recorded Future", "indicators": ["targeted", "crime", "civil_unrest"], "access": "paid", "reliability": "B", "cadence": "continuous", "built": False},
-    {"id": "ops",         "name": "Organic reports (our own people)", "indicators": ["crowd", "transit", "infrastructure", "targeted", "civil_unrest"], "access": "internal", "reliability": "A", "cadence": "continuous", "built": False},
+    {"id": "ops",         "name": "Organic reports (our own people)", "indicators": ["crowd", "transit", "infrastructure", "targeted", "civil_unrest"], "access": "internal", "reliability": "A", "cadence": "continuous", "built": True},
 ]
 CADENCES = ["manual", "hourly", "every few hours", "daily", "weekly", "continuous", "on demand"]  # Decision K: operator-adjustable
 
@@ -104,7 +104,7 @@ class SourceStateRow(Base):
 def _configured(source_id: str) -> bool:
     """Whether the source can actually be collected from right now — built, and keyed if it needs a key."""
     import os
-    if source_id == "gdacs":
+    if source_id in ("gdacs", "ops"):
         return True
     if source_id == "clstr":
         return bool(os.environ.get("CLSTR_API_KEY"))

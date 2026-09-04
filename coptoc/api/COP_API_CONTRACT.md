@@ -150,6 +150,23 @@ Mounted in the COP app (the wall's S2 panel) **and** runnable standalone: `make 
 
 Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `req_evt_<event>`; a trip's requirement expires when the trip is cancelled or its window passes. Directed places count as blue-force points for collection relevance.
 
+## 3.3 Sigtoc — organic reports and cases (`/v1/s2`, PRD §5.10 #1–2, §5.11)
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/s2/reports` | `text, kind (spot/sitrep/note), reported_by, reporter_role?, at?, lat?, lon?, place?, case_id?, credibility?` — roles security / ep / ea / analyst / battle_captain | a SPOTREP from our own people: `source: ops`, reliability A, credibility 2 by default. With `case_id`, extraction runs and the response carries `extracted {entities, relationships, events, evidence_added}`. Ledger `s2.report.filed` |
+| `GET` | `/s2/reports?case_id=` | | reports, newest first |
+| `GET` | `/s2/cases` | | only the cases the caller's role may read, with counts and `pending_review` |
+| `POST` | `/s2/cases` | `title, kind (general/person/site/actor), subject_type?, subject_id?, summary?` — roles battle_captain / analyst (Decision Q) | ledger `s2.case.opened` with `on_person` |
+| `GET` | `/s2/cases/{id}` | | the case, its graph (suggested + confirmed), its reports, and `analysis {links[], pattern}`. **Every read is on the ledger** (`s2.case.read`) |
+| `GET` | `/s2/cases/{id}/queue` | | the review queue: every `suggested` entity, relationship (with names), and event, each with `evidence[] {report_id, quote, reliability, credibility}` |
+| `POST` | `/s2/cases/{id}/decide` | `kind (entity/relationship/event), id, decision (confirm/reject), note?` — battle_captain / analyst | ledger `s2.case.confirmed` / `s2.case.rejected` |
+| `POST` | `/s2/cases/{id}/entities/{eid}/merge` | `into` | the analyst says two entities are one; aliases kept, evidence and edges moved. Ledger `s2.case.merged` |
+| `GET` | `/s2/cases/{id}/views?entity_id=&confirmed_only=` | | data for the three views: `link_chart {nodes, edges[grade, status, dashed]}`, `timeline[]`, `time_wheel {grid 7×24, peak, pattern}` |
+| `PATCH` | `/s2/cases/{id}/close` | | ledger `s2.case.closed` |
+
+Extraction (Decision P) only suggests. Without `ANTHROPIC_API_KEY` it is a cited heuristic: capitalized names and initials, `@handles`, phone numbers, emails, plates after "plate"/"reg", and an `associate` link when two people share a sentence with an association word. With the key, the model (`TOC_MODEL`, default `claude-opus-5`) returns the same shape with an exact quote per item; anything without a quote is dropped. Every item's evidence carries the report's grade, so a relationship's `grade` is the best reliability and credibility among its citations.
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.

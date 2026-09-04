@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.1
+**Version:** 3.11
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -291,8 +291,8 @@ follow from that, none of which the wall has yet.
 
 | # | Requirement | Military analog | Corporate form | Section | Status |
 | :-- | :--- | :--- | :--- | :--- | :--- |
-| 1 | **Organic reporting is a first-class source.** Our own people report what they see, and S2 treats it as reporting from the most reliable source there is. | SPOTREP / SITREP from the unit | A security officer in the SF lobby reports a crowd forming; an EP agent reports the route is blocked; a traveler's check-in note. Each is a `Report` with who, where, when, what — and it is a Sigtoc source (`source: ops`, reliability graded like any other, typically A). | S3 → S2 | **[NEXT]** — the check-in note is the seed; the `Report` object does not exist |
-| 2 | **Cases that live for months.** S2 tracks a thing over time, accumulating evidence, with assessments that version rather than replace. | The target folder | A recurring protest group at HQ; a persistent online threat actor naming the company; a fixation case against an executive. A `Case` holds evidence and every assessment ever made on it. Threats are events; a case is the thread through them. | S2 | **[NEXT]** — threats and assessments exist; nothing persists across them |
+| 1 | **Organic reporting is a first-class source.** Our own people report what they see, and S2 treats it as reporting from the most reliable source there is. | SPOTREP / SITREP from the unit | A security officer in the SF lobby reports a crowd forming; an EP agent reports the route is blocked; a traveler's check-in note. Each is a `Report` with who, where, when, what — and it is a Sigtoc source (`source: ops`, reliability graded like any other, typically A). | S3 → S2 | **[BUILT]** — `Report` (SPOTREP / SITREP / note) filed from the wall by security, EP, EA, analyst, or Battle Captain; `source: ops`, reliability A, credibility 2 until corroborated; filed into a case it runs extraction |
+| 2 | **Cases that live for months.** S2 tracks a thing over time, accumulating evidence, with assessments that version rather than replace. | The target folder | A recurring protest group at HQ; a persistent online threat actor naming the company; a fixation case against an executive. A `Case` holds evidence and every assessment ever made on it. Threats are events; a case is the thread through them. | S2 | **[BUILT]** — `Case` (general / person / site / actor) holding reports, the graph, and the review queue; person cases need the Battle Captain or S2; every read on the ledger |
 | 3 | **A product hands off to an operation.** When an assessment is strong enough, Ops plans the response and resources it. | Target package → OPORD | An approved assessment on the Vegas keynote becomes an `Operation`: tasks (advance the venue, vet transport, brief the principal), assignments (EP team, local vendor), and resource asks (S4: vehicles, kit). The wall shows the operation's status against the event. | S2 → S3 (S4 for resources) | **[LATER]** — the wall has events and trips, not plans |
 | 4 | **Dissemination is tracked.** "Right people, right time" is a measurable: who a product went to, when, and whether they acknowledged it. | Distribution list and read-back | Every product carries recipients and acknowledgements; latency from `observed_at` → published → acknowledged is on the record. A warning nobody read is a failure the ledger should show. | S2 → S6 | **[NEXT]** — products exist; recipients and acknowledgements do not |
 
@@ -351,7 +351,7 @@ suggested until confirmed.
 **Not in scope.** Ingesting a platform's full event firehose; bulk data fusion; anything that competes with Gotham on
 volume. Cases are case-sized. The value is provenance on every line, not scale.
 
-**Status:** **[NEXT]** model with `Report`/`Case`; **[LATER]** extraction and the three views.
+**Status:** **[BUILT]** model with `Report`/`Case`, entities / relationships / events with evidence on every line, suggest→confirm review queue, analyst-decided alias merges, and the data for all three views (`/cases/{id}/views`: link chart nodes and edges with grade and status, timeline, 7×24 time wheel with the pattern stated as a sentence). Extraction is a cited heuristic (names, handles, plates, phones, emails, association in one sentence) with the model path behind `ANTHROPIC_API_KEY`. **[NEXT]** the pictures themselves; extraction from collected signals, not only reports.
 
 ### 5.9 Decisions for §5 (2026-09-02)
 
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.11** — `Report`/`Case` and the case graph built (§5.10 #1–2, §5.11); the review queue is the v1 workbench.
 - **v3.10** — Sigtoc requirements, the self-generating collection plan, sources as operator settings, `/v1/s2` embedded and standalone; domains recorded.
 - **v3.9** — the watch built: shift model, estimate lines on every panel, the brief, handover/acknowledge on the ledger (web + API; iOS read-only).
 - **v3.8** — the watch (§3.1): shift model, panels as running estimates with owned assessment lines, the shift change brief, handover on the ledger; decisions S–V.

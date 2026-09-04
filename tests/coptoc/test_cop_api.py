@@ -293,7 +293,10 @@ def test_take_handover_acknowledge_transfers_the_watch(client):
     assert client.get("/v1/cop/watch").json()["status"] == "pending_ack"
     assert client.post("/v1/cop/watch/handover", json={}, headers=BC).status_code == 409
     # Incoming acknowledges → the watch transfers, both names on the ledger, the next slot is now held
-    r = client.post("/v1/cop/watch/acknowledge", json={"battle_captain": "T. Whitfield"}, headers=BC)
+    # If the clock happens to be inside the slot's overlap window, the seed events count as arrivals during handover
+    # and must be acknowledged one by one (that rule is tested on its own below); acknowledge whatever the brief requires
+    required = client.get("/v1/cop/watch/brief").json()["acknowledgement"]["required_item_ids"]
+    r = client.post("/v1/cop/watch/acknowledge", json={"battle_captain": "T. Whitfield", "acknowledged_item_ids": required}, headers=BC)
     assert r.status_code == 200, r.text
     assert r.json()["now_holding"]["battle_captain"] == "T. Whitfield" and r.json()["now_holding"]["status"] == "open"
     log = client.get("/v1/cop/log", params={"limit": 20}).json()

@@ -209,7 +209,36 @@ async def seed_if_empty(session: AsyncSession) -> bool:
     await reseed(session)
     return True
 
+# §5.10/5.11 demo: a site-security case with two synthetic SPOTREPs. Names, plates, handles, and numbers are invented.
+CASE_REPORTS = [
+    (2, "guard_07", "site security", "north gate, SF HQ",
+     "Observed Marcus Vane at the north gate at 21:40 talking to Dana Ortiz. Vane was in a grey sedan, plate 7ABC123. "
+     "He mentioned the account @vane_ops and gave the number +1 415 555 0142. Both left together toward Market Street."),
+    (1, "guard_03", "site security", "north gate, SF HQ",
+     "M. Vane seen again with Dana Ortiz at the north gate, on foot, photographing the loading dock. Left when approached."),
+]
+
+
+async def _seed_case(session: AsyncSession, now: datetime) -> None:
+    from sigtoc.cases import CaseEventRow, CaseRow, EntityRow, RelationshipRow, ReportRow, file_report_into_case
+    for model in (CaseEventRow, RelationshipRow, EntityRow, ReportRow, CaseRow):
+        for row in (await session.execute(select(model))).scalars():
+            await session.delete(row)
+    await session.flush()
+    case = CaseRow(id="case_seed_gate", title="North gate loiterer", kind="person", subject_type="location", subject_id="loc_sf",
+                   summary="Two sightings of the same pair at the SF HQ north gate; second time photographing the dock.", opened_by="S2 duty analyst", opened_at=now - timedelta(hours=25))
+    session.add(case); await session.flush()
+    for i, (days_ago, who, role, place, text) in enumerate(CASE_REPORTS):
+        at = (now - timedelta(days=days_ago)).replace(hour=21, minute=40 + 10 * i, second=0, microsecond=0)  # the hour the report text names
+        r = ReportRow(id=f"rpt_seed_{i + 1}", kind="spot", reported_by=who, reporter_role=role, at=at, lat=37.7897, lon=-122.3989, place=place,
+                      text=text, case_id=case.id, filed_at=at + timedelta(minutes=6))
+        session.add(r); await session.flush()
+        known = [e.name for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == case.id))).scalars()]
+        await file_report_into_case(session, r, case, known)
+
+
 async def reseed(session: AsyncSession) -> None:
+    await _seed_case(session, now_utc())
     for model in (AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)

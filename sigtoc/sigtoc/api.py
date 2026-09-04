@@ -1,5 +1,6 @@
 """Sigtoc's own API (Decision 3a). Mounted into the COP app under /v1/s2 and runnable standalone: `make run-s2`."""
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
@@ -12,6 +13,8 @@ from shared.database import async_session_factory, create_engine, init_db
 from shared.ledger import AsyncDatabaseEventLedger
 from . import requirements as R
 from .requirements import CADENCES, CATALOG, INDICATORS, RequirementRow, SourceStateRow
+from . import cases as C
+from .cases import CaseEventRow, CaseRow, EntityRow, RelationshipRow, ReportRow
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
 
@@ -183,6 +186,200 @@ async def query(lat: float = Query(...), lon: float = Query(...), radius_km: flo
             "threats": [{"id": t.id, "title": t.title, "severity": t.severity, "source": t.source, "confidence": t.confidence, "synthetic": t.synthetic,
                          "observed_at": t.observed_at.isoformat() + "Z", "distance_km": round(haversine_km(lat, lon, t.lat, t.lon), 1)} for t in threats],
             "requirements": [R.to_dict(r, R.plan_for(r, cat)) for r in reqs]}
+
+
+# ---------------------------------------------------------------- §5.10 reports, §5.11 cases
+
+CASE_OPENERS = {"battle_captain", "analyst"}  # Decision Q: "Battle Captain or S2 lead"
+REPORT_FILERS = {"battle_captain", "security", "analyst", "ea", "ep"}
+
+
+class ReportCreate(BaseModel):
+    text: str
+    kind: Literal["spot", "sitrep", "note"] = "spot"
+    reported_by: str
+    reporter_role: str = ""
+    at: Optional[datetime] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    place: Optional[str] = None
+    case_id: Optional[str] = None
+    credibility: int = Field(2, ge=1, le=6)
+
+class CaseCreate(BaseModel):
+    title: str
+    kind: Literal["general", "person", "site", "actor"] = "general"
+    subject_type: Optional[str] = None
+    subject_id: Optional[str] = None
+    summary: str = ""
+
+class Decision(BaseModel):
+    kind: Literal["entity", "relationship", "event"]
+    id: str
+    decision: Literal["confirm", "reject"]
+    note: Optional[str] = None
+
+class Merge(BaseModel):
+    into: str
+
+
+async def _read_logged(case: CaseRow, role: Optional[str], actor: Optional[str]) -> None:
+    allowed = set(case.access_roles.split(","))
+    if (role or "").lower() not in allowed:
+        raise HTTPException(403, f"Case {case.id} is readable by {sorted(allowed)}; you are {role or 'unspecified'}")
+    await ledger().append_event(content_id=case.id, event_type="s2.case.read", actor_type="human", actor_id=actor or "unspecified", reason=f"{case.title} read")
+
+
+@router.post("/reports", status_code=201)
+async def file_report(body: ReportCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """An organic report — our own people saying what they see. Filed into a case if one is named; extraction runs and
+    everything it finds is suggested to the analyst."""
+    if (x_toc_role or "").lower() not in REPORT_FILERS:
+        raise HTTPException(403, "Filing a report needs a security, EP, analyst, EA, or Battle Captain role")
+    now = R.now_utc()
+    r = ReportRow(id=f"rpt_{uuid.uuid4().hex[:8]}", kind=body.kind, reported_by=body.reported_by, reporter_role=body.reporter_role, at=naive(body.at) or now,
+                  lat=body.lat, lon=body.lon, place=body.place, text=body.text.strip(), case_id=body.case_id, credibility=body.credibility, filed_at=now)
+    session.add(r); await session.commit()
+    extracted = None
+    if body.case_id:
+        case = await session.get(CaseRow, body.case_id)
+        if not case: raise HTTPException(404, "case not found")
+        known = [e.name for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == case.id, EntityRow.status == "confirmed"))).scalars()]
+        extracted = await C.file_report_into_case(session, r, case, known)
+    await ledger().append_event(content_id=body.case_id or r.id, event_type="s2.report.filed", actor_type="human", actor_id=x_toc_actor or body.reported_by,
+                                reason=f"{body.kind.upper()} from {body.reported_by}: {r.text[:100]}" + (f" — suggested {extracted['entities']} entities, {extracted['relationships']} links, {extracted['events']} events" if extracted else ""),
+                                metadata={"report_id": r.id, "grade": f"{r.reliability}{r.credibility}", **(extracted or {})})
+    return {**C.report_dict(r), "extracted": extracted}
+
+
+@router.get("/reports")
+async def list_reports(case_id: Optional[str] = None, limit: int = 50, session: AsyncSession = Depends(get_session)):
+    q = select(ReportRow).order_by(ReportRow.at.desc()).limit(limit)
+    if case_id: q = q.where(ReportRow.case_id == case_id)
+    return [C.report_dict(r) for r in (await session.execute(q)).scalars()]
+
+
+@router.get("/cases")
+async def list_cases(status: Optional[str] = None, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None)):
+    rows = (await session.execute(select(CaseRow).order_by(CaseRow.opened_at.desc()))).scalars().all()
+    out = []
+    for c in rows:
+        if status and c.status != status: continue
+        if (x_toc_role or "").lower() not in set(c.access_roles.split(",")): continue  # you don't see cases you can't read
+        ents = (await session.execute(select(EntityRow).where(EntityRow.case_id == c.id, EntityRow.merged_into.is_(None)))).scalars().all()
+        rels = (await session.execute(select(RelationshipRow).where(RelationshipRow.case_id == c.id))).scalars().all()
+        evs = (await session.execute(select(CaseEventRow).where(CaseEventRow.case_id == c.id))).scalars().all()
+        pending = sum(1 for x in list(ents) + list(rels) + list(evs) if x.status == "suggested")
+        out.append(C.case_dict(c, {"entities": len(ents), "relationships": len(rels), "events": len(evs), "pending_review": pending}))
+    return out
+
+
+@router.post("/cases", status_code=201)
+async def open_case(body: CaseCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    role = (x_toc_role or "").lower()
+    if role not in CASE_OPENERS:
+        raise HTTPException(403, f"Opening a case needs {sorted(CASE_OPENERS)}; you are {role or 'unspecified'}")
+    now = R.now_utc()
+    c = CaseRow(id=f"case_{uuid.uuid4().hex[:8]}", title=body.title, kind=body.kind, subject_type=body.subject_type, subject_id=body.subject_id, summary=body.summary,
+                opened_by=x_toc_actor or role, opened_at=now)
+    session.add(c); await session.commit()
+    await ledger().append_event(content_id=c.id, event_type="s2.case.opened", actor_type="human", actor_id=x_toc_actor or role, new_state="open",
+                                reason=f"{body.kind} case: {body.title}" + (f" on {body.subject_type} {body.subject_id}" if body.subject_id else ""),
+                                metadata={"kind": body.kind, "on_person": body.kind == "person" or body.subject_type == "person"})
+    return C.case_dict(c)
+
+
+@router.get("/cases/{case_id}")
+async def get_case(case_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Every read is on the ledger (Decision Q)."""
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    await _read_logged(c, x_toc_role, x_toc_actor)
+    g = await C.case_graph(session, case_id)
+    reports = [C.report_dict(r) for r in (await session.execute(select(ReportRow).where(ReportRow.case_id == case_id).order_by(ReportRow.at))).scalars()]
+    pending = [x for x in g["entities"] + g["relationships"] + g["events"] if x["status"] == "suggested"]
+    return {**C.case_dict(c, {"pending_review": len(pending)}), "graph": g, "reports": reports,
+            "analysis": {"links": C.link_summary(g), "pattern": C.time_wheel(g["events"])["pattern"]}}
+
+
+@router.get("/cases/{case_id}/queue")
+async def review_queue(case_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The officer's v1 workbench: every suggested fact with its citation — confirm, reject, or merge."""
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    await _read_logged(c, x_toc_role, x_toc_actor)
+    g = await C.case_graph(session, case_id, include=("suggested",))
+    names = {e["id"]: e["name"] for e in (await C.case_graph(session, case_id))["entities"]}
+    return {"case_id": case_id,
+            "entities": g["entities"],
+            "relationships": [{**r, "from_name": names.get(r["from"]), "to_name": names.get(r["to"])} for r in g["relationships"]],
+            "events": g["events"], "total": len(g["entities"]) + len(g["relationships"]) + len(g["events"])}
+
+
+@router.post("/cases/{case_id}/decide")
+async def decide(case_id: str, body: Decision, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    if (x_toc_role or "").lower() not in CASE_OPENERS:
+        raise HTTPException(403, "Confirming or rejecting evidence is the analyst's or the Battle Captain's")
+    model = {"entity": EntityRow, "relationship": RelationshipRow, "event": CaseEventRow}[body.kind]
+    row = await session.get(model, body.id)
+    if not row or row.case_id != case_id: raise HTTPException(404, f"{body.kind} not found in this case")
+    old = row.status
+    row.status = "confirmed" if body.decision == "confirm" else "rejected"
+    row.decided_by, row.decided_at = x_toc_actor or x_toc_role, R.now_utc()
+    await session.commit()
+    label = getattr(row, "name", None) or getattr(row, "summary", None) or f"{row.from_id}→{row.to_id}"
+    await ledger().append_event(content_id=case_id, event_type=f"s2.case.{body.decision}ed", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=row.status,
+                                reason=f"{body.kind} {body.decision}ed: {str(label)[:100]}" + (f" — {body.note}" if body.note else ""), metadata={"kind": body.kind, "id": body.id})
+    return {"kind": body.kind, "id": body.id, "status": row.status}
+
+
+@router.post("/cases/{case_id}/entities/{entity_id}/merge")
+async def merge_entity(case_id: str, entity_id: str, body: Merge, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Alias resolution, decided by a human: this entity is the same as that one. Evidence and edges move; the alias is kept."""
+    if (x_toc_role or "").lower() not in CASE_OPENERS: raise HTTPException(403, "Merging is the analyst's call")
+    a, b = await session.get(EntityRow, entity_id), await session.get(EntityRow, body.into)
+    if not a or not b or a.case_id != case_id or b.case_id != case_id or a.id == b.id: raise HTTPException(404, "entities not found in this case")
+    aliases = set(json.loads(b.aliases_json or "[]")) | {a.name} | set(json.loads(a.aliases_json or "[]"))
+    b.aliases_json = json.dumps(sorted(aliases))
+    b.evidence_json = json.dumps(json.loads(b.evidence_json or "[]") + json.loads(a.evidence_json or "[]"))
+    for r in (await session.execute(select(RelationshipRow).where(RelationshipRow.case_id == case_id))).scalars():
+        if r.from_id == a.id: r.from_id = b.id
+        if r.to_id == a.id: r.to_id = b.id
+    for v in (await session.execute(select(CaseEventRow).where(CaseEventRow.case_id == case_id))).scalars():
+        parts = json.loads(v.participants_json or "[]")
+        if a.id in parts: v.participants_json = json.dumps([b.id if p == a.id else p for p in parts])
+    a.merged_into, a.status = b.id, "rejected"
+    await session.commit()
+    await ledger().append_event(content_id=case_id, event_type="s2.case.merged", actor_type="human", actor_id=x_toc_actor or x_toc_role,
+                                reason=f"'{a.name}' merged into '{b.name}' (alias)", metadata={"from": a.id, "into": b.id})
+    return C.entity_dict(b)
+
+
+@router.get("/cases/{case_id}/views")
+async def case_views(case_id: str, entity_id: Optional[str] = None, confirmed_only: bool = False, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The data behind the three views (§5.11): link chart (nodes/edges with grade and status), timeline, time wheel."""
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    await _read_logged(c, x_toc_role, x_toc_actor)
+    g = await C.case_graph(session, case_id, include=("confirmed",) if confirmed_only else ("suggested", "confirmed"))
+    return {"case_id": case_id,
+            "link_chart": {"nodes": [{"id": e["id"], "label": e["name"], "type": e["type"], "status": e["status"]} for e in g["entities"]],
+                           "edges": [{"id": r["id"], "from": r["from"], "to": r["to"], "type": r["type"], "status": r["status"], "grade": r["grade"], "dashed": r["status"] != "confirmed"} for r in g["relationships"]]},
+            "timeline": [{"id": v["id"], "at": v["at"], "summary": v["summary"], "participants": v["participants"], "status": v["status"], "place": v["place"]} for v in g["events"]],
+            "time_wheel": C.time_wheel(g["events"], entity_id),
+            "analysis": {"links": C.link_summary(g), "pattern": C.time_wheel(g["events"], entity_id)["pattern"]}}
+
+
+@router.patch("/cases/{case_id}/close")
+async def close_case(case_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    if (x_toc_role or "").lower() not in CASE_OPENERS: raise HTTPException(403, "Closing a case is the analyst's or the Battle Captain's")
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    c.status, c.closed_at = "closed", R.now_utc(); await session.commit()
+    await ledger().append_event(content_id=case_id, event_type="s2.case.closed", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state="open", new_state="closed", reason=f"{c.title} closed")
+    return C.case_dict(c)
 
 
 def standalone_app() -> FastAPI:

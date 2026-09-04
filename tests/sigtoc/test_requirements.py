@@ -17,6 +17,9 @@ def client():
         c.post("/v1/cop/seed")
         # seed replaces the wall; resync so standing requirements reflect it
         c.post("/v1/s2/requirements/sync", json=c.get("/v1/cop/snapshot", params={"restricted": "true"}, headers={"X-TOC-Role": "battle_captain"}).json())
+        # these tests exercise the catalogue with GDACS as the only live feed; organic reporting (built, always on) is
+        # switched off here so the coverage numbers stay about the external sources — see test_organic_reporting_counts
+        c.patch("/v1/s2/sources/ops", json={"enabled": False})
         yield c
 
 def iso(dt): return dt.astimezone(timezone.utc).isoformat()
@@ -97,3 +100,16 @@ def test_sigtoc_runs_standalone(client):
     with TestClient(s2app) as s2:
         assert s2.get("/v1/health").json()["service"] == "sigtoc"
         assert len(s2.get("/v1/s2/requirements").json()) >= 20
+
+
+def test_organic_reporting_counts_as_a_source(client):
+    """Our own people are a tasked source (the guards are told what to look for), reliability A, and cover the human indicators."""
+    client.patch("/v1/s2/sources/ops", json={"enabled": True})
+    try:
+        p = client.get("/v1/s2/requirements/req_loc_loc_sf/plan").json()
+        by = {i["indicator"]: i for i in p["indicators"]}
+        assert by["targeted"]["covered"] is True and by["targeted"]["sources"][0]["id"] == "ops" and by["targeted"]["sources"][0]["reliability"] == "A"
+        assert by["natural_hazard"]["sources"][0]["id"] == "gdacs"  # ops doesn't pretend to watch earthquakes
+        assert p["covered"] > 1
+    finally:
+        client.patch("/v1/s2/sources/ops", json={"enabled": False})

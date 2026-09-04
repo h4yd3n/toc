@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import MapView from './MapView'
 import { BriefPanel, EstimateLine, WatchChip } from './Watch'
 import { RequirementsPanel } from './Requirements'
+import { CasesPanel } from './Cases'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -137,6 +138,7 @@ export default function App() {
         </PanelHead>
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
         <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} />
+        <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
         <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>
         <ul className="list">
           {snap?.threats.map(t => (
