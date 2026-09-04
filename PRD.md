@@ -271,6 +271,7 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | Severe weather (US) | NWS / NOAA alerts | free, keyless | **[NEXT]** |
 | Humanitarian / conflict situation | ReliefWeb API | free, keyless | **[NEXT]** |
 | Civil unrest, political violence | ACLED · GDELT | free key · free | **[NEXT]** |
+| Clustered news events by country, with timelines | CLSTR (clstr.news) — a new, single-maintainer service; multi-source clusters and "situations", ~30–90 min behind the wires by design | free key, 100 req/day, 7-day history | **[NEXT]** trial — source reliability **F** until it earns a grade; its significance score is theirs, never ours |
 | Health notices | WHO Disease Outbreak News | free RSS | **[NEXT]** |
 | Travel advisories | State Dept per-country RSS · FCDO | free | **[NEXT]** — the State Dept JSON endpoint is dead |
 | Baseline for an unfamiliar place | Wikidata · Nager.Date holidays · NOAA climate normals | free | **[NEXT]** for Area Assessment |
