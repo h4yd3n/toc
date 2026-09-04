@@ -167,7 +167,7 @@ is drawn from the same picture the INTSUM summarizes.
 
 **Aggregation.** Every location reports: people assigned, people present, security on shift, VIPs present. These roll up into clusters when zoomed out.
 
-**[NEXT]:** real-time check-in (a person confirms where they are), last-known-position freshness, off-duty vs. unreachable states.
+**[BUILT]:** real-time check-in and last-known-position freshness (12 h window, Decision 2). **[NEXT]:** off-duty vs. unreachable as distinct states.
 
 ---
 
@@ -363,7 +363,7 @@ All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a
 
 **[TONIGHT] — travel.** A trip has a traveler, an origin, a destination (a location or a raw coordinate), departure and return times, a purpose, and a status (planned / active / complete). An active trip moves the traveler's pin. The S3 timeline shows active and upcoming travel.
 
-**[NEXT] — events.** A corporate event has a venue, a time window, and attendees. Two months out it's on the calendar so S2 can assess threats against it and S1 can plan security coverage. Attending VIPs each get a trip generated.
+**[BUILT] — events.** A corporate event has a venue, a time window, and attendees. Two months out it's on the calendar so S2 can assess threats against it and S1 can plan security coverage. Attending VIPs each get a trip generated.
 
 **[LATER]** — long-range planning view, security coverage assignment per event.
 
@@ -473,7 +473,7 @@ The native apps are native for a reason: the map has to be fluid and the animati
 | Entity | Key fields |
 | :--- | :--- |
 | `Trip` | `id`, `person_id`, `origin_location_id`, `dest_location_id` or `dest_lat`/`dest_lon`/`dest_name`, `depart_at`, `return_at`, `purpose`, `status` |
-| `Event` **[NEXT]** | `id`, `name`, `venue_location_id`, `start_at`, `end_at`, `attendee_ids` |
+| `Event` **[BUILT]** | `id`, `name`, `venue_location_id`, `start_at`, `end_at`, `attendee_ids` |
 
 **S2 (placeholder):**
 
@@ -503,7 +503,7 @@ COP never writes back to a source system.
 | S2 | Country and city advisories | State Dept, FCDO, OSAC | State Dept + FCDO **[BUILT]** live, country-scoped; OSAC **[LATER]** (login) |
 | S2 | Civil unrest, crime, conflict events | ACLED, GDELT, news RSS | ACLED **[BUILT]** (key); CLSTR **[BUILT]** (key); GDELT **[LATER]** |
 | S2 | Targeted threats, online chatter | Commercial intel (Flashpoint, Recorded Future, Dataminr) | **[LATER]** premium connectors |
-| S6 | Contact channel | Phone/SMS (Twilio), Slack, mass-notification (Everbridge) | tel: links **[BUILT]** — outbound **[LATER]** |
+| S6 | Contact channel | Phone/SMS (Twilio), Slack, mass-notification (Everbridge) | tel: links, outbound SMS + Slack, inbound SMS **[BUILT]** (simulated without credentials) — Everbridge **[LATER]** |
 
 **Connector rules** (from Sigtoc's collector contract):
 1. A connector returns rows shaped for the COP table, keyed by `external_id`, and the API upserts — re-running is idempotent.
