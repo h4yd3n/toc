@@ -85,3 +85,35 @@ Attach a screenshot of the current wall (`docs/wall.png`, or take one from http:
 
 Variant to try second: "Do the minimalist extreme: what is the least this wall can show and still let the watch
 officer act within five seconds of a FLASH? Then show how the rest reveals on demand."
+
+---
+
+## 3. App icon
+
+> Design an iOS and Android app icon for **TOC**, an open-source Tactical Operations Center for corporate security
+> teams — the wall a watch officer runs a 12-hour shift from: one map at the center, the staff sections around it,
+> ops and intelligence feeding each other. The author ran one of these rooms in Iraq as the intelligence officer.
+>
+> I want one idea, drawn once, that a person remembers after seeing it a single time on a home screen. Not a dot in a
+> ring, not a generic map pin, not a shield, not crosshairs, not radar, not an eagle, not a globe. One bold shape,
+> two colors at most on a dark ground, no text unless the letterform *is* the idea.
+>
+> Explore these four ideas and pick the strongest:
+> 1. **Fusion.** Two rings, blue (our people, operations) and amber (intelligence, the outside world), overlapping;
+>    the overlap is the brightest thing on the icon. That overlap is what a TOC is.
+> 2. **The wall.** A dark square divided into a coarse grid of panels with the center cell lit like a map — the room
+>    itself, seen from the watch officer's chair.
+> 3. **Shift change.** A thick ring with one clean break at twelve o'clock: the 24-hour watch, the moment the brief
+>    is handed over.
+> 4. **The letter.** A "T" built from a horizontal bar and a vertical stroke that read as a wall and its floor, or as
+>    an antenna mast; monospaced, heavy, slightly extended, with one amber accent.
+>
+> Palette: ground `#0b0f14`, blue `#3b82f6`, amber `#f59e0b`, off-white `#dce4ee`. Flat vector, hard edges, one soft
+> glow allowed, no gradients on the ground, no 3D, no bevels, no gloss. It must survive at 29 px and at 1024 px, in
+> the iOS rounded mask and inside an Android circle, and still be recognizable in monochrome.
+>
+> Show each idea as a 1024×1024 icon on a phone home screen next to Mail, Maps, and Slack so I can judge it in
+> company, then show the winner alone, large, with a two-sentence reason it will be remembered.
+
+Variant: "Same brief, but the icon must work as a single-color stamp on a black hoodie and as a 16 px favicon.
+Kill every idea that does not survive both."
