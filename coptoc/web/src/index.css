@@ -305,3 +305,4 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .srow .sname { flex: 1; } .srow.unbuilt .sname { color: var(--dim); } .srow select { padding: 2px 4px; font-size: 10px; }
 .list .row.reqrow { display: block; }  /* beat .list .row's flex */
 .list .row.rollcall { display: block; }
+.srow .sname { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .srow .small { white-space: nowrap; }
