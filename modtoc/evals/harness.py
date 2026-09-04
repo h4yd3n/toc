@@ -8,10 +8,10 @@ from modtoc.classifier.client import ClassifierClient
 from modtoc.engine.router import ModerationRouter
 
 
-def run_eval_harness(policy_path: str, golden_set_path: str) -> Dict:
+def run_eval_harness(policy_path: str, golden_set_path: str, mode: str = "heuristic") -> Dict:
     validator = PolicyValidator()
     policy = validator.validate_policy_file(policy_path)
-    router = ModerationRouter(policy)
+    router = ModerationRouter(policy, classifier=ClassifierClient(mode=mode))
 
     with open(golden_set_path, "r") as f:
         golden_set = json.load(f)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
                         help="heuristic (offline, CI) or claude (needs ANTHROPIC_API_KEY; model from MODTOC_MODEL, default claude-opus-5)")
     args = parser.parse_args()
 
-    report = run_eval_harness(args.policy, args.golden)
+    report = run_eval_harness(args.policy, args.golden, mode=args.mode)
     md = format_markdown_diff_comment(report)
     print(md)
 

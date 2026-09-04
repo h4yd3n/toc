@@ -37,7 +37,7 @@ class ModerationRouter:
 
         # Step 2: Route via matrix — unless the classifier failed, in which case we fail CLOSED:
         # limited visibility and a human review, never "allow because nothing was found".
-        if result.failed:
+        if getattr(result, "failed", False):  # duck-typed: test doubles may omit the flag
             action, target_vis, route_name = EnforcementAction.RESTRICT_VISIBILITY, VisibilityState.LIMITED, "classifier_failure_human_review"
         else:
             action, target_vis, route_name = RoutingTableGenerator.resolve_decision(
@@ -95,7 +95,7 @@ class ModerationRouter:
                 "severity": result.severity.value,
                 "confidence": result.confidence,
                 "route_instruction": route_name,
-                "classifier_failed": result.failed,
+                "classifier_failed": getattr(result, "failed", False),
             },
         )
 
