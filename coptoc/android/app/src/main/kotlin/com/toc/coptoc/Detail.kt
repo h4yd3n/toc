@@ -40,7 +40,7 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
             }
             is Selection.PersonSel -> snap.people.firstOrNull { it.id == sel.id }?.let { p ->
                 Kicker("S1 PERSON · ${p.status.uppercase().replace('_', ' ')} · ${p.teamName}"); Title((if (p.isVip) "★ " else "") + p.name); Text(p.role, color = Palette.dim, fontSize = 11.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip(if (p.positionSource == "checkin") "CHECKED IN ${"%.0f".format(p.checkinAgeH ?: 0.0)}h ago" else "DERIVED POSITION", if (p.positionSource == "checkin") Palette.green else Palette.dim); if (p.checkinStale) Chip("STALE", Palette.amber); p.incidentStatus?.let { Chip("ROLL CALL · ${it.uppercase()}", Palette.roster(it)) } }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip(p.availability.uppercase().replace('_', ' '), when (p.availability) { "unreachable" -> Palette.red; "off_duty" -> Palette.dim; else -> Palette.green }); Chip(if (p.positionSource == "checkin") "CHECKED IN ${"%.0f".format(p.checkinAgeH ?: 0.0)}h ago" else "DERIVED POSITION", if (p.positionSource == "checkin") Palette.green else Palette.dim); if (p.checkinStale) Chip("STALE", Palette.amber); p.incidentStatus?.let { Chip("ROLL CALL · ${it.uppercase()}", Palette.roster(it)) } }
                 p.lastCheckinNote?.let { KV("Last note", it) }; p.phone?.let { KV("Phone", it) }; p.email?.let { KV("Email", it) }
                 snap.trips.firstOrNull { it.id == p.tripId }?.let { t -> KV("Trip", "${t.originName} → ${t.destName} · ${t.purpose}"); t.operation?.let { KV("Operation", "${it.title} · ${it.tasksDone}/${it.tasksTotal} tasks · ${it.status}") } }
                 if (p.threatIdsInArea.isNotEmpty()) { Section("THREATS NEAR", "${p.threatIdsInArea.size}"); p.threatIdsInArea.mapNotNull { id -> snap.threats.firstOrNull { it.id == id } }.forEach { t -> Row(Modifier.clickable { store.select(Selection.ThreatSel(t.id)) }, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip(t.severity.take(3).uppercase(), Palette.severity(t.severity), filled = true); Text(t.title, color = Palette.text, fontSize = 11.sp) } } }
@@ -65,6 +65,7 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                 Stats("${e.attendeeCount} attending", "${e.vipCount} VIP", "${e.securityCount} security", "${e.tripsGenerated} trips")
                 KV("Window", "${e.startAt.take(10)} → ${e.endAt.take(10)}"); KV("Brief", e.description)
                 e.operation?.let { KV("Operation", "${it.title} · ${it.status.uppercase()} · ${it.tasksDone}/${it.tasksTotal} tasks · ${it.resourcesOpen} S4 asks open" + (it.fromProductId?.let { f -> " · from $f" } ?: "")) }
+                e.coverage?.let { KV("Coverage", "${it.assigned}/${it.required} security assigned" + (if (it.gap > 0) " · GAP ${it.gap}" else "") + " · ${it.rule}") }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Mini("DRAFT S2 ASSESSMENT", Palette.amber, !busy) { store.act("drafting") { draftAssessment("event", e.id) } } }
             }
             is Selection.IncidentSel -> snap.incidents.firstOrNull { it.id == sel.id }?.let { i ->

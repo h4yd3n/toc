@@ -49,6 +49,29 @@ struct COPClient {
     func requestCheckins(incidentId: String) async throws { try await send("POST", "/v1/cop/incidents/\(incidentId)/request-checkins", [:]) }
     func closeIncident(id: String) async throws { try await send("PATCH", "/v1/cop/incidents/\(id)/close", [:]) }
 
+    // Sigtoc reads
+    func requirements() async throws -> [Requirement] { try await fetch("/v1/s2/requirements?status=active") }
+    func intsums() async throws -> [IntsumHead] { try await fetch("/v1/s2/intsum") }
+    func warnings() async throws -> [Warning] { try await fetch("/v1/s2/warnings") }
+    func cases() async throws -> [CaseHead] { try await fetch("/v1/s2/cases") }
+    func distribution(_ ptype: String, _ pid: String) async throws -> Distribution { try await fetch("/v1/s2/products/\(ptype)/\(pid)/distribution") }
+    // Sigtoc writes
+    func releaseWarning(id: String) async throws { try await send("POST", "/v1/s2/warnings/\(id)/release", [:]) }
+    func cancelWarning(id: String) async throws { try await send("POST", "/v1/s2/warnings/\(id)/cancel", [:]) }
+    func ackProduct(_ ptype: String, _ pid: String) async throws { try await send("POST", "/v1/s2/products/\(ptype)/\(pid)/ack", [:]) }
+    func draftIntsum() async throws { try await send("POST", "/v1/s2/intsum/draft", [:]) }
+    func releaseIntsum(id: String) async throws { try await send("POST", "/v1/s2/intsum/\(id)/release", [:]) }
+    func runWarningRule() async throws { try await send("POST", "/v1/s2/warnings/suggest", [:]) }
+
+    private func fetch<T: Decodable>(_ path: String) async throws -> T {
+        var req = URLRequest(url: baseURL.appending(path: path.split(separator: "?").first.map(String.init) ?? path))
+        if let q = path.split(separator: "?").dropFirst().first { var c = URLComponents(url: req.url!, resolvingAgainstBaseURL: false)!; c.query = String(q); req.url = c.url }
+        req.setValue(role, forHTTPHeaderField: "X-TOC-Role"); req.setValue(actor, forHTTPHeaderField: "X-TOC-Actor")
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        try check(resp, data)
+        return try decoder.decode(T.self, from: data)
+    }
+
     private func send(_ method: String, _ path: String, _ body: [String: Any]?) async throws {
         var req = URLRequest(url: baseURL.appending(path: path))
         req.httpMethod = method

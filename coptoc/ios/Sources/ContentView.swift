@@ -12,7 +12,7 @@ struct ContentView: View {
             OpsScreen().tabItem { Label("S3", systemImage: "calendar") }
         }
         .tint(Theme.blue)
-        .safeAreaInset(edge: .top, spacing: 0) { PostureBar() }
+        .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
         }
@@ -57,6 +57,8 @@ struct PostureBar: View {
                     Stat("VIP OUT", s?.vipsTraveling, Theme.gold); Stat("CHECKED IN", s?.checkedInFresh, Theme.green)
                     Stat("SEC ON SHIFT", s?.securityOnShift, Theme.green); Stat("THREATS", s?.activeThreats, Theme.red)
                     Stat("CONFIRMED", s?.confirmedLinks, Theme.red); Stat("UNACCOUNTED", s?.unaccounted, (s?.unaccounted ?? 0) > 0 ? Theme.red : .white)
+                    if (s?.flash ?? 0) > 0 { Stat("FLASH", s?.flash, Theme.red) }
+                    if (s?.unreachable ?? 0) > 0 { Stat("UNREACHABLE", s?.unreachable, Theme.red) }
                     Stat("OPEN PIRs", s?.openPirs, Theme.amber); Stat("EVENTS", s?.upcomingEvents)
                 }
             }
@@ -67,6 +69,29 @@ struct PostureBar: View {
     }
     func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
     func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
+}
+
+/// §5.6 — released warnings, red, under the header, with the reader's acknowledgement.
+struct FlashStrip: View {
+    @Environment(COPStore.self) private var store
+    var body: some View {
+        if !store.liveWarnings.isEmpty {
+            VStack(spacing: 4) {
+                ForEach(store.liveWarnings) { w in
+                    HStack(spacing: 8) {
+                        Text("FLASH").font(.system(size: 9, weight: .heavy, design: .monospaced)).tracking(2).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.red, in: RoundedRectangle(cornerRadius: 3)).foregroundStyle(.white)
+                        Text(w.shortTitle).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(red: 1, green: 0.79, blue: 0.79)).lineLimit(1)
+                        Spacer()
+                        Text("\(w.releasedBy ?? "") · \(w.ageMin ?? 0)m").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim)
+                        Button("ACK") { store.act("acknowledging") { try await store.client.ackProduct("warning", w.id) } }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.green).disabled(store.busy != nil)
+                    }
+                    .contentShape(Rectangle()).onTapGesture { store.selection = w.subjectType == "location" ? .site(w.subjectId) : w.subjectType == "person" ? .person(w.subjectId) : .event(w.subjectId) }
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.red.opacity(0.14))
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.red.opacity(0.6)).frame(height: 1) }
+        }
+    }
 }
 
 struct Stat: View {

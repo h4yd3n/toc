@@ -28,12 +28,14 @@ fun WallScreen(store: Store) {
     val snap = st.snap
     Column(Modifier.fillMaxSize().background(Palette.bg)) {
         Header(st, store)
+        FlashStrip(st, store)
         Row(Modifier.weight(1f).fillMaxWidth()) {
             val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 1100
             Panel(Modifier.width(if (wide) 260.dp else 210.dp).fillMaxHeight()) { S1Panel(st, store) }
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 WallMap(snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize())
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+                st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
                 st.busy?.let { Text(it.uppercase() + "…", Modifier.align(Alignment.BottomCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).padding(6.dp), color = Palette.blue2, fontSize = 10.sp, fontFamily = FontFamily.Monospace) }
                 st.error?.let { Text(it, Modifier.align(Alignment.TopCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).border(1.dp, Palette.red, RoundedCornerShape(4.dp)).padding(8.dp).clickable { store.dismissError() }, color = Palette.red, fontSize = 11.sp) }
                 if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
@@ -120,6 +122,15 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
     Label("S2 · INTELLIGENCE", "Sigtoc", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
     LazyColumn(Modifier.weight(1f)) {
+        val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
+        item { Label("WARNINGS", "${pending.size} awaiting release", action = { Mini("RUN RULE", enabled = st.busy == null) { store.act("running the warning rule") { runWarningRule() } } }) }
+        items(pending, key = { it.id }) { w ->
+            Column(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(w.severity.uppercase(), if (w.severity == "critical") Palette.red else Palette.amber, filled = true); Chip(w.status.uppercase()); Text(w.shortTitle, color = Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                Text("${w.suggestedBy} · ${w.subjectType} ${w.subjectName}", color = Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
+                Row(Modifier.padding(top = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (st.role == "battle_captain") Mini("RELEASE · SMS + CHAT", Palette.red, st.busy == null) { store.act("releasing FLASH") { releaseWarning(w.id) } } else Text("Battle Captain releases", color = Palette.dim, fontSize = 9.5.sp)
+                    if (st.role in listOf("battle_captain", "analyst")) Mini("CANCEL", Palette.dim, st.busy == null) { store.act("cancelling warning") { cancelWarning(w.id) } } } } }
         val reqs = st.requirements
         if (reqs.isNotEmpty()) {
             val avg = if (reqs.isEmpty()) 0 else reqs.sumOf { it.coverage.pct } / reqs.size
@@ -136,7 +147,13 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
                 }
             }
         }
-        st.intsums.firstOrNull()?.let { i -> item { Label("INTSUM", i.status.uppercase()); Text(i.headline, Modifier.padding(horizontal = 10.dp), color = if (i.nstr) Palette.green else Palette.text, fontSize = 10.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) } }
+        st.intsums.firstOrNull()?.let { i -> item { Label("INTSUM", i.status.uppercase(), action = { if (i.status != "released" && st.role == "battle_captain") Mini("RELEASE", Palette.green, st.busy == null) { store.act("releasing INTSUM") { releaseIntsum(i.id) } } else if (st.role in listOf("battle_captain", "analyst")) Mini("DRAFT NOW", enabled = st.busy == null) { store.act("drafting INTSUM") { draftIntsum() } } })
+            Text(i.headline, Modifier.padding(horizontal = 10.dp), color = if (i.nstr) Palette.green else Palette.text, fontSize = 10.sp, maxLines = 3, overflow = TextOverflow.Ellipsis) } }
+        if (st.cases.isNotEmpty()) {
+            item { Label("CASES", "${st.cases.count { it.status == "open" }} open") }
+            items(st.cases, key = { it.id }) { c -> Row(Modifier.padding(horizontal = 10.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(c.kind.uppercase(), if (c.kind == "person") Palette.amber else Palette.dim); Text(c.title, color = Palette.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (c.pendingReview > 0) Chip("${c.pendingReview} TO REVIEW", Palette.amber) else Chip(c.status.uppercase(), if (c.status == "open") Palette.green else Palette.dim) } } }
         item { Label("THREATS", "${snap.threats.size} · ${snap.summary.realThreats} live") }
         items(snap.threats, key = { it.id }) { t ->
             RowItem(selected = (st.selection as? Selection.ThreatSel)?.id == t.id, onClick = { store.select(Selection.ThreatSel(t.id)) }) {
@@ -166,12 +183,13 @@ fun ColumnScope.S3Panel(st: WallState, store: Store) {
     androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(snap.events, key = { it.id }) { e -> Card(Palette.purple, selected = (st.selection as? Selection.EventSel)?.id == e.id, onClick = { store.select(Selection.EventSel(e.id)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                e.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple) } }
+                e.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) }
+                e.coverage?.let { Chip("COVER ${it.assigned}/${it.required}", if (it.gap > 0) Palette.red else Palette.green) } }
             Text(e.venueName, color = Palette.text.copy(alpha = .8f), fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${e.attendeeCount} attending · ${e.vipCount} VIP · ${e.tripsGenerated} trips", color = Palette.dim, fontSize = 9.5.sp) } }
         items(snap.trips, key = { it.id }) { t -> Card(if (t.status == "active") Palette.blue else Palette.line, selected = (st.selection as? Selection.PersonSel)?.id == t.personId, onClick = { store.select(Selection.PersonSel(t.personId)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(t.status.uppercase(), if (t.status == "active") Palette.blue2 else Palette.dim, filled = true); Text((if (t.isVip) "★ " else "") + t.personName, color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                t.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple) } }
+                t.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) } }
             Text("${t.originName.split(" ").first()} → ${t.destName}", color = Palette.text.copy(alpha = .8f), fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(t.purpose, color = Palette.dim, fontSize = 9.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
     }
@@ -194,3 +212,38 @@ fun ColumnScope.LogPanel(st: WallState) {
 @Composable fun Dot(color: Color) = Box(Modifier.size(7.dp).background(color, RoundedCornerShape(50)))
 @Composable fun RowItem(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) =
     Row(Modifier.fillMaxWidth().background(if (selected) Palette.blue.copy(alpha = .12f) else Color.Transparent).clickable { onClick() }.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), content = content)
+
+
+/** §5.6 — released warnings under the header, with the reader's acknowledgement. */
+@Composable
+fun FlashStrip(st: WallState, store: Store) {
+    val live = st.snap?.warnings?.filter { it.status == "released" } ?: return
+    if (live.isEmpty()) return
+    Column(Modifier.fillMaxWidth().background(Palette.red.copy(alpha = .14f)).border(0.5.dp, Palette.red.copy(alpha = .6f)).padding(horizontal = 12.dp, vertical = 4.dp)) {
+        live.forEach { w ->
+            Row(Modifier.fillMaxWidth().clickable { store.select(when (w.subjectType) { "location" -> Selection.SiteSel(w.subjectId); "person" -> Selection.PersonSel(w.subjectId); else -> Selection.EventSel(w.subjectId) }) }, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("FLASH", Modifier.background(Palette.red, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+                Text(w.shortTitle, color = Color(0xFFFECACA), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${w.releasedBy ?: ""} · ${w.ageMin ?: 0}m", color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                Mini("ACK", Palette.green, st.busy == null) { store.act("acknowledging") { ackProduct("warning", w.id) } }
+            }
+        }
+    }
+}
+
+/** §5.10 #3 — the operation against its subject: tasks by section and S4 asks; tap a task to advance it. */
+@Composable
+fun OperationSheet(op: Operation, st: WallState, store: Store, onClose: () -> Unit) {
+    Column(Modifier.padding(10.dp).width(360.dp).background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.purple.copy(alpha = .5f), RoundedCornerShape(6.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("S3 OPERATION · ${op.status.uppercase()}" + (op.fromProductId?.let { " · from $it" } ?: ""), color = Palette.dim, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.2.sp); Spacer(Modifier.weight(1f)); Text("×", Modifier.clickable { onClose() }, color = Palette.dim, fontSize = 18.sp) }
+        Text(op.title, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold); Text(op.subjectName, color = Palette.dim, fontSize = 11.sp)
+        Text("${op.tasksDone}/${op.tasksTotal} tasks", color = Palette.text, fontSize = 11.sp)
+        Box(Modifier.fillMaxWidth().height(5.dp).background(Palette.line, RoundedCornerShape(3.dp))) { Box(Modifier.fillMaxWidth(op.pct / 100f).fillMaxHeight().background(if (op.pct == 100) Palette.green else Palette.purple, RoundedCornerShape(3.dp))) }
+        if (op.notes.isNotBlank()) Text(op.notes, color = Palette.text.copy(alpha = .85f), fontSize = 11.sp)
+        Label("TASKS", "tap to advance")
+        op.tasks.forEach { t -> Row(Modifier.fillMaxWidth().clickable(enabled = st.busy == null) { store.act("updating task") { updateTask(op.id, t.id, when (t.status) { "todo" -> "doing"; "doing" -> "done"; else -> "todo" }); store.openOperation(op.id) } }.padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chip(t.status.uppercase(), when (t.status) { "done" -> Palette.green; "doing" -> Palette.amber; "blocked" -> Palette.red; else -> Palette.dim }, filled = true); Chip(t.section)
+            Text(t.title, color = if (t.status == "done") Palette.dim else Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text(t.owner, color = Palette.dim, fontSize = 9.sp) } }
+        if (op.resources.isNotEmpty()) { Label("S4 · RESOURCES"); op.resources.forEach { r -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { Chip(r.status.uppercase(), when (r.status) { "issued" -> Palette.green; "approved" -> Palette.amber; "denied" -> Palette.red; else -> Palette.dim }); Text("${r.qty} × ${r.item}", color = Palette.text, fontSize = 11.sp) } } }
+    }
+}

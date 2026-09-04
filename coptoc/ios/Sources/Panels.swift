@@ -66,10 +66,63 @@ struct IntelScreen: View {
         List {
             Section {
                 HStack { PanelHead(code: "S2", title: "INTELLIGENCE", hint: "Sigtoc")
-                    Button("⟳ COLLECT") { store.act("collecting GDACS") { try await store.client.refreshIntel() } }
+                    Button("⟳ COLLECT") { store.act("collecting") { try await store.client.refreshIntel() } }
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S2" })
             }.listRowBackground(Theme.panel)
+            Section(header: SectionLabel(text: "WARNINGS · \(store.pendingWarnings.count) AWAITING RELEASE")) {
+                if store.pendingWarnings.isEmpty {
+                    HStack { Text("Nothing suggested. Confirm a link on an elevated threat, or collect a critical one.").font(.system(size: 11)).foregroundStyle(Theme.dim)
+                        Spacer(); Button("RUN RULE") { store.act("running the warning rule") { try await store.client.runWarningRule() } }.font(.system(size: 9, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil) }
+                }
+                ForEach(store.pendingWarnings) { w in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack { Chip(text: w.severity.uppercased(), color: w.severity == "critical" ? Theme.red : Theme.amber, filled: true); Chip(text: w.status.uppercased(), color: Theme.dim); Text(w.shortTitle).font(.system(size: 12, weight: .semibold)).lineLimit(2) }
+                        Text("\(w.suggestedBy) · \(w.subjectType) \(w.subjectName)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                        HStack {
+                            if store.client.role == "battle_captain" { Button("RELEASE · SMS + CHAT") { store.act("releasing FLASH") { try await store.client.releaseWarning(id: w.id) } }.tint(Theme.red) }
+                            else { Text("Battle Captain releases").font(.system(size: 10)).foregroundStyle(Theme.dim) }
+                            if store.client.role == "battle_captain" || store.client.role == "analyst" { Button("CANCEL") { store.act("cancelling warning") { try await store.client.cancelWarning(id: w.id) } } }
+                        }.font(.system(size: 9, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+                    }
+                }
+            }.listRowBackground(Theme.panel)
+            if let i = store.intsums.first {
+                Section(header: SectionLabel(text: "INTSUM · \(i.status.uppercased())")) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(i.headline).font(.system(size: 12)).foregroundStyle(i.nstr ? Theme.green : .primary)
+                        HStack {
+                            if i.status != "released" && store.client.role == "battle_captain" { Button("RELEASE") { store.act("releasing INTSUM") { try await store.client.releaseIntsum(id: i.id) } }.tint(Theme.green) }
+                            else if let by = i.releasedBy { Text("released by \(by)").font(.system(size: 10)).foregroundStyle(Theme.dim) }
+                            Spacer()
+                            if store.client.role == "battle_captain" || store.client.role == "analyst" { Button("DRAFT NOW") { store.act("drafting INTSUM") { try await store.client.draftIntsum() } } }
+                        }.font(.system(size: 9, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+                    }
+                }.listRowBackground(Theme.panel)
+            }
+            Section(header: SectionLabel(text: "REQUIREMENTS · \(store.requirements.count) ACTIVE · \(store.requirements.isEmpty ? 0 : store.requirements.map(\.coverage.pct).reduce(0, +) / store.requirements.count)% AVG COVERAGE")) {
+                ForEach(store.requirements.sorted { $0.priority < $1.priority }.prefix(12)) { r in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Chip(text: "P\(r.priority)", color: r.priority == 1 ? Theme.red : r.priority == 2 ? Theme.amber : Theme.dim, filled: true)
+                            Chip(text: r.kind == "directed" ? "DIRECTED" : r.subjectType.uppercased(), color: Theme.dim)
+                            Text(r.subjectName).font(.system(size: 12)).lineLimit(1); Spacer()
+                            Text("\(r.coverage.covered)/\(r.coverage.total)").font(.system(size: 10, design: .monospaced)).foregroundStyle(r.coverage.pct == 100 ? Theme.green : Theme.amber)
+                        }
+                        ProgressView(value: Double(r.coverage.pct), total: 100).tint(r.coverage.pct == 100 ? Theme.green : Theme.amber)
+                    }
+                }
+            }.listRowBackground(Theme.panel)
+            if !store.cases.isEmpty {
+                Section(header: SectionLabel(text: "CASES · \(store.cases.filter { $0.status == "open" }.count) OPEN")) {
+                    ForEach(store.cases) { c in
+                        HStack(spacing: 8) {
+                            Chip(text: c.kind.uppercased(), color: c.kind == "person" ? Theme.amber : Theme.dim); Text(c.title).font(.system(size: 12, weight: .semibold)).lineLimit(1); Spacer()
+                            if (c.pendingReview ?? 0) > 0 { Chip(text: "\(c.pendingReview!) TO REVIEW", color: Theme.amber) } else { Chip(text: c.status.uppercased(), color: c.status == "open" ? Theme.green : Theme.dim) }
+                        }
+                    }
+                }.listRowBackground(Theme.panel)
+            }
             Section(header: SectionLabel(text: "THREATS \(store.snapshot?.threats.count ?? 0) · \(store.snapshot?.summary.realThreats ?? 0) LIVE")) {
                 ForEach(store.snapshot?.threats ?? []) { t in
                     Button { store.selection = .threat(t.id) } label: {
@@ -132,6 +185,8 @@ struct OpsScreen: View {
                     Button { store.selection = .event(e.id) } label: {
                         VStack(alignment: .leading, spacing: 3) {
                             HStack { Chip(text: e.status == "active" ? "LIVE" : "T-\(e.daysUntil)d", color: Theme.purple); Text("★ \(e.name)").font(.system(size: 13, weight: .semibold)); Spacer()
+                                if let op = e.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) }
+                                if let c = e.coverage { Chip(text: "COVER \(c.assigned)/\(c.required)", color: c.gap > 0 ? Theme.red : Theme.green) }
                                 if !e.threatIdsInArea.isEmpty { Text("△\(e.threatIdsInArea.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.amber) } }
                             Text(e.venueName).font(.system(size: 12, design: .monospaced))
                             Text("\(ISO.short(e.startAt)) → \(ISO.short(e.endAt))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
@@ -144,7 +199,8 @@ struct OpsScreen: View {
                 ForEach(store.snapshot?.trips ?? []) { t in
                     Button { store.selection = .person(t.personId) } label: {
                         VStack(alignment: .leading, spacing: 3) {
-                            HStack { Chip(text: t.status.uppercased(), color: t.status == "active" ? Theme.blue : Theme.dim); if t.isVip { Text("★").foregroundStyle(Theme.gold) }; Text(t.personName).font(.system(size: 13, weight: .semibold)); if t.eventId != nil { Chip(text: "EVT", color: Theme.purple) } }
+                            HStack { Chip(text: t.status.uppercased(), color: t.status == "active" ? Theme.blue : Theme.dim); if t.isVip { Text("★").foregroundStyle(Theme.gold) }; Text(t.personName).font(.system(size: 13, weight: .semibold)); if t.eventId != nil { Chip(text: "EVT", color: Theme.purple) }
+                                if let op = t.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) } }
                             Text("\(t.originName.split(separator: " ").first.map(String.init) ?? "") → \(t.destName.split(separator: ",").first.map(String.init) ?? "")").font(.system(size: 12, design: .monospaced))
                             Text("dep \(ISO.rel(t.departAt, now: store.now)) · ret \(ISO.rel(t.returnAt, now: store.now))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
                             Text(t.purpose).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)

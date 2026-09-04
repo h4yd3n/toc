@@ -28,6 +28,8 @@ struct Snapshot: Decodable {
     var assessments: [Assessment]
     var incidents: [Incident]
     var log: [LogEntry]
+    var warnings: [Warning]?
+    var operations: [OperationSummary]?
 }
 
 struct Summary: Decodable {
@@ -35,6 +37,7 @@ struct Summary: Decodable {
     var activeThreats: Int, realThreats: Int, confirmedLinks: Int, checkedInFresh: Int, openPirs: Int, upcomingEvents: Int
     var openIncidents: Int, unaccounted: Int
     var posture: String
+    var flash: Int?, warningsPending: Int?, offDuty: Int?, unreachable: Int?
 }
 
 struct Site: Decodable, Identifiable, Hashable {
@@ -53,7 +56,7 @@ struct Person: Decodable, Identifiable, Hashable {
     var status: String, lat: Double, lon: Double, tripId: String?
     var positionSource: String, checkinAgeH: Double?, checkinStale: Bool, lastCheckinAt: String?, lastCheckinNote: String?
     var threatIdsInArea: [String], confirmedThreatIds: [String]
-    var phone: String?, email: String?, source: String, incidentStatus: String?
+    var phone: String?, email: String?, source: String, incidentStatus: String?, availability: String?
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
     var traveling: Bool { status == "traveling" }
 }
@@ -63,12 +66,14 @@ struct Trip: Decodable, Identifiable, Hashable {
     var originLocationId: String, originName: String, originLat: Double, originLon: Double
     var destLocationId: String?, destName: String, destLat: Double, destLon: Double
     var departAt: String, returnAt: String, purpose: String, status: String, eventId: String?, createdBy: String, source: String
+    var operation: OperationSummary?
 }
 
 struct CopEvent: Decodable, Identifiable, Hashable {
     var id: String, name: String, eventType: String, venueLocationId: String?, venueName: String, venueLat: Double, venueLon: Double
     var startAt: String, endAt: String, status: String, daysUntil: Int, description: String, securityPlan: String?
     var attendeeIds: [String], attendeeCount: Int, vipCount: Int, securityCount: Int, tripsGenerated: Int, threatIdsInArea: [String], source: String
+    var operation: OperationSummary?, coverage: Coverage?
     var coordinate: CLLocationCoordinate2D { .init(latitude: venueLat, longitude: venueLon) }
 }
 
@@ -154,3 +159,22 @@ enum ISO {
         let f = DateFormatter(); f.dateFormat = "dd MMM HH:mm'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d)
     }
 }
+
+
+// MARK: - Sigtoc on the phone (§5.2, §5.6, §5.10, §5.11)
+
+struct OperationSummary: Decodable, Hashable { var id: String, title: String, status: String, tasksTotal: Int, tasksDone: Int, blocked: Int?, resourcesOpen: Int?, pct: Int?, fromProductId: String? }
+struct Coverage: Decodable, Hashable { var required: Int, assigned: Int, gap: Int, rule: String }
+struct Warning: Decodable, Identifiable, Hashable {
+    var id: String, title: String, text: String, subjectType: String, subjectId: String, subjectName: String, threatId: String?
+    var severity: String, status: String, suggestedBy: String, createdAt: String, releasedBy: String?, releasedAt: String?, ageMin: Int?
+    var shortTitle: String { title.replacingOccurrences(of: "FLASH — ", with: "") }
+}
+struct CoverageStat: Decodable, Hashable { var covered: Int, total: Int, pct: Int, gaps: [String] }
+struct Requirement: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, subjectType: String, subjectName: String, question: String, priority: Int, status: String, owner: String
+    var windowFrom: String?, windowTo: String?, coverage: CoverageStat
+}
+struct IntsumHead: Decodable, Identifiable, Hashable { var id: String, status: String, headline: String, nstr: Bool, releasedBy: String? }
+struct CaseHead: Decodable, Identifiable, Hashable { var id: String, title: String, kind: String, status: String, openedBy: String, entities: Int?, relationships: Int?, events: Int?, pendingReview: Int? }
+struct Distribution: Decodable, Hashable { var sent: Int, acknowledged: Int, unacknowledged: [String] }

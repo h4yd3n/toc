@@ -5,6 +5,10 @@ import Observation
 @MainActor
 final class COPStore {
     var snapshot: Snapshot?
+    var requirements: [Requirement] = []
+    var intsums: [IntsumHead] = []
+    var warnings: [Warning] = []
+    var cases: [CaseHead] = []
     var error: String?
     var busy: String?
     var selection: Selection?
@@ -24,7 +28,11 @@ final class COPStore {
     }
 
     func load() async {
-        do { snapshot = try await client.snapshot(restricted: showRestricted); error = nil }
+        do {
+            snapshot = try await client.snapshot(restricted: showRestricted); error = nil
+            async let r = client.requirements(); async let i = client.intsums(); async let w = client.warnings(); async let c = client.cases()
+            requirements = (try? await r) ?? []; intsums = (try? await i) ?? []; warnings = (try? await w) ?? []; cases = (try? await c) ?? []
+        }
         catch let e as DecodingError { self.error = "contract drift: \(e)" }  // name the missing key, not just "data is missing"
         catch { self.error = error.localizedDescription }
     }
@@ -46,4 +54,6 @@ final class COPStore {
     func incident(_ id: String?) -> Incident? { snapshot?.incidents.first { $0.id == id } }
     var openIncidents: [Incident] { snapshot?.incidents.filter { $0.status == "open" } ?? [] }
     var travelers: [Person] { snapshot?.people.filter(\.traveling) ?? [] }
+    var liveWarnings: [Warning] { warnings.filter { $0.status == "released" } }
+    var pendingWarnings: [Warning] { warnings.filter { $0.status == "suggested" || $0.status == "draft" } }
 }

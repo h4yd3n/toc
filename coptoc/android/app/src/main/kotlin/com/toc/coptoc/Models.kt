@@ -10,21 +10,21 @@ import kotlinx.serialization.Serializable
 @Serializable data class Estimate(val section: String, val assessment: String = "", val recommendation: String = "", val updatedBy: String? = null, val updatedAt: String? = null)
 @Serializable data class Summary(val totalPeople: Int = 0, val present: Int = 0, val traveling: Int = 0, val vipsTraveling: Int = 0, val securityOnShift: Int = 0, val activeThreats: Int = 0,
                                  val realThreats: Int = 0, val confirmedLinks: Int = 0, val checkedInFresh: Int = 0, val openPirs: Int = 0, val upcomingEvents: Int = 0, val openIncidents: Int = 0,
-                                 val unaccounted: Int = 0, val posture: String = "normal")
+                                 val unaccounted: Int = 0, val posture: String = "normal", val flash: Int = 0, val warningsPending: Int = 0, val offDuty: Int = 0, val unreachable: Int = 0)
 @Serializable data class Site(val id: String, val name: String, val type: String = "", val lat: Double, val lon: Double, val city: String = "", val country: String = "", val posture: String = "normal",
                               val effectivePosture: String = "normal", val sensitivity: String = "standard", val assigned: Int = 0, val present: Int = 0, val securityOnShift: Int = 0, val vipsPresent: Int = 0,
                               val threatIdsInArea: List<String> = emptyList(), val confirmedThreatIds: List<String> = emptyList())
 @Serializable data class Person(val id: String, val name: String, val role: String = "", val teamName: String = "", val homeLocationId: String = "", val locationId: String? = null, val isVip: Boolean = false,
                                 val onShift: Boolean = false, val status: String = "at_post", val lat: Double = 0.0, val lon: Double = 0.0, val tripId: String? = null, val positionSource: String = "derived",
                                 val checkinAgeH: Double? = null, val checkinStale: Boolean = false, val lastCheckinNote: String? = null, val threatIdsInArea: List<String> = emptyList(),
-                                val phone: String? = null, val email: String? = null, val incidentStatus: String? = null)
+                                val phone: String? = null, val email: String? = null, val incidentStatus: String? = null, val availability: String = "available")
 @Serializable data class OperationSummary(val id: String, val title: String = "", val status: String = "planned", val tasksTotal: Int = 0, val tasksDone: Int = 0, val blocked: Int = 0, val resourcesOpen: Int = 0, val pct: Int = 0, val fromProductId: String? = null)
 @Serializable data class Trip(val id: String, val personId: String, val personName: String = "", val isVip: Boolean = false, val originName: String = "", val originLat: Double = 0.0, val originLon: Double = 0.0,
                               val destName: String = "", val destLat: Double = 0.0, val destLon: Double = 0.0, val departAt: String = "", val returnAt: String = "", val purpose: String = "", val status: String = "planned",
                               val eventId: String? = null, val operation: OperationSummary? = null)
 @Serializable data class CopEvent(val id: String, val name: String, val eventType: String = "", val venueName: String = "", val venueLat: Double = 0.0, val venueLon: Double = 0.0, val startAt: String = "", val endAt: String = "",
                                   val status: String = "upcoming", val daysUntil: Int = 0, val description: String = "", val attendeeCount: Int = 0, val vipCount: Int = 0, val securityCount: Int = 0,
-                                  val tripsGenerated: Int = 0, val threatIdsInArea: List<String> = emptyList(), val operation: OperationSummary? = null)
+                                  val tripsGenerated: Int = 0, val threatIdsInArea: List<String> = emptyList(), val operation: OperationSummary? = null, val coverage: CoverageInfo? = null)
 @Serializable data class ConfirmedLink(val linkId: Int, val targetType: String, val targetId: String, val targetName: String = "", val confirmedBy: String = "", val note: String? = null)
 @Serializable data class Threat(val id: String, val title: String, val summary: String = "", val lat: Double, val lon: Double, val radiusKm: Double = 0.0, val severity: String = "low", val eventType: String? = null,
                                 val source: String = "", val url: String? = null, val confidence: String = "low", val observedAt: String = "", val synthetic: Boolean = true,
@@ -43,7 +43,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Snapshot(val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
-                                  val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList())
+                                  val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList())
 
 // Sigtoc (read side on the phone)
 @Serializable data class Coverage(val covered: Int = 0, val total: Int = 0, val pct: Int = 0, val gaps: List<String> = emptyList())
@@ -58,3 +58,13 @@ sealed interface Selection {
     data class EventSel(val id: String) : Selection
     data class IncidentSel(val id: String) : Selection
 }
+
+@Serializable data class CoverageInfo(val required: Int = 0, val assigned: Int = 0, val gap: Int = 0, val rule: String = "")
+@Serializable data class Warning(val id: String, val title: String = "", val text: String = "", val subjectType: String = "", val subjectId: String = "", val subjectName: String = "", val threatId: String? = null,
+                                 val severity: String = "elevated", val status: String = "suggested", val suggestedBy: String = "", val createdAt: String = "", val releasedBy: String? = null, val releasedAt: String? = null, val ageMin: Int? = null) {
+    val shortTitle get() = title.removePrefix("FLASH — ")
+}
+@Serializable data class CaseHead(val id: String, val title: String = "", val kind: String = "general", val status: String = "open", val openedBy: String = "", val entities: Int = 0, val relationships: Int = 0, val events: Int = 0, val pendingReview: Int = 0)
+@Serializable data class OpTask(val id: String, val title: String = "", val section: String = "", val owner: String = "", val status: String = "todo")
+@Serializable data class OpResource(val id: String, val item: String = "", val qty: Int = 1, val status: String = "requested")
+@Serializable data class Operation(val id: String, val title: String = "", val status: String = "planned", val subjectName: String = "", val fromProductId: String? = null, val notes: String = "", val tasks: List<OpTask> = emptyList(), val resources: List<OpResource> = emptyList(), val tasksTotal: Int = 0, val tasksDone: Int = 0, val pct: Int = 0)
