@@ -5,7 +5,7 @@ import os
 import re
 import uuid
 from datetime import timedelta, datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Literal, Any, Dict, List, Optional, Tuple
 
 from fastapi import Request, APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select
@@ -19,7 +19,7 @@ from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAtte
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -1106,6 +1106,37 @@ async def answer_resource(op_id: str, res_id: str, body: ResourceUpdate, session
     await session.commit()
     await get_ledger().append_event(content_id=op_id, event_type="cop.operation.resource", actor_type="human", actor_id=r.updated_by, old_state=old, new_state=body.status, reason=f"S4: {r.qty} × {r.item} {body.status.upper()}" + (f" — {body.note}" if body.note else ""))
     return resource_dict(r)
+
+
+# ---------------------------------------------------------------- §13 imports — the connectors we can build without accounts
+
+IMPORTERS = {"battle_captain", "ea", "security", "analyst"}
+
+
+@router.post("/import/{kind}")
+async def import_data(kind: Literal["people", "shifts", "trips", "ics"], body: ImportText, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Paste or post an export: people (HRIS CSV), shifts (scheduling CSV), trips (travel-system CSV), ics (calendar).
+    Rows carry their provenance; what cannot be placed is reported, never guessed."""
+    require_role(x_toc_role, IMPORTERS, "Importing")
+    from . import imports as I
+    actor = actor_from(x_toc_actor)
+    if kind == "people": result = await I.import_people(session, body.text, body.source or "hris:csv")
+    elif kind == "shifts": result = await I.import_shifts(session, body.text, body.source or "scheduling:csv")
+    elif kind == "trips": result = await I.import_trips(session, body.text, actor, body.source or "travel_system:csv")
+    else: result = await I.import_ics(session, body.text, actor, body.source or "calendar:ics")
+    await sync_standing_requirements(session)
+    await get_ledger().append_event(content_id="import", event_type="cop.import", actor_type="human", actor_id=actor,
+                                    reason=f"{kind} import from {result['source']}: " + ", ".join(f"{k} {v}" for k, v in result.items() if isinstance(v, int)), metadata=result)
+    return result
+
+
+@router.post("/import/badge/events")
+async def import_badge_events(body: BadgeBatch, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    """A badge-reader feed. Badge-in is a check-in at the site; the position source on the wall reads `checkin`."""
+    from . import imports as I
+    result = await I.import_badge(session, [e.model_dump() for e in body.events], body.source or "badge")
+    await get_ledger().append_event(content_id="import", event_type="cop.import", actor_type="system", actor_id=body.source or "badge", reason=f"badge events: {result['applied']} applied, {result['skipped']} skipped", metadata=result)
+    return result
 
 
 @router.post("/seed")

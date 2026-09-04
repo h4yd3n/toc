@@ -172,3 +172,20 @@ class ResourceCreate(BaseModel):
 class ResourceUpdate(BaseModel):
     status: Literal["requested", "approved", "issued", "denied"]
     note: Optional[str] = None
+
+
+# §13 imports
+class ImportText(BaseModel):
+    text: str
+    source: Optional[str] = None
+
+class BadgeEvent(BaseModel):
+    person_id: Optional[str] = None
+    email: Optional[str] = None
+    location_id: str
+    at: Optional[str] = None
+    direction: Literal["in", "out"] = "in"
+
+class BadgeBatch(BaseModel):
+    events: List[BadgeEvent]
+    source: Optional[str] = "badge"
