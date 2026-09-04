@@ -24,6 +24,7 @@ targets:
         # Where the wall's API is. The simulator uses the Mac's localhost; a real phone needs the Mac's LAN address:
         #   make ios-device TOC_API=http://<mac-lan-ip>:8000
         TOC_API: http://localhost:8000
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Sources/Info.plist
       properties:
