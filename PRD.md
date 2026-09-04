@@ -145,7 +145,7 @@ Coverage: 3 of 5 indicators. Gaps are visible before anyone asks for an assessme
 Rules:
 1. **Coverage is shown, always.** An indicator with no connected source is a collection gap on the plan — so refuse-to-assess (§5.5) is never a surprise.
 2. **Sources are recommended by indicator**, from the catalog in §5.8. Connecting one is an admin action; recommending it is automatic.
-3. **Cadence is per source, set by the analyst.** Defaults ship with each connector. **[NEEDS RULING]** the defaults — they should come from someone who has run collection, not be invented here.
+3. **Cadence is per source and adjustable by whoever runs the system** — the analyst or an admin — from the source's settings, with every option available (manual, hourly, every few hours, daily, weekly). Each connector ships with a default that is a starting point, not a rule; the operator changes it as they learn the source. (Decision K.)
 4. **Relevance is filtered against blue force and against directed subjects.** The world's events are collected; only those touching a requirement's subject reach the wall.
 
 ### 5.4 Collection and processing **[BUILT for GDACS; pattern for all]**
@@ -379,14 +379,16 @@ COP never writes back to a source system.
 | H | Who creates directed requirements | **Any security role, plus EAs**; the S2 analyst owns the answer | §5.2 — not yet built |
 | I | Area Assessment scoring | **No numeric composite.** Bands, confidence, and gaps per indicator; the human ranks | §5.6 — not yet built |
 | J | Raw signal retention | **90 days**; anything cited by a product lives as long as the product; the ledger is forever | §5.4 — not yet built |
+| K | Collection cadence | **Per source, operator-adjustable**, all options exposed; shipped defaults are starting points, not rules | §5.3 — not yet built |
+| L | Inbound SMS replies | **The check-in link is enough for v1**; a Twilio inbound webhook (a "SAFE" text clears the row) comes with a public deploy | §8 — not yet built |
+| M | Escalation timer | **15 minutes** with no response → auto-flag UNREACHABLE and float the name to the top of the call list | §8 — not yet built |
+| N | Roster edits | **Anyone on the floor may add a missed name** (visitor, contractor); tagged `basis: manual` and logged | §8 — not yet built |
 
 ---
 
 ## 15. Open Decisions
 
-1. **Inbound replies** — when someone replies "SAFE" to the SMS instead of tapping the link, should a Twilio inbound webhook clear them automatically (needs a public URL), or is the link enough for v1?
-2. **Escalation timer** — after N minutes with no response, auto-flag unreachable and put the name at the top of the call list? What is N?
-3. **Roster edits** — may the floor add a name the auto-roster missed (a visitor, a contractor), and does that need Battle Captain approval?
+None outstanding. Everything raised so far is logged in §14; new questions go here as they come up.
 
 ## Appendix — Version History
 
@@ -396,4 +398,5 @@ COP never writes back to a source system.
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.5** — cadence adjustable (K); S6 inbound, escalation, roster edits decided (L–N). No open decisions.
 - **v3.4** — Sigtoc spec (§5): two missions, first-class requirements, self-generating collection plan, Area Assessment + INTSUM, standalone surface; decisions G–J.
