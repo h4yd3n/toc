@@ -117,3 +117,31 @@ officer act within five seconds of a FLASH? Then show how the rest reveals on de
 
 Variant: "Same brief, but the icon must work as a single-color stamp on a black hoodie and as a 16 px favicon.
 Kill every idea that does not survive both."
+
+---
+
+## 3b. App icon, second brief — no circles
+
+> Design an app icon for **TOC**, an open-source Tactical Operations Center for corporate security: the wall a watch
+> officer runs a 12-hour shift from. Hard rule: **no circles, no rings, no compass, no pins, no radar, no globes, no
+> crosshairs, no shields, no eagles**. Every company already has the ring-with-a-dot; I do not want it. Rectilinear
+> geometry only — bars, blocks, grids, chevrons, letterforms. One idea, bold enough to be drawn from memory.
+>
+> Four ideas, each rooted in something the product does:
+> 1. **The wall.** A dark square split into a coarse grid of panels, like a control room seen head-on from the
+>    officer's chair: most panels near-black, one wide center panel a deep blue block (the map), one small panel
+>    amber (an alert). Think Mondrian at night, or a server-rack face. No text.
+> 2. **Shift change.** Two heavy horizontal bars stacked, one blue and one amber, the top one offset a step to the
+>    right: the outgoing watch handing to the incoming. Or two interlocking rectangular hooks in those colors.
+> 3. **Accountability.** A 3×3 field of squares, all off-white, one amber: a roll call with one name unaccounted for.
+>    The single odd square is the whole story.
+> 4. **The monogram.** A heavy "T" whose crossbar is a wide slab (the wall) and whose stem is a narrow stroke (the
+>    floor beneath it), in an extended monospaced grotesk, off-white on the dark ground, with a single amber tick at
+>    the right end of the crossbar. Letterform icons are remembered (Notion, Threads, Linear).
+>
+> Palette: ground `#0b0f14`, blue `#3b82f6`, amber `#f59e0b`, off-white `#dce4ee`. Flat, hard-edged vector, no
+> gradients, no glow, no 3D, no bevel, no gloss, no text other than idea 4. Must survive at 29 px and at 1024 px,
+> inside the iOS rounded mask and inside an Android circle, and read in one color.
+>
+> Show each idea at 1024×1024 on a phone home screen beside Mail, Maps, and Slack, then the winner alone, large,
+> with a two-sentence reason a stranger would recognize it a week later.
