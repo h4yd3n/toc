@@ -17,6 +17,8 @@ from . import cases as C
 from .cases import CaseEventRow, CaseRow, EntityRow, RelationshipRow, ReportRow
 from . import area as A
 from .area import AreaAssessmentRow
+from . import intsum as I
+from .intsum import IntsumRow
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
 
@@ -449,6 +451,75 @@ async def update_area(area_id: str, body: AreaUpdate, session: AsyncSession = De
     await session.commit()
     await ledger().append_event(content_id=row.id, event_type="s2.area.status", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=body.status, reason=f"{row.title} → {body.status}")
     return A.to_dict(row)
+
+
+# ---------------------------------------------------------------- §5.6 INTSUM (Decision G)
+
+INTSUM_RELEASERS = {"battle_captain"}
+INTSUM_DRAFTERS = {"battle_captain", "analyst"}
+
+
+class IntsumRelease(BaseModel):
+    notes: Optional[str] = None
+
+
+@router.post("/intsum/draft", status_code=201)
+async def draft_intsum(session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Manual draft (the fixed-time draft calls the same code). Covers everything since the last INTSUM."""
+    if (x_toc_role or "").lower() not in INTSUM_DRAFTERS:
+        raise HTTPException(403, "Drafting the INTSUM is the analyst's or the Battle Captain's; it also drafts itself at the fixed hour")
+    row = await I.draft(session, R.now_utc())
+    d = I.to_dict(row)
+    await ledger().append_event(content_id=row.id, event_type="s2.intsum.drafted", actor_type="ai_model", actor_id=row.drafted_by, new_state="draft",
+                                reason=f"INTSUM {d['period']['from'][:16]}Z → {d['period']['to'][:16]}Z: {d['headline']}", metadata={"requested_by": x_toc_actor or x_toc_role, "nstr": d["nstr"]})
+    return d
+
+
+async def draft_if_due(session: AsyncSession, now: Optional[datetime] = None) -> Optional[IntsumRow]:
+    """Called by the COP on a timer: Decision G's fixed-time draft. Idempotent per day."""
+    now = now or R.now_utc()
+    if not await I.due(session, now): return None
+    row = await I.draft(session, now)
+    d = I.to_dict(row)
+    await ledger().append_event(content_id=row.id, event_type="s2.intsum.drafted", actor_type="system", actor_id="scheduler", new_state="draft",
+                                reason=f"INTSUM (fixed-time {I.DRAFT_HOUR_UTC:02d}00Z) {d['period']['from'][:16]}Z → {d['period']['to'][:16]}Z: {d['headline']}", metadata={"nstr": d["nstr"]})
+    return row
+
+
+@router.get("/intsum")
+async def list_intsums(limit: int = 14, session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(IntsumRow).order_by(IntsumRow.period_to.desc()).limit(limit))).scalars().all()
+    return [{"id": r.id, "status": r.status, "period": json.loads(r.product_json)["period"], "headline": json.loads(r.product_json)["headline"], "nstr": json.loads(r.product_json)["nstr"],
+             "released_by": r.released_by, "released_at": R.iso(r.released_at)} for r in rows]
+
+
+@router.get("/intsum/latest")
+async def latest_intsum(session: AsyncSession = Depends(get_session)):
+    row = await I.latest(session)
+    if not row: raise HTTPException(404, "no INTSUM yet — one drafts itself at %02d00Z, or POST /intsum/draft" % I.DRAFT_HOUR_UTC)
+    return I.to_dict(row)
+
+
+@router.get("/intsum/{intsum_id}")
+async def get_intsum(intsum_id: str, session: AsyncSession = Depends(get_session)):
+    row = await session.get(IntsumRow, intsum_id)
+    if not row: raise HTTPException(404, "INTSUM not found")
+    return I.to_dict(row)
+
+
+@router.post("/intsum/{intsum_id}/release")
+async def release_intsum(intsum_id: str, body: IntsumRelease, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Decision G: the Battle Captain releases. One human gate on the product the whole floor reads."""
+    if (x_toc_role or "").lower() not in INTSUM_RELEASERS:
+        raise HTTPException(403, "Only the Battle Captain releases the INTSUM (Decision G)")
+    row = await session.get(IntsumRow, intsum_id)
+    if not row: raise HTTPException(404, "INTSUM not found")
+    if row.status == "released": raise HTTPException(409, "already released")
+    row.status, row.released_by, row.released_at, row.notes = "released", x_toc_actor or "battle_captain", R.now_utc(), body.notes or ""
+    await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.intsum.released", actor_type="human", actor_id=row.released_by, old_state="draft", new_state="released",
+                                reason=f"INTSUM released" + (f" — {body.notes}" if body.notes else ""))
+    return I.to_dict(row)
 
 
 def standalone_app() -> FastAPI:

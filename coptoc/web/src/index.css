@@ -336,3 +336,8 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .cellview { margin-top: 8px; padding: 8px; border: 1px solid var(--line-2); border-radius: 4px; background: var(--panel-2); }
 .refusal { margin-top: 8px; padding: 8px; border: 1px solid rgba(239,68,68,.5); border-radius: 4px; color: var(--red); font-size: 11.5px; }
 .pick { margin: 0 2px 0 0; accent-color: var(--amber); }
+
+/* §5.6 INTSUM */
+.detail.intsum { border-color: rgba(34,197,94,.45); }
+.detail.intsum .bluf.nstr { color: var(--green); }
+.detail.intsum li .sev { margin-right: 4px; }

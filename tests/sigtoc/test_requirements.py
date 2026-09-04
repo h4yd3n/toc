@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp.name}"
+os.environ["TOC_INTSUM_CLOCK"] = "off"  # the fixed-time INTSUM draft is tested directly, not on a timer
 os.environ.pop("ANTHROPIC_API_KEY", None); os.environ.pop("CLSTR_API_KEY", None)
 
 import pytest

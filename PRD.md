@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.12
+**Version:** 3.13
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -242,7 +242,7 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 | **Threat** | collection | something happened near a subject — a ring on the map with source, severity, confidence | **[BUILT]** |
 | **Assessment** | a wall subject | the finding for one trip, event, or site: BLUF, judgments with term + band + confidence, evidence, gaps | **[BUILT]** |
 | **Area Assessment** | a directed requirement | the environment for a place and window that may not be on the wall; **several candidates compared side by side** | **[BUILT]** — `/v1/s2/area-assessments`; the S2 panel picks directed requirements and opens the matrix |
-| **INTSUM** | daily, standing | what changed in the last 24 h across every active requirement: new threats, changed scores, expired windows, open gaps | **[NEXT]** |
+| **INTSUM** | daily, standing | what changed since the last one across every active requirement: new threats attributed to requirements, wall changes, organic reports and cases, products, collection and gaps | **[BUILT]** — drafts itself at `TOC_INTSUM_HOUR_UTC` (default 0500Z), the Battle Captain releases; NSTR when nothing happened |
 | **Warning** | collection | an imminent, specific threat to a subject — FLASH to the floor | **[LATER]** with S6 alerting |
 
 **The Area Assessment compares; it does not score** (Decision I). Candidates are laid side by side on what is known, how well it is known, and what is missing. Each cell is one of three states: **reported** — a term from the fixed list, its band, a code-computed confidence, and the evidence; **quiet** — a tasked source is watching and has reported nothing, which is worth exactly as much as that source's reliability and is never a finding of safety; **gap** — nobody is watching, with the sources that could. Reporting up to 90 days before the window counts as describing the place. A product where nothing is known for any candidate refuses and cannot be approved (§5.5). Ranking is the human's.
@@ -526,7 +526,7 @@ COP never writes back to a source system.
 | D | Outbound channel for check-in requests | **SMS and chat at once.** Real when Twilio/Slack are configured; otherwise recorded and shown as SIMULATED — the wall never claims a message left the building when it didn't | `cop/comms.py` |
 | E | Roll-call closure | **May close with names unaccounted**; the number is the after-action record | `close_incident` |
 | F | Who opens a roll call | **Battle Captain only.** Anyone on the floor may work the roster | `ROLL_CALL_OPENERS` |
-| G | INTSUM publication | **Drafted at a fixed time, released by the Battle Captain** — one human gate on the product the whole floor reads | §5.6 — not yet built |
+| G | INTSUM publication | **Drafted at a fixed time, released by the Battle Captain** — one human gate on the product the whole floor reads | §5.6 — enforced: a ten-minute clock drafts once per day at the fixed hour (and at startup if missed); only `battle_captain` may release |
 | H | Who creates directed requirements | **Any security role, plus EAs**; the S2 analyst owns the answer | §5.2 — not yet built |
 | I | Area Assessment scoring | **No numeric composite.** Bands, confidence, and gaps per indicator; the human ranks | §5.6 — enforced: the product has no score field; three cell states |
 | J | Raw signal retention | **90 days**; anything cited by a product lives as long as the product; the ledger is forever | §5.4 — not yet built |
@@ -557,6 +557,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.13** — INTSUM built (§5.6, Decision G): a fixed-order diff since the last one, fixed-hour draft, Battle Captain release.
 - **v3.12** — Area Assessment built (§5.6): candidates side by side, reported / quiet / gap cells, refuse-to-approve; stale rulings in §5.6 replaced with G and I.
 - **v3.11** — `Report`/`Case` and the case graph built (§5.10 #1–2, §5.11); the review queue is the v1 workbench.
 - **v3.10** — Sigtoc requirements, the self-generating collection plan, sources as operator settings, `/v1/s2` embedded and standalone; domains recorded.

@@ -177,6 +177,16 @@ Extraction (Decision P) only suggests. Without `ANTHROPIC_API_KEY` it is a cited
 
 Product shape: `indicators[]` (rows), `candidates[]` (columns) each with `cells[]` — `state` is `reported` (`likelihood` from the ICD 203 list, `band`, code-computed `confidence` with `confidence_basis`, `evidence[]`), `quiet` (a tasked source, nothing reported; `confidence: low`), or `gap` (`recommended[]` sources) — plus `counts`, `worst`, `bluf`, `author`. No score, rank, or composite field exists (Decision I). Evidence is the wall's threat table within the requirement's radius (+5 km buffer) observed between 90 days before the window and its end; a threat's `event_type` maps to an indicator, unmapped ones are listed as `unclassified`. `refusal` is set and approval is refused when no candidate has a reported or quiet cell.
 
+## 3.5 Sigtoc — INTSUM (`/v1/s2/intsum`, PRD §5.6, Decision G)
+
+| Method | Path | Body / params | Notes |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/s2/intsum/draft` | — battle_captain / analyst | drafts now, covering everything since the last INTSUM's `period.to` (24 h if none). Ledger `s2.intsum.drafted` |
+| `GET` | `/s2/intsum` · `/latest` · `/{id}` | | headlines, or the full product |
+| `POST` | `/s2/intsum/{id}/release` | `notes?` — **battle_captain only** | `409` if already released. Ledger `s2.intsum.released` |
+
+The fixed-time draft: the COP app runs a ten-minute clock that drafts once per calendar day once `TOC_INTSUM_HOUR_UTC` (default 5) has passed — including at startup if the hour was missed. `TOC_INTSUM_CLOCK=off` disables it (tests). Product structure is fixed: `headline` (NSTR when nothing significant), `requirements` (active/standing/directed counts; created, expired, answered), `new_threats` (observed in the period, worst first, each attributed to the active requirements it falls inside, P1 first), `wall` (links, posture, roll calls), `reports` + `cases`, `products` (assessment and area-assessment events, pending area assessments), `collection` (live sources with last run, collector runs, gaps ranked by requirements affected).
+
 ## 4. The S2 drafter (`POST /assessments/draft`)
 CLUE-style: the model drafts, code decides what it may say.
 - **Code selects the evidence** — threats within radius (+5 km) of the subject, plus confirmed links.

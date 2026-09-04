@@ -127,3 +127,16 @@ export interface AreaCandidate { requirement_id: string; place: string; lat: num
   unclassified: { threat_id: string; title: string }[] }
 export interface AreaAssessment { id: string; title: string; purpose: string; requirement_ids: string[]; status: 'draft' | 'review' | 'approved'; author: string; created_at: string; decided_by: string | null
   indicators: { id: string; label: string }[]; candidates: AreaCandidate[]; gaps: string[]; approvable: boolean; refusal: string | null; note: string; places?: string[] }
+
+// §5.6 INTSUM — the daily diff (Decision G)
+export interface LogEv { id: string; at: string; type: string; actor: string; subject: string; summary: string; old: string | null; new: string | null }
+export interface Intsum { id: string; status: 'draft' | 'released'; drafted_by: string; drafted_at: string; released_by: string | null; released_at: string | null; notes: string
+  period: { from: string; to: string; hours: number }; headline: string; nstr: boolean; structure: string[]; event_count: number
+  requirements: { active: number; standing: number; directed: number; created: LogEv[]; updated: LogEv[]; expired: { id: string; subject: string }[]; answered: { id: string; subject: string }[] }
+  new_threats: { id: string; title: string; severity: string; source: string; confidence: string; observed_at: string; synthetic: boolean; requirements: { id: string; subject: string; priority: number }[] }[]
+  wall: { links: LogEv[]; posture: LogEv[]; roll_calls: LogEv[] }
+  reports: { id: string; kind: string; by: string; place: string | null; grade: string; text: string; case_id: string | null }[]
+  cases: { opened: LogEv[]; closed: LogEv[]; decisions: number; open: number }
+  products: { assessments: LogEv[]; area_assessments: LogEv[]; pending_area_assessments: { id: string; title: string; status: string }[] }
+  collection: { runs: LogEv[]; source_changes: LogEv[]; sources: { id: string; name: string; last_collected_at: string | null; last_result: string | null }[]; gaps: { indicator: string; label: string; requirements_affected: number }[] } }
+export interface IntsumHead { id: string; status: 'draft' | 'released'; period: { from: string; to: string; hours: number }; headline: string; nstr: boolean; released_by: string | null }

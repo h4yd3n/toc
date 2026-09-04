@@ -1,4 +1,4 @@
-import type { AreaAssessment, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { AreaAssessment, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -55,3 +55,8 @@ export const listAreas = () => req<AreaAssessment[]>('GET', '/v1/s2/area-assessm
 export const getArea = (id: string) => req<AreaAssessment>('GET', `/v1/s2/area-assessments/${id}`)
 export const draftArea = (requirement_ids: string[], title?: string) => req<AreaAssessment>('POST', '/v1/s2/area-assessments', { requirement_ids, title })
 export const setAreaStatus = (id: string, status: 'draft' | 'review' | 'approved') => req<AreaAssessment>('PATCH', `/v1/s2/area-assessments/${id}`, { status })
+export const listIntsums = () => req<IntsumHead[]>('GET', '/v1/s2/intsum')
+export const latestIntsum = () => req<Intsum>('GET', '/v1/s2/intsum/latest')
+export const getIntsum = (id: string) => req<Intsum>('GET', `/v1/s2/intsum/${id}`)
+export const draftIntsum = () => req<Intsum>('POST', '/v1/s2/intsum/draft')
+export const releaseIntsum = (id: string, notes?: string) => req<Intsum>('POST', `/v1/s2/intsum/${id}/release`, { notes })
