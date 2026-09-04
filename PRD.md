@@ -247,9 +247,54 @@ The loop, closed: **Ops reports → S2 grades and files into cases → S2 assess
 acknowledged → Ops plans the operation → the floor watches it → Ops reports.** The wall is where all of it is visible
 at once, which is what a fusion cell is.
 
+### 5.11 The analyst's workbench — one graph, three views
+
+The `Case` from §5.10 is the folder. This is what an analyst does inside it: link analysis, pattern of life, and
+time-event charts — the products an S2 used to draw by hand, drawn by the system from the case's own evidence.
+The product category is Palantir Gotham / i2 Analyst's Notebook; the wedge here is narrower on purpose.
+
+**The model.** A case is a graph, and every element of it carries a source.
+
+| Element | Fields | Notes |
+| :--- | :--- | :--- |
+| `Entity` | `id`, `type` (person · organization · account · phone · vehicle · place · device), `name`, `aliases[]`, `attributes{}` | Aliases resolve across sources — forty handles, one actor |
+| `Relationship` | `from`, `to`, `type` (member_of · associate · contacted · funded · located_at · owns · …), `first_seen`, `last_seen`, `status` (suggested · confirmed · rejected), `evidence[]` | A dated, typed, sourced line between two entities |
+| `Event` | `at`, `place`, `participants[]`, `type`, `summary`, `evidence[]` | What happened, when, where, who was there |
+| `Evidence` | `signal_id` or `report_id`, `quote`, `source`, `reliability` (A–F), `credibility` (1–6) | The join that makes the chart honest — every edge and every event traces to a line in a report |
+
+**The views are renderings, not products.** Because the model is one graph, all three are automatic:
+
+| View | What it shows | Military name |
+| :--- | :--- | :--- |
+| **Link chart** | entities and relationships; force-directed; confirmed edges solid, suggested edges dashed; **source grade visible on every edge** — a confirmed A1 and a suggested D4 never look alike | association matrix / network diagram |
+| **Timeline** | events on a time axis, filterable by entity; the case's own history | time-event chart |
+| **Time wheel** | activity by hour-of-day × day-of-week per entity, from event timestamps | pattern-of-life analysis |
+
+Plus the map: every `place` entity and located event already has a home on the wall.
+
+**The boundary (Decision P).** The machine **extracts**: it reads reports and signals into entities, relationships, and
+events, each cited to the line it came from, and proposes alias merges. Everything it produces is `suggested` until an
+analyst confirms it. It never asserts a link without a citation, never grades a source, and never draws a line the
+analyst can't trace back. This is the same rule as threat links on the wall (Decision 3), and it is what keeps a
+link chart from filling with plausible lines nobody can defend.
+
+**Access (Decision Q).** This is the tool that gets misused. Opening a case on a **person** requires the Battle Captain
+or the S2 lead. Viewing a case is role-gated. **Every read of a case is written to the ledger**, not only every write —
+the record of who looked at whom is part of the product.
+
+**Build order (Decision O).** The graph model is designed now, because it changes how `Report` and `Case` (§5.10)
+store evidence — they must be graph-shaped from the start. The views come after requirements, the collection plan,
+and the Area Assessment. All three views ship together (Decision R): they are one model, and building one without the
+others would mean building the model three times.
+
+**Not in scope.** Ingesting a platform's full event firehose; bulk data fusion; anything that competes with Gotham on
+volume. Cases are case-sized. The value is provenance on every line, not scale.
+
+**Status:** **[NEXT]** model with `Report`/`Case`; **[LATER]** extraction and the three views.
+
 ### 5.9 Decisions for §5 (2026-09-02)
 
-All four taken — see §14 (G–J): INTSUM drafted at a fixed time and released by the Battle Captain; any security role or EA may create a directed requirement; no numeric composite on the Area Assessment; raw signals kept 90 days, cited signals as long as the product, the ledger forever.
+All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a fixed time and released by the Battle Captain; any security role or EA may create a directed requirement; no numeric composite on the Area Assessment; raw signals kept 90 days, cited signals as long as the product, the ledger forever.
 
 ---
 
@@ -428,6 +473,10 @@ COP never writes back to a source system.
 | L | Inbound SMS replies | **The check-in link is enough for v1**; a Twilio inbound webhook (a "SAFE" text clears the row) comes with a public deploy | §8 — not yet built |
 | M | Escalation timer | **15 minutes** with no response → auto-flag UNREACHABLE and float the name to the top of the call list | §8 — not yet built |
 | N | Roster edits | **Anyone on the floor may add a missed name** (visitor, contractor); tagged `basis: manual` and logged | §8 — not yet built |
+| O | Workbench build order | **Design the case graph now** (it shapes `Report`/`Case`); build the views after requirements, collection plan, Area Assessment | §5.11 |
+| P | Extracted links | **Suggested until an analyst confirms**; source grade visible on every edge; no line without a citation | §5.11 |
+| Q | Case access | **Battle Captain or S2 lead opens a case on a person**; viewing role-gated; **every read on the ledger** | §5.11 |
+| R | Which views first | **All three together** — link chart, timeline, time wheel — one model, three renderings | §5.11 |
 
 ---
 
@@ -443,6 +492,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.7** — the analyst's workbench (§5.11): case graph with provenance, suggest→confirm extraction, link chart / timeline / time wheel; decisions O–R.
 - **v3.6** — the origin in the author's words (§1.1); the ops↔intel loop and the four requirements it adds (§5.10).
 - **v3.5** — cadence adjustable (K); S6 inbound, escalation, roster edits decided (L–N). No open decisions.
 - **v3.4** — Sigtoc spec (§5): two missions, first-class requirements, self-generating collection plan, Area Assessment + INTSUM, standalone surface; decisions G–J.
