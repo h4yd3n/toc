@@ -2,9 +2,10 @@ import SwiftUI
 
 struct PersonnelScreen: View {
     @Environment(COPStore.self) private var store
+    @State private var addingSite = false
     var body: some View {
         List {
-            Section { PanelHead(code: store.sectionCode("S1"), title: store.sectionTitle("S1", "PERSONNEL"), hint: "Blue Force"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
+            Section { EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
             TaskingsSection(section: "S1")
             if !store.openIncidents.isEmpty {
                 Section(header: SectionLabel(text: "S6 · ROLL CALLS")) {
@@ -19,11 +20,18 @@ struct PersonnelScreen: View {
                 }.listRowBackground(Theme.red.opacity(0.08))
             }
             TaskOrgSection()
-            Section(header: SectionLabel(text: "LOCATIONS")) {
+            Section(header: HStack {
+                SectionLabel(text: "LOCATIONS")
+                if store.can("S3", "edit") {
+                    Spacer()
+                    Button("+ SITE") { addingSite = true }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered)
+                }
+            }) {
                 ForEach(store.snapshot?.locations ?? []) { l in
                     Button { store.selection = .site(l.id) } label: {
                         HStack(spacing: 8) {
                             Circle().fill(Theme.posture(l.effectivePosture)).frame(width: 7, height: 7).shadow(color: Theme.posture(l.effectivePosture), radius: 4)
+                            if l.isToc == true { Text("◈").foregroundStyle(Theme.blue) }
                             Text(l.name).lineLimit(1)
                             if l.sensitivity == "restricted" { Text("⚿").foregroundStyle(Theme.amber) }
                             Spacer()
@@ -51,6 +59,7 @@ struct PersonnelScreen: View {
             }.listRowBackground(Theme.panel)
         }
         .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg).drivesDock(store)
+        .sheet(isPresented: $addingSite) { SiteForm { addingSite = false } }
     }
 }
 
@@ -67,7 +76,7 @@ struct IntelScreen: View {
     var body: some View {
         List {
             Section {
-                HStack { PanelHead(code: store.sectionCode("S2"), title: store.sectionTitle("S2", "INTELLIGENCE"), hint: "Sigtoc")
+                HStack { Spacer()
                     Button("⟳ COLLECT") { store.act("collecting") { try await store.client.refreshIntel() } }
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S2" })
@@ -215,7 +224,6 @@ struct OpsScreen: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     Color.clear.frame(height: 0).background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .named("agenda")).minY) })
-                    PanelHead(code: store.sectionCode("S3"), title: store.sectionTitle("S3", "OPERATIONS"), hint: "Agenda").padding(.horizontal, 14).padding(.top, 8)
                     EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }).padding(.horizontal, 14)
                     TaskingsSection(section: "S3", plain: true)
                     ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
@@ -412,7 +420,6 @@ struct LogisticsScreen: View {
         let title = store.snapshot?.sections?.first { $0.code == "S4" }?.title ?? "LOGISTICS"
         List {
             Section {
-                PanelHead(code: "S4", title: title, hint: "Supply & equipment")
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S4" })
                 if let b = board {
                     HStack(spacing: 8) { Chip(text: "S4 \(b.status.uppercased())", color: healthColor(b.status), filled: b.status != "green")
@@ -478,7 +485,6 @@ struct SignalScreen: View {
         let canEdit = store.client.role == "battle_captain" || store.client.role == "signal"
         List {
             Section {
-                PanelHead(code: "S6", title: title, hint: "Comms & systems")
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S6" })
                 if let b = board {
                     HStack(spacing: 8) { Chip(text: "S6 \(b.status.uppercased())", color: healthColor(b.status), filled: b.status != "green")

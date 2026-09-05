@@ -49,6 +49,9 @@ final class COPStore {
     var client = COPClient()
     var users: [UserInfo] = []
     var tab = "COP"  // the phone's tab; a header counter can jump it
+    /// Bumped when the section's own tab is tapped again: the sheet takes it as "raise me a step", so a sheet resting
+    /// down by the dock can be brought back without finding the handle.
+    var sheetRaise = 0
     func signIn(_ id: String) { client.userId = id; UserDefaults.standard.set(id, forKey: "toc.user"); Task { await load() } }
     func loadUsers() async { users = (try? await client.users()) ?? [] }
     var me: Me? { snapshot?.me }

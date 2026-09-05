@@ -30,6 +30,11 @@ struct COPClient {
     func setPosture(siteId: String, posture: String) async throws {
         try await send("PATCH", "/v1/cop/locations/\(siteId)/posture", ["posture": posture, "reason": "Set from iOS"])
     }
+    /// §3.1 sites: add one, correct one that moved, and move the TOC when it jumps.
+    func createLocation(_ body: [String: Any]) async throws { try await send("POST", "/v1/cop/locations", body) }
+    func updateLocation(id: String, _ body: [String: Any]) async throws { try await send("PATCH", "/v1/cop/locations/\(id)", body) }
+    func setToc(siteId: String) async throws { try await send("POST", "/v1/cop/locations/\(siteId)/toc", [:]) }
+
     func draftAssessment(subjectType: String, subjectId: String) async throws {
         try await send("POST", "/v1/cop/assessments/draft", ["subject_type": subjectType, "subject_id": subjectId])
     }

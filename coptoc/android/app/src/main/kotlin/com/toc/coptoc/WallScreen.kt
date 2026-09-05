@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -137,7 +139,8 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
     TaskingDialogs(st, store, "S1", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
-    Label(sectionHead(snap, "S1", "PERSONNEL"), "Blue Force")
+    var addingSite by remember { mutableStateOf(false) }
+    if (addingSite) SiteFormDialog(store, null) { addingSite = false }
     EstimateLine(snap.estimates.firstOrNull { it.section == "S1" })
     var openUnits by remember { mutableStateOf(setOf<String>()) }
     val roots = snap.teams.filter { t -> t.parentId == null && snap.teams.any { it.parentId == t.id } }
@@ -161,10 +164,12 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
             }
             roots.forEach { unit(it, 0) }
         }
-        item { Label("LOCATIONS") }
+        item { Label("LOCATIONS", action = if (st.role == "battle_captain") ({ Mini("+ SITE", Palette.blue2, true) { addingSite = true } }) else null) }
         items(snap.locations, key = { it.id }) { l ->
             RowItem(selected = (st.selection as? Selection.SiteSel)?.id == l.id, onClick = { store.select(Selection.SiteSel(l.id)) }) {
-                Dot(Palette.posture(l.effectivePosture)); Text(l.name, color = Palette.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Dot(Palette.posture(l.effectivePosture))
+                if (l.isToc) Text("◈", color = Palette.blue2, fontSize = 10.sp)
+                Text(l.name, color = Palette.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (l.threatIdsInArea.isNotEmpty()) Text("△${l.threatIdsInArea.size} ", color = Palette.amber, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 Text("${l.present}/${l.assigned}", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             }
@@ -189,7 +194,7 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
     TaskingDialogs(st, store, "S2", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
-    Label(sectionHead(st.snap, "S2", "INTELLIGENCE"), "Sigtoc", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
+    Label("", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
     val s2State = androidx.compose.foundation.lazy.rememberLazyListState(); s2State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s2State, contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -251,7 +256,6 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S3Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    Label(sectionHead(st.snap, "S3", "OPERATIONS"), "Events · Travel")
     androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(snap.events, key = { it.id }) { e -> Card(Palette.purple, selected = (st.selection as? Selection.EventSel)?.id == e.id, onClick = { store.select(Selection.EventSel(e.id)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -366,7 +370,7 @@ fun PhoneScreen(st: WallState, store: Store) {
             }
         }
         Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerPx = it.height }) {  // the header, floating over the picture
-            PhoneHeader(st, store, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
+            PhoneHeader(st, store, tab = tab, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
             FlashStrip(st, store)
         }
         Box(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {  // (kept: the sheets and toasts below sit in this scope)
@@ -386,7 +390,7 @@ fun PhoneScreen(st: WallState, store: Store) {
                 val on = t == tab
                 val badge = when (t) { Tab.S1 -> snap?.incidents?.count { it.status == "open" } ?: 0; Tab.S2 -> snap?.summary?.warningsPending ?: 0; else -> 0 }
                 val dot = when (t) { Tab.S4 -> snap?.summary?.s4Status; Tab.S6 -> snap?.summary?.s6Status; else -> null }?.takeIf { it != "green" }
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Palette.panel2 else Color.Transparent).clickable { tab = t; store.select(null); NavBarChrome.expand() }.padding(vertical = vPad), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Palette.panel2 else Color.Transparent).clickable { if (t == tab) SheetRaise.bump() else { tab = t; store.select(null) }; NavBarChrome.expand() }.padding(vertical = vPad), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box { Icon(t.icon, contentDescription = t.label, tint = if (on) Palette.blue2 else Palette.dim, modifier = Modifier.size(iconSize))
                         if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp)
                         dot?.let { Box(Modifier.offset(x = 16.dp, y = (-3).dp).size(8.dp).background(healthColor(it), RoundedCornerShape(50))) } }
@@ -399,7 +403,7 @@ fun PhoneScreen(st: WallState, store: Store) {
 
 /** The iOS posture bar, on Android: TOC · DEFCON · clock; the watch line; the counters. Drawn under the status bar. */
 @Composable
-fun PhoneHeader(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
+fun PhoneHeader(st: WallState, store: Store, tab: Tab = Tab.COP, onJump: (Tab) -> Unit = {}) {
     @Composable fun J(n: String, label: String, color: Color = Palette.text) = Stat(n, label, color, onClick = STAT_TAB[label]?.let { t -> { onJump(t) } })
     val s = st.snap?.summary; val w = st.snap?.watch
     var roleMenu by remember { mutableStateOf(false) }
@@ -445,6 +449,9 @@ fun PhoneHeader(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
                     DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) }) } }
         }
         }
+        // §3 — the watch and the counters belong to the COP, where the picture has room for them. A section's sheet
+        // needs the height more than it needs a summary it is one tap away from.
+        if (tab == Tab.COP)
         Column(Modifier.padding(horizontal = 10.dp).padding(top = 8.dp, bottom = 6.dp).fillMaxWidth().background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {  // the watch and the counters: a lighter card floating over the picture
         w?.let { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${it.name.uppercase()} WATCH", color = Palette.blue2, fontSize = 10.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
@@ -512,7 +519,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
         onPick = { d -> scrubbed = d; val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
     LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S3", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
-        item { Label(sectionHead(snap, "S3", "OPERATIONS"), "Agenda"); EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
+        item { EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
         items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
             when (val r = rows[i]) {
                 is AgendaRow.Day -> Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -614,7 +621,7 @@ fun ColumnScope.S4Phone(st: WallState, store: Store) {
     val s4State = androidx.compose.foundation.lazy.rememberLazyListState(); s4State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s4State, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S4", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
-        item { Label("S4 · $title", "Supply & equipment"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S4" })
+        item { EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S4" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S4 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
                 Text("${b.counts.red} red · ${b.counts.amber} amber · ${b.counts.inbound} inbound" + (if (b.counts.late > 0) " · ${b.counts.late} late" else ""), color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
@@ -658,7 +665,7 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
     val s6State = androidx.compose.foundation.lazy.rememberLazyListState(); s6State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s6State, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S6", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
-        item { Label("S6 · $title", "Comms & systems"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S6" })
+        item { EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S6" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S6 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
                 Text("${b.counts.down} down · ${b.counts.degraded} degraded · ${b.counts.total} systems", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
@@ -694,38 +701,75 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
 /** §3 the map-first sections: the picture behind with the section's layer, the section's list on a sheet with three rests — peek, half, full. */
 @Composable
 fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, content: @Composable ColumnScope.() -> Unit) {
-    var rest by remember { mutableStateOf(0.55f) }
-    var drag by remember { mutableStateOf(0f) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        val totalPx = with(density) { maxHeight.toPx() }
-        val avail = (totalPx - headerPx).coerceAtLeast(200f)
+        // The map is composed here and not again while the sheet moves. It used to share a scope with the drag
+        // state, so every frame of a drag re-ran the map's update block and rebuilt every feature on it.
         WallMap(st.snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section)
-        val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
-        val hPx = (avail * restAnim - drag).coerceIn(90f * density.density, avail * 0.92f)
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { hPx.toDp() })
-            .background(Palette.bg.copy(alpha = .96f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
-            Column(Modifier.fillMaxWidth()
-                .pointerInput(Unit) {  // own the pointer from the first touch: the map view underneath would otherwise take the gesture once it moves
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false); down.consume()
-                        var acc = 0f; var moved = false
-                        while (true) {
-                            val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!ch.pressed) { ch.consume(); break }
-                            acc += ch.position.y - ch.previousPosition.y; if (kotlin.math.abs(acc) > 8f) moved = true; ch.consume()
-                        }
-                        if (moved) { val target = (avail * rest - acc) / avail; rest = if (target < .32f) .12f else if (target < .75f) .55f else .92f }
-                        else rest = if (rest <= .15f) .55f else if (rest < .75f) .92f else .12f
-                        drag = 0f
+        SectionSheet(headerPx, section, content)
+    }
+}
+
+/** Bumped when a section's own tab is tapped again: the sheet takes it as "raise me a step". */
+object SheetRaise {
+    var count by androidx.compose.runtime.mutableStateOf(0)
+        private set
+    fun bump() { count += 1 }
+}
+
+/** The sheet: it owns the drag, so a drag recomposes this and nothing else. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSheet(headerPx: Int, section: String, content: @Composable ColumnScope.() -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val totalPx = with(density) { maxHeight.toPx() }
+    val avail = (totalPx - headerPx).coerceAtLeast(200f)
+    val grip = 52f * density.density      // the handle is a comfortable target, not a hairline
+    val dock = 104f * density.density     // the floating tab bar and a thumb of clearance above it
+    // Peek leaves the handle above the tab bar rather than behind it; half and full are fractions of the wall.
+    val stops = listOf(grip + dock, avail * 0.55f, avail * 0.92f)
+    var rest by remember { mutableStateOf(stops[1]) }
+    var drag by remember { mutableStateOf(0f) }
+    val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
+    androidx.compose.runtime.LaunchedEffect(SheetRaise.count) {
+        if (SheetRaise.count > 0) rest = stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1).coerceAtMost(stops.size - 1)]
+    }
+    val visible = (restAnim - drag).coerceIn(stops[0], stops[2])
+    // Laid out once at full height and slid to the rest it should sit at: resizing it on every frame of a drag
+    // re-measured the whole section list under the finger. The offset comes before the background, or the panel
+    // stays behind at the layout position while its contents slide away.
+    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { stops[2].toDp() })
+        .offset { androidx.compose.ui.unit.IntOffset(0, (stops[2] - visible).toInt()) }
+        .background(Palette.bg.copy(alpha = .96f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+        .border(0.5.dp, Palette.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
+        // Where the handle currently sits in the window. The gesture is measured against this rather than against the
+        // handle's own coordinates, because the handle moves as the sheet moves: a drag measured locally is measured
+        // against an origin the drag itself is shifting, and that feedback shows up as the header shaking.
+        var handleTop by remember { mutableStateOf(0f) }
+        Column(Modifier.fillMaxWidth()
+            .onGloballyPositioned { handleTop = it.positionInWindow().y }
+            .pointerInput(Unit) {  // own the pointer from the first touch: the map underneath would otherwise take it
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false); down.consume()
+                    val startY = handleTop + down.position.y      // the finger, in window space
+                    var delta = 0f; var moved = false
+                    while (true) {
+                        val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) { ch.consume(); break }
+                        delta = (handleTop + ch.position.y) - startY
+                        if (kotlin.math.abs(delta) > 8f) moved = true
+                        if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
+                        ch.consume()
                     }
+                    rest = if (moved) stops.minByOrNull { kotlin.math.abs(it - (rest - delta)) }!!
+                           else stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1) % stops.size]
+                    drag = 0f
                 }
-                .padding(top = 10.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(36.dp, 4.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
-                Text(if (rest <= .15f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
             }
-            content()
+            .heightIn(min = 52.dp).padding(top = 14.dp, bottom = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(48.dp, 5.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
+            Text(if (rest <= stops[0] + 1f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
         }
+        content()
     }
 }
 

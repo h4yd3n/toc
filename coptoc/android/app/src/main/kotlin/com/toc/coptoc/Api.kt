@@ -31,6 +31,11 @@ class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "b
     suspend fun draftIntsum() = send("POST", "/v1/s2/intsum/draft", buildJsonObject { })
     suspend fun updateTask(opId: String, taskId: String, status: String) = send("PATCH", "/v1/cop/operations/$opId/tasks/$taskId", buildJsonObject { put("status", status) })
 
+    /** §3.1 sites: add one, correct one that moved, and move the TOC when it jumps. */
+    suspend fun createLocation(body: kotlinx.serialization.json.JsonObject) = send("POST", "/v1/cop/locations", body)
+    suspend fun updateLocation(id: String, body: kotlinx.serialization.json.JsonObject) = send("PATCH", "/v1/cop/locations/$id", body)
+    suspend fun setToc(siteId: String) = send("POST", "/v1/cop/locations/$siteId/toc", buildJsonObject { })
+
     suspend fun setPosture(siteId: String, posture: String) = send("PATCH", "/v1/cop/locations/$siteId/posture", buildJsonObject { put("posture", posture); put("reason", "Set from Android") })
     suspend fun confirmLink(threatId: String, targetType: String, targetId: String) = send("POST", "/v1/cop/threats/$threatId/links", buildJsonObject { put("target_type", targetType); put("target_id", targetId) })
     suspend fun removeLink(threatId: String, linkId: Int) = send("DELETE", "/v1/cop/threats/$threatId/links/$linkId", null)
