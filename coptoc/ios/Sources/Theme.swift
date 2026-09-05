@@ -80,51 +80,67 @@ extension View {
 struct SectionTab<Content: View>: View {
     var section: String
     @ViewBuilder var content: () -> Content
-    @State private var rest: CGFloat = 0.55
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // The map is built here and never again while the sheet moves. It used to sit in the same body as the
+            // drag state, so every frame of a drag rebuilt a MapKit view carrying every site, traveller, route and
+            // threat ring — which is what made a slow drag crawl.
+            MapScreen(layer: section)
+            SectionSheet(section: section, content: content())
+        }
+    }
+}
+
+/// The sheet: it owns the drag, so a drag invalidates this and nothing else.
+private struct SectionSheet<Content: View>: View {
+    @Environment(COPStore.self) private var store
+    var section: String
+    var content: Content
+    @State private var rest: CGFloat = 0     // the resting height in points; 0 until the first layout resolves it
     @State private var drag: CGFloat = 0
-    private let grip: CGFloat = 52     // the header is the handle, so it is a comfortable target rather than a hairline
+    private let grip: CGFloat = 52           // the handle is a comfortable target, not a hairline
+    private let dock: CGFloat = 104          // the floating tab bar and a thumb of clearance above it
+
+    /// Peek leaves the handle above the tab bar rather than behind it; half and full are fractions of the wall.
+    func rests(_ h: CGFloat) -> [CGFloat] { [grip + dock, h * 0.55, h * 0.92] }
+
     var body: some View {
         GeometryReader { g in
-            ZStack(alignment: .bottom) {
-                MapScreen(layer: section)
-                // The sheet is always laid out at its full height and slid down to the rest we want. Resizing it on
-                // every frame of a drag re-measured the whole section list under the finger, which is what made this
-                // jerky; moving it is a transform the compositor does for free.
-                let full = g.size.height * 0.92
-                let visible = max(grip, min(full, g.size.height * rest - drag))
-                VStack(spacing: 0) {
-                    VStack(spacing: 5) {
-                        Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 48, height: 5)
-                        Text(rest <= 0.15 ? "\(section) · pull up" : "\(section)").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: grip).contentShape(Rectangle())
-                    // One gesture, not a drag and a tap competing: arbitration between them cost a beat at the start
-                    // of every drag, which is most of what made this feel like it was catching. A touch that barely
-                    // moves is the tap, and cycles the rests; anything more carries the sheet.
-                    // High priority: the map underneath runs UIKit pan recognisers, and they were winning the
-                    // drag off the handle. The sheet is on top, so it gets first claim on a touch that starts there.
-                    .highPriorityGesture(DragGesture(minimumDistance: 0)
-                        .onChanged { v in if abs(v.translation.height) > 2 { drag = v.translation.height } }
-                        .onEnded { v in
-                            let moved = v.translation.height
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                                if abs(moved) < 6 {
-                                    rest = rest <= 0.15 ? 0.55 : rest < 0.75 ? 0.92 : 0.12
-                                } else {
-                                    let target = (g.size.height * rest - moved) / g.size.height
-                                    rest = target < 0.32 ? 0.12 : target < 0.75 ? 0.55 : 0.92
-                                }
-                                drag = 0
-                            }
-                        })
-                    content().frame(maxHeight: .infinity)
+            let stops = rests(g.size.height)
+            let base = rest > 0 ? rest : stops[1]
+            let visible = min(max(base - drag, stops[0]), stops[2])
+            VStack(spacing: 0) {
+                VStack(spacing: 5) {
+                    Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 48, height: 5)
+                    Text(base <= stops[0] + 1 ? "\(section) · pull up" : "\(section)")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim)
                 }
-                .frame(height: full, alignment: .top)   // slack goes below, so the handle stays at the sheet's edge
-                .background(Theme.bg.opacity(0.96), in: UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
-                .overlay(alignment: .top) { UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16).stroke(Theme.line, lineWidth: 0.5) }
-                .shadow(color: .black.opacity(0.4), radius: 12, y: -4)
-                .offset(y: full - visible)   // last: offset is a render transform, and a background applied after it
-                                             // would stay behind at the layout frame while the sheet slid away
+                .frame(maxWidth: .infinity, minHeight: grip).contentShape(Rectangle())
+                // One gesture, not a drag and a tap competing: arbitration between them cost a beat at the start of
+                // every drag. High priority, because the map underneath runs UIKit pan recognisers that were winning
+                // a touch that started on the handle.
+                .highPriorityGesture(DragGesture(minimumDistance: 0)
+                    .onChanged { v in if abs(v.translation.height) > 2 { drag = v.translation.height } }
+                    .onEnded { v in
+                        let moved = v.translation.height
+                        let settled: CGFloat = abs(moved) < 6
+                            ? stops[(( stops.firstIndex(of: base) ?? 1) + 1) % stops.count]      // a tap cycles the rests
+                            : stops.min(by: { abs($0 - (base - moved)) < abs($1 - (base - moved)) })!
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { rest = settled; drag = 0 }
+                    })
+                content.frame(maxHeight: .infinity)
+            }
+            .frame(height: stops[2], alignment: .top)   // laid out once at full height and slid: resizing it on every
+            .background(Theme.bg.opacity(0.96), in: UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
+            .overlay(alignment: .top) { UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16).stroke(Theme.line, lineWidth: 0.5) }
+            .shadow(color: .black.opacity(0.4), radius: 12, y: -4)
+            .offset(y: stops[2] - visible)              // frame re-measured the whole list under the finger
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .onAppear { if rest == 0 { rest = stops[1] } }
+            // Tapping the section's own tab again raises the sheet a step, for when it is resting out of the way.
+            .onChange(of: store.sheetRaise) {
+                guard let i = stops.firstIndex(of: rest) else { return }
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { rest = stops[min(i + 1, stops.count - 1)] }
             }
         }
     }

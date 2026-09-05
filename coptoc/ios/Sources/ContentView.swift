@@ -191,7 +191,7 @@ struct TabBar: View {
         HStack(spacing: 0) {
             ForEach(tabs, id: \.self) { t in
                 let on = t == tab
-                Button { tab = t; store.selection = nil; store.expandBar() } label: {
+                Button { if t == tab { store.sheetRaise += 1 } else { tab = t; store.selection = nil }; store.expandBar() } label: {
                     VStack(spacing: c ? 0 : 3) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: Self.icons[t] ?? "square").font(.system(size: c ? 17 : 20, weight: .medium)).frame(height: c ? 20 : 24)
