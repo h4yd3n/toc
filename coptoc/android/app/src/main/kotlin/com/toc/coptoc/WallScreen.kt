@@ -367,26 +367,51 @@ fun PhoneHeader(st: WallState, store: Store) {
     HorizontalDivider(thickness = 0.5.dp, color = Palette.line)
 }
 
-/** S3 on the phone: events, then trips, as a vertical list; the battle log beneath. */
+/** S3 on the phone: an agenda by day — events and standalone trips under their date, a gap line when days go by
+ * with nothing — and the battle log beneath. */
+sealed class AgendaRow { data class Day(val day: java.time.LocalDate, val daysAway: Long) : AgendaRow(); data class Gap(val days: Long) : AgendaRow(); data class Ev(val e: CopEvent) : AgendaRow(); data class Tr(val t: Trip) : AgendaRow() }
+
+fun agendaRows(snap: Snapshot): List<AgendaRow> {
+    val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+    fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrDefault(today)
+    val byDay = sortedMapOf<java.time.LocalDate, MutableList<AgendaRow>>()
+    snap.events.forEach { e -> byDay.getOrPut(dayOf(e.startAt)) { mutableListOf() }.add(AgendaRow.Ev(e)) }
+    snap.trips.filter { it.eventId == null }.forEach { t -> byDay.getOrPut(maxOf(dayOf(t.departAt), today)) { mutableListOf() }.add(AgendaRow.Tr(t)) }
+    val out = mutableListOf<AgendaRow>(); var prev: java.time.LocalDate? = null
+    byDay.forEach { (d, rows) ->
+        prev?.let { p -> val gap = java.time.temporal.ChronoUnit.DAYS.between(p, d); if (gap > 1) out.add(AgendaRow.Gap(gap - 1)) }
+        out.add(AgendaRow.Day(d, java.time.temporal.ChronoUnit.DAYS.between(today, d))); out.addAll(rows); prev = d
+    }
+    return out
+}
+
 @Composable
 fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    Label("S3 · OPERATIONS", "Events · Travel")
+    Label("S3 · OPERATIONS", "Agenda")
     EstimateLine(snap.estimates.firstOrNull { it.section == "S3" })
+    val rows = remember(snap) { agendaRows(snap) }
     LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
-        item { Label("EVENTS", "${snap.events.size}") }
-        items(snap.events, key = { it.id }) { e -> Column(Modifier.fillMaxWidth().clickable { store.select(Selection.EventSel(e.id)) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                e.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) }; e.coverage?.let { Chip("COVER ${it.assigned}/${it.required}", if (it.gap > 0) Palette.red else Palette.green) } }
-            Text(e.venueName, color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            Text("${e.startAt.take(10)} → ${e.endAt.take(10)} · ${e.attendeeCount} attending · ${e.vipCount} VIP", color = Palette.dim, fontSize = 10.sp) } }
-        item { Label("TRAVEL", "${snap.trips.size}") }
-        items(snap.trips, key = { it.id }) { t -> Column(Modifier.fillMaxWidth().clickable { store.select(Selection.PersonSel(t.personId)) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(t.status.uppercase(), if (t.status == "active") Palette.blue2 else Palette.dim, filled = true); Text((if (t.isVip) "★ " else "") + t.personName, color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); t.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) } }
-            Text("${t.originName.split(" ").first()} → ${t.destName}", color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            Text(t.purpose, color = Palette.dim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+        items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
+            when (val r = rows[i]) {
+                is AgendaRow.Day -> Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.day.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM", java.util.Locale.US)).uppercase(), color = if (r.daysAway == 0L) Palette.red else Palette.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+                    Text(when { r.daysAway == 0L -> "TODAY"; r.daysAway == 1L -> "TOMORROW"; r.daysAway < 0 -> "STARTED"; else -> "IN ${r.daysAway} DAYS" }, color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace) }
+                is AgendaRow.Gap -> Text("— nothing for ${r.days} day${if (r.days == 1L) "" else "s"} —", Modifier.fillMaxWidth().padding(vertical = 10.dp), color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                is AgendaRow.Ev -> { val e = r.e; RowItem(selected = (st.selection as? Selection.EventSel)?.id == e.id, onClick = { store.select(Selection.EventSel(e.id)) }) { Column(Modifier.weight(1f)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        e.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) }; e.coverage?.let { Chip("COVER ${it.assigned}/${it.required}", if (it.gap > 0) Palette.red else Palette.green) } }
+                    Text(e.venueName, color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("${e.startAt.take(10)} → ${e.endAt.take(10)} · ${e.attendeeCount} attending · ${e.vipCount} VIP · ${e.tripsGenerated} trips", color = Palette.dim, fontSize = 10.sp) } } }
+                is AgendaRow.Tr -> { val t = r.t; RowItem(selected = (st.selection as? Selection.PersonSel)?.id == t.personId, onClick = { store.select(Selection.PersonSel(t.personId)) }) { Column(Modifier.weight(1f)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(t.status.uppercase(), if (t.status == "active") Palette.blue2 else Palette.dim, filled = true); Text((if (t.isVip) "★ " else "") + t.personName, color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); t.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) } }
+                    Text("${t.originName.split(" ").first()} → ${t.destName.split(",").first()} · ret ${t.returnAt.take(10)}", color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text(t.purpose, color = Palette.dim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
+            }
+        }
+        if (rows.isEmpty()) item { Text("Nothing planned.", Modifier.padding(14.dp), color = Palette.dim, fontSize = 12.sp) }
         item { Label("LOG · BATTLE LOG", "hash-chained") }
-        items(snap.log, key = { it.id }) { e -> Row(Modifier.padding(horizontal = 12.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        items(snap.log, key = { it.id }) { e -> Row(Modifier.padding(horizontal = 14.dp, vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(e.type.removePrefix("cop.").removePrefix("s2.").uppercase().take(14), color = if (e.actorType == "human") Palette.blue2 else Palette.amber, fontSize = 8.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(78.dp))
             Text(e.summary, color = Palette.text.copy(alpha = .85f), fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
     }

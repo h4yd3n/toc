@@ -177,37 +177,51 @@ struct AssessmentCard: View {
 
 struct OpsScreen: View {
     @Environment(COPStore.self) private var store
+    /// One row per day that has something, in order, with a gap line when days go by with nothing.
+    struct AgendaItem: Identifiable { enum Kind { case event(CopEvent), trip(Trip) }; var id: String; var day: Date; var kind: Kind }
+    var agenda: [(day: Date, items: [AgendaItem])] {
+        guard let snap = store.snapshot else { return [] }
+        var items: [AgendaItem] = snap.events.compactMap { e in ISO.date(e.startAt).map { AgendaItem(id: e.id, day: Calendar(identifier: .gregorian).startOfDay(for: $0), kind: .event(e)) } }
+        items += snap.trips.filter { $0.eventId == nil }.compactMap { t in ISO.date(t.departAt).map { AgendaItem(id: t.id, day: Calendar(identifier: .gregorian).startOfDay(for: max($0, Calendar.current.startOfDay(for: store.now))), kind: .trip(t)) } }
+        let grouped = Dictionary(grouping: items, by: \.day)
+        return grouped.keys.sorted().map { (day: $0, items: grouped[$0]!.sorted { a, b in if case .event = a.kind, case .trip = b.kind { return true }; return a.id < b.id }) }
+    }
     var body: some View {
         List {
-            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Events · Travel"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }) }.listRowBackground(Theme.panel)
-            Section(header: SectionLabel(text: "EVENTS")) {
-                ForEach(store.snapshot?.events ?? []) { e in
-                    Button { store.selection = .event(e.id) } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack { Chip(text: e.status == "active" ? "LIVE" : "T-\(e.daysUntil)d", color: Theme.purple); Text("★ \(e.name)").font(.system(size: 13, weight: .semibold)); Spacer()
-                                if let op = e.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) }
-                                if let c = e.coverage { Chip(text: "COVER \(c.assigned)/\(c.required)", color: c.gap > 0 ? Theme.red : Theme.green) }
-                                if !e.threatIdsInArea.isEmpty { Text("△\(e.threatIdsInArea.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.amber) } }
-                            Text(e.venueName).font(.system(size: 12, design: .monospaced))
-                            Text("\(ISO.short(e.startAt)) → \(ISO.short(e.endAt))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
-                            Text("\(e.attendeeCount) attending · \(e.vipCount) VIP · \(e.securityCount) sec · \(e.tripsGenerated) trips").font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                    }.foregroundStyle(.primary)
+            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Agenda"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }) }.listRowBackground(Theme.panel)
+            let days = agenda
+            ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
+                if idx > 0, let gap = Calendar(identifier: .gregorian).dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
+                    Text("— nothing for \(gap - 1) day\(gap - 1 == 1 ? "" : "s") —").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity).listRowBackground(Theme.bg)
                 }
-            }.listRowBackground(Theme.panel)
-            Section(header: SectionLabel(text: "TRAVEL")) {
-                ForEach(store.snapshot?.trips ?? []) { t in
-                    Button { store.selection = .person(t.personId) } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack { Chip(text: t.status.uppercased(), color: t.status == "active" ? Theme.blue : Theme.dim); if t.isVip { Text("★").foregroundStyle(Theme.gold) }; Text(t.personName).font(.system(size: 13, weight: .semibold)); if t.eventId != nil { Chip(text: "EVT", color: Theme.purple) }
-                                if let op = t.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) } }
-                            Text("\(t.originName.split(separator: " ").first.map(String.init) ?? "") → \(t.destName.split(separator: ",").first.map(String.init) ?? "")").font(.system(size: 12, design: .monospaced))
-                            Text("dep \(ISO.rel(t.departAt, now: store.now)) · ret \(ISO.rel(t.returnAt, now: store.now))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
-                            Text(t.purpose).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Section(header: DayHeader(day: d.day, now: store.now)) {
+                    ForEach(d.items) { item in
+                        switch item.kind {
+                        case .event(let e):
+                            Button { store.selection = .event(e.id) } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack { Chip(text: e.status == "active" ? "LIVE" : "T-\(e.daysUntil)d", color: Theme.purple); Text("★ \(e.name)").font(.system(size: 13, weight: .semibold)); Spacer()
+                                        if let op = e.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) }
+                                        if let c = e.coverage { Chip(text: "COVER \(c.assigned)/\(c.required)", color: c.gap > 0 ? Theme.red : Theme.green) }
+                                        if !e.threatIdsInArea.isEmpty { Text("△\(e.threatIdsInArea.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.amber) } }
+                                    Text(e.venueName).font(.system(size: 12, design: .monospaced))
+                                    Text("\(ISO.short(e.startAt)) → \(ISO.short(e.endAt)) · \(e.attendeeCount) attending · \(e.vipCount) VIP · \(e.tripsGenerated) trips").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                                }
+                            }.foregroundStyle(.primary)
+                        case .trip(let t):
+                            Button { store.selection = .person(t.personId) } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack { Chip(text: t.status.uppercased(), color: t.status == "active" ? Theme.blue : Theme.dim); if t.isVip { Text("★").foregroundStyle(Theme.gold) }; Text(t.personName).font(.system(size: 13, weight: .semibold))
+                                        if let op = t.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) } }
+                                    Text("\(t.originName.split(separator: " ").first.map(String.init) ?? "") → \(t.destName.split(separator: ",").first.map(String.init) ?? "") · ret \(ISO.rel(t.returnAt, now: store.now))").font(.system(size: 12, design: .monospaced))
+                                    Text(t.purpose).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }.foregroundStyle(.primary)
                         }
-                    }.foregroundStyle(.primary)
-                }
-            }.listRowBackground(Theme.panel)
+                    }
+                }.listRowBackground(Theme.panel)
+            }
+            if days.isEmpty { Text("Nothing planned.").font(.system(size: 12)).foregroundStyle(Theme.dim).listRowBackground(Theme.panel) }
             Section(header: SectionLabel(text: "BATTLE LOG · hash-chained")) {
                 ForEach(store.snapshot?.log ?? []) { e in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -220,5 +234,17 @@ struct OpsScreen: View {
             }.listRowBackground(Theme.panel)
         }
         .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+    }
+}
+
+
+/// A day header on the agenda: weekday, date, and how far away it is.
+struct DayHeader: View {
+    var day: Date; var now: Date
+    var body: some View {
+        let f = DateFormatter(); let _ = f.dateFormat = "EEE d MMM"
+        let days = Calendar(identifier: .gregorian).dateComponents([.day], from: Calendar(identifier: .gregorian).startOfDay(for: now), to: day).day ?? 0
+        HStack { Text(f.string(from: day).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(days == 0 ? Theme.red : .primary)
+            Text(days == 0 ? "TODAY" : days == 1 ? "TOMORROW" : days < 0 ? "STARTED" : "IN \(days) DAYS").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim) }
     }
 }
