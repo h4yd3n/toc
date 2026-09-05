@@ -143,10 +143,10 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
     fun members(id: String): List<Person> = snap.people.filter { it.teamId == id } + snap.teams.filter { it.parentId == id }.flatMap { members(it.id) }
     val s1State = androidx.compose.foundation.lazy.rememberLazyListState(); s1State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s1State, contentPadding = PaddingValues(bottom = 96.dp)) {  // room for the floating tab bar
+        taskingsSection(st, store, "S1", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         if (roots.isNotEmpty()) {  // §4 the task organization: brigade → battalions → companies
             item { Label("TASK ORGANIZATION", "present/assigned · ↗ away") }
             fun unit(t: Team, depth: Int) {
-        taskingsSection(st, store, "S1", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
                 val kids = snap.teams.filter { it.parentId == t.id }; val m = members(t.id); val away = m.count { it.status == "traveling" }; val bad = m.count { it.availability == "unreachable" }
                 val isOpen = depth == 0 || t.id in openUnits
                 item(key = "org_" + t.id) { Row(Modifier.fillMaxWidth().clickable { if (kids.isEmpty()) store.select(Selection.SiteSel(t.locationId)) else openUnits = if (t.id in openUnits) openUnits - t.id else openUnits + t.id }
