@@ -1,3 +1,4 @@
+const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
 import type { CopEvent, Selection, Snapshot, Trip } from './types'
 
 const DAY = 864e5
@@ -19,7 +20,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp }: { snap: Snapshot | 
       cls: `ev ${e.status === 'active' ? 'live' : ''} ${e.coverage && e.coverage.gap > 0 ? 'gap' : ''} ${e.threat_ids_in_area.length ? 'threat' : ''}`,
       title: `${e.name} · ${e.venue_name} · ${e.attendee_count} attending · ${e.vip_count} VIP · ${tripsOf(e)} trips` + (e.coverage ? ` · cover ${e.coverage.assigned}/${e.coverage.required}` : '') + (e.operation ? ` · OP ${e.operation.tasks_done}/${e.operation.tasks_total}` : '') })),
     // trips an event generated are the event; they fold into its span
-    ...snap.trips.filter(t => !t.event_id).map((t: Trip): Span => ({ id: t.id, kind: 'trip', label: `${t.is_vip ? '★ ' : ''}${t.person_name.split(' ')[0]} → ${t.dest_name.split(',')[0]}`, sub: t.purpose, start: +new Date(t.depart_at), end: +new Date(t.return_at), sel: { type: 'person', id: t.person_id },
+    ...snap.trips.filter(t => !t.event_id).map((t: Trip): Span => ({ id: t.id, kind: 'trip', label: `${t.is_vip ? '★ ' : ''}${t.person_name.split(' ')[0]} → ${t.dest_name.split(',')[0]}`, sub: t.current_leg ? `${LEG_ICON[t.current_leg.kind]} ${t.current_leg.label || t.current_leg.to_name}` : t.purpose, start: +new Date(t.depart_at), end: +new Date(t.return_at), sel: { type: 'person', id: t.person_id },
       cls: `tr ${t.status} ${t.is_vip ? 'vip' : ''}`, title: `${t.person_name} · ${t.origin_name} → ${t.dest_name} · ${t.purpose}` })),
   ].filter(s => s.end >= t0 && s.start <= tFar).sort((a, b) => a.start - b.start)
   // lanes: events on top, trips beneath; a span takes the first lane whose last span has ended

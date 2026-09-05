@@ -48,7 +48,8 @@ def test_decision2_fresh_checkin_overrides_derived_position(client):
     r = client.post("/v1/cop/people/p_cto/checkin", json={"lat": 35.0, "lon": 139.0, "note": "old", "at": iso(NOW - timedelta(hours=30))})
     assert r.status_code == 200
     cto = next(p for p in client.get("/v1/cop/snapshot").json()["people"] if p["id"] == "p_cto")
-    assert cto["position_source"] == "derived" and cto["checkin_stale"] is True and abs(cto["lat"] - 35.6762) < 1e-6
+    # derived = the itinerary's current leg (§6: the Palace Hotel, not the Tokyo office centroid)
+    assert cto["position_source"] == "derived" and cto["checkin_stale"] is True and abs(cto["lat"] - 35.6847) < 1e-6
     # A fresh one takes over
     client.post("/v1/cop/people/p_cto/checkin", json={"lat": 35.70, "lon": 139.70, "note": "hotel"})
     cto = next(p for p in client.get("/v1/cop/snapshot").json()["people"] if p["id"] == "p_cto")

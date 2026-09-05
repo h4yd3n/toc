@@ -423,7 +423,8 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
                 is AgendaRow.Tr -> { val t = r.t; RowItem(selected = (st.selection as? Selection.PersonSel)?.id == t.personId, onClick = { store.select(Selection.PersonSel(t.personId)) }) { Column(Modifier.weight(1f)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(t.status.uppercase(), if (t.status == "active") Palette.blue2 else Palette.dim, filled = true); Text((if (t.isVip) "★ " else "") + t.personName, color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); t.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) } }
                     Text("${t.originName.split(" ").first()} → ${t.destName.split(",").first()} · ret ${t.returnAt.take(10)}", color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    Text(t.purpose, color = Palette.dim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
+                    Text(t.purpose, color = Palette.dim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    t.currentLeg?.let { l -> Text("${l.icon} ${l.label.ifEmpty { l.toName }} · " + (if (l.kind == "lodging") "until ${l.endAt.take(10)}" else "→ ${l.toName} ${l.endAt.take(16).replace('T', ' ')}"), color = Palette.blue2, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis) } } } }
             }
         }
         if (rows.isEmpty()) item { Text("Nothing planned.", Modifier.padding(14.dp), color = Palette.dim, fontSize = 12.sp) }

@@ -167,6 +167,22 @@ struct DetailView: View {
             kv("To", trip.destName); kv("Depart", "\(ISO.short(trip.departAt)) (\(ISO.rel(trip.departAt, now: store.now)))")
             kv("Return", "\(ISO.short(trip.returnAt)) (\(ISO.rel(trip.returnAt, now: store.now)))"); kv("Purpose", trip.purpose); kv("Source", trip.source)
             if let e = store.event(trip.eventId) { Button("★ \(e.name)") { store.selection = .event(e.id) }.font(.system(size: 12)) }
+            if let legs = trip.legs, !legs.isEmpty {
+                SectionLabel(text: "ITINERARY · \(legs.count) LEGS" + (trip.currentLeg.map { " · NOW: \($0.label.isEmpty ? $0.toName : $0.label)" } ?? ""))
+                ForEach(legs) { l in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Rectangle().fill(l.status == "current" ? Theme.blue : Theme.line).frame(width: 2, height: 28)
+                        Text(ISO.short(l.startAt)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(width: 82, alignment: .leading)
+                        Text(l.icon).font(.system(size: 11))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(l.label.isEmpty ? l.toName : l.label).font(.system(size: 12, weight: .semibold))
+                            Text(l.kind == "lodging" ? "until \(ISO.short(l.endAt))" : "\(l.fromName ?? "") → \(l.toName)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer()
+                        Chip(text: l.status == "current" ? "NOW" : l.status.uppercased(), color: l.status == "current" ? Theme.blue : Theme.dim)
+                    }.opacity(l.status == "done" ? 0.55 : 1)
+                }
+            }
         }
         threatRows(ids: p.threatIdsInArea, confirmed: p.confirmedThreatIds, targetType: "person", targetId: p.id)
         if let trip { draftButton("trip", trip.id) }

@@ -24,6 +24,20 @@ class TripUpdate(BaseModel):
     return_at: Optional[datetime] = None
     purpose: Optional[str] = None
 
+class LegCreate(BaseModel):
+    kind: Literal["flight", "ground", "lodging"]
+    label: str = ""
+    ref: Optional[str] = None
+    from_name: Optional[str] = None
+    from_lat: Optional[float] = None
+    from_lon: Optional[float] = None
+    to_name: str
+    to_lat: float
+    to_lon: float
+    start_at: datetime
+    end_at: datetime
+    note: str = ""
+
 class EventCreate(BaseModel):
     name: str
     event_type: str = "conference"

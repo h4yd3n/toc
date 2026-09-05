@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,7 +44,15 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                 Kicker("S1 PERSON · ${p.status.uppercase().replace('_', ' ')} · ${p.teamName}"); Title((if (p.isVip) "★ " else "") + p.name); Text(p.role, color = Palette.dim, fontSize = 11.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip(p.availability.uppercase().replace('_', ' '), when (p.availability) { "unreachable" -> Palette.red; "off_duty" -> Palette.dim; else -> Palette.green }); Chip(if (p.positionSource == "checkin") "CHECKED IN ${"%.0f".format(p.checkinAgeH ?: 0.0)}h ago" else "DERIVED POSITION", if (p.positionSource == "checkin") Palette.green else Palette.dim); if (p.checkinStale) Chip("STALE", Palette.amber); p.incidentStatus?.let { Chip("ROLL CALL · ${it.uppercase()}", Palette.roster(it)) } }
                 p.lastCheckinNote?.let { KV("Last note", it) }; p.phone?.let { KV("Phone", it) }; p.email?.let { KV("Email", it) }
-                snap.trips.firstOrNull { it.id == p.tripId }?.let { t -> KV("Trip", "${t.originName} → ${t.destName} · ${t.purpose}"); t.operation?.let { KV("Operation", "${it.title} · ${it.tasksDone}/${it.tasksTotal} tasks · ${it.status}") } }
+                snap.trips.firstOrNull { it.id == p.tripId }?.let { t -> KV("Trip", "${t.originName} → ${t.destName} · ${t.purpose}"); t.operation?.let { KV("Operation", "${it.title} · ${it.tasksDone}/${it.tasksTotal} tasks · ${it.status}") }
+                    if (t.legs.isNotEmpty()) { Section("ITINERARY", "${t.legs.size} legs" + (t.currentLeg?.let { " · now: ${it.label.ifEmpty { it.toName }}" } ?: ""))
+                        t.legs.forEach { l -> Row(Modifier.fillMaxWidth().alpha(if (l.status == "done") .55f else 1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.width(2.dp).height(28.dp).background(if (l.status == "current") Palette.blue2 else Palette.line))
+                            Text(l.startAt.take(16).replace('T', ' '), color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(88.dp))
+                            Text(l.icon, fontSize = 11.sp)
+                            Column(Modifier.weight(1f)) { Text(l.label.ifEmpty { l.toName }, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(if (l.kind == "lodging") "until ${l.endAt.take(16).replace('T', ' ')}" else "${l.fromName ?: ""} → ${l.toName}", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            Chip(if (l.status == "current") "NOW" else l.status.uppercase(), if (l.status == "current") Palette.blue2 else Palette.dim) } } } }
                 if (p.threatIdsInArea.isNotEmpty()) { Section("THREATS NEAR", "${p.threatIdsInArea.size}"); p.threatIdsInArea.mapNotNull { id -> snap.threats.firstOrNull { it.id == id } }.forEach { t -> Row(Modifier.clickable { store.select(Selection.ThreatSel(t.id)) }, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip(t.severity.take(3).uppercase(), Palette.severity(t.severity), filled = true); Text(t.title, color = Palette.text, fontSize = 11.sp) } } }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Mini("CHECK IN HERE", Palette.green, !busy) { store.act("checking in") { checkIn(p.id, p.lat, p.lon, "Checked in from Android") } } }
             }

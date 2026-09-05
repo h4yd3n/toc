@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.18
+**Version:** 3.19
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -377,6 +377,8 @@ All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a
 
 **[BUILT]** — long-range planning view (the next 90 days by week: events with coverage and gaps, trips, who is committed) and security coverage per event: a default rule (one lead, one agent per VIP, one more past twenty attending) the Battle Captain can override; only security-team people can cover; overlapping assignments are flagged on the ledger.
 
+**[BUILT] — the itinerary (2026-09-04).** A trip may carry *legs*: flights, ground moves, and lodging, each with a place, a start and end, a label (carrier and number, property, provider), and a confirmation reference. Legs are optional on every business trip, VIP or not: present when the travel system or an EA supplied them, blank otherwise, never inferred. What they buy: the traveler's derived position follows the current leg (a flight in progress is placed at its arrival airport, a night at the hotel; between legs, where the last one ended), so proximity rules and roll calls see the hotel, not the city centroid; the person's detail shows the itinerary as a timeline with the current leg marked; the S3 agenda row shows the current leg. Sources: a travel-system CSV of legs (`/import/legs`, upsert by confirmation reference within a trip) and a pasted confirmation (`/import/itinerary`, one leg per line, places as IATA codes from a known table or `@lat,lon`; anything the parser cannot place is reported, never guessed — the §5.5 discipline applied to S3). EAs add and remove single legs by API. **[LATER]** booking-platform connectors (Concur, Navan) and airline status feeds.
+
 ---
 
 ## 7. S4 — Supply: Equipment Board **[DROPPED]**
@@ -483,6 +485,7 @@ The native apps are native for a reason: the map has to be fluid and the animati
 | Entity | Key fields |
 | :--- | :--- |
 | `Trip` | `id`, `person_id`, `origin_location_id`, `dest_location_id` or `dest_lat`/`dest_lon`/`dest_name`, `depart_at`, `return_at`, `purpose`, `status` |
+| `TripLeg` **[BUILT]** | `id`, `trip_id`, `kind` (flight / ground / lodging), `label`, `ref`, `from_name`/`from_lat`/`from_lon` (not for lodging), `to_name`/`to_lat`/`to_lon`, `start_at`, `end_at`, `note`, `source`; derived `status` (done / current / planned) |
 | `Event` **[BUILT]** | `id`, `name`, `venue_location_id`, `start_at`, `end_at`, `attendee_ids` |
 
 **S2 (placeholder):**
@@ -567,6 +570,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.19** — S3 itineraries: optional legs (flight / ground / lodging) on every business trip; the traveler's position follows the current leg; CSV and pasted-confirmation imports; the phone calendar as a continuous day ribbon that unfolds into the month.
 - **v3.18** — the wall's layout decided: rails and slide-out panels over the map only, S3 and the log full width; posture as five levels read as DEFCON 5 → 1 with the levels menu; DISPLAY toggles. The recon-diamond identity.
 - **v3.17** — the rest of the document: the Warning product with S6 alerting, S1 availability states, NWS zone resolution, export adapters for HRIS / scheduling / travel / calendar / badge, long-range planning with coverage, Wikidata baseline; S2 panels and FLASH on iOS and Android. S4 dropped by the author.
 - **v3.16** — §5.10 #3 `Operation` (target package → OPORD) and #4 dissemination tracking built.

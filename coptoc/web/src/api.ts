@@ -81,4 +81,4 @@ export const getPlanning = (days = 90) => req<Planning>('GET', `/v1/cop/planning
 export const assignCoverage = (eventId: string, person_id: string, role: string) => req<{ overlaps: string[] }>('POST', `/v1/cop/events/${eventId}/coverage`, { person_id, role })
 export const removeCoverage = (eventId: string, personId: string) => req<unknown>('DELETE', `/v1/cop/events/${eventId}/coverage/${personId}`)
 export const setRequiredSecurity = (eventId: string, required_security: number) => req<unknown>('PATCH', `/v1/cop/events/${eventId}`, { required_security })
-export const importText = (kind: 'people' | 'shifts' | 'trips' | 'ics', text: string) => req<ImportResult>('POST', `/v1/cop/import/${kind}`, { text })
+export const importText = (kind: 'people' | 'shifts' | 'trips' | 'ics' | 'legs' | 'itinerary', text: string) => req<ImportResult>('POST', `/v1/cop/import/${kind}`, { text })

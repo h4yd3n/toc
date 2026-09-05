@@ -34,7 +34,12 @@ export interface Incident {
   total: number; accounted: number; pct: number; counts: Record<RosterStatus, number>; checkins_requested: number
   channels: string[]; delivery_summary: Record<string, { sent: number; simulated: number; failed: number }>; roster: RosterEntry[]
 }
-export interface Trip { operation?: OperationSummary | null;
+export interface Leg {
+  id: string; kind: 'flight' | 'ground' | 'lodging'; label: string; ref: string | null
+  from_name: string | null; from_lat: number | null; from_lon: number | null; to_name: string; to_lat: number; to_lon: number
+  start_at: string; end_at: string; status: 'done' | 'current' | 'planned'; note: string; source: string
+}
+export interface Trip { operation?: OperationSummary | null; legs: Leg[]; current_leg: Leg | null;
   id: string; person_id: string; person_name: string; is_vip: boolean
   origin_location_id: string; origin_name: string; origin_lat: number; origin_lon: number
   dest_location_id: string | null; dest_name: string; dest_lat: number; dest_lon: number

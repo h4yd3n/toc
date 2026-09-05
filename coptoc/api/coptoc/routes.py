@@ -16,10 +16,10 @@ from shared.database import async_session_factory, create_engine, init_db
 from . import db_models  # noqa: F401 — registers tables on Base.metadata
 from .comms import Dispatcher, public_url
 from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
-                        TeamRow, ThreatLinkRow, ThreatRow, TripRow)
+                        TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -222,6 +222,37 @@ async def create_trip(body: TripCreate, session: AsyncSession = Depends(get_sess
                                     reason=f"{person.name} → {name}", metadata={"person_id": person.id, "dest": name})
     await sync_standing_requirements(session)
     return {"id": trip.id, "status": "created"}
+
+
+# §6 — the itinerary: legs are optional on every trip, present when someone supplied them.
+
+@router.post("/trips/{trip_id}/legs", status_code=201)
+async def add_leg(trip_id: str, body: LegCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    trip = await one_or_404(session, TripRow, trip_id, "trip")
+    if naive(body.end_at) <= naive(body.start_at):
+        raise HTTPException(422, "end_at must be after start_at")
+    if body.kind != "lodging" and not body.from_name:
+        raise HTTPException(422, "a flight or ground leg needs from_name")
+    leg = TripLegRow(id=f"leg_{uuid.uuid4().hex[:8]}", trip_id=trip.id, kind=body.kind, label=body.label, ref=body.ref,
+                     from_name=body.from_name, from_lat=body.from_lat, from_lon=body.from_lon, to_name=body.to_name, to_lat=body.to_lat, to_lon=body.to_lon,
+                     start_at=naive(body.start_at), end_at=naive(body.end_at), note=body.note, source="manual", created_by=actor_from(x_toc_actor))
+    session.add(leg)
+    await session.commit()
+    await get_ledger().append_event(content_id=trip.id, event_type="cop.trip.leg_added", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    reason=f"{body.kind}: {body.label or body.to_name} → {body.to_name}", metadata={"leg_id": leg.id, "kind": body.kind})
+    return {"id": leg.id, "status": "created"}
+
+
+@router.delete("/trips/{trip_id}/legs/{leg_id}")
+async def remove_leg(trip_id: str, leg_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
+    leg = await one_or_404(session, TripLegRow, leg_id, "leg")
+    if leg.trip_id != trip_id:
+        raise HTTPException(404, "leg not on this trip")
+    await session.delete(leg)
+    await session.commit()
+    await get_ledger().append_event(content_id=trip_id, event_type="cop.trip.leg_removed", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    reason=f"{leg.kind}: {leg.label or leg.to_name}", metadata={"leg_id": leg_id})
+    return {"id": leg_id, "status": "removed"}
 
 
 @router.patch("/trips/{trip_id}")
@@ -1183,8 +1214,9 @@ IMPORTERS = {"battle_captain", "ea", "security", "analyst"}
 
 
 @router.post("/import/{kind}")
-async def import_data(kind: Literal["people", "shifts", "trips", "ics"], body: ImportText, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    """Paste or post an export: people (HRIS CSV), shifts (scheduling CSV), trips (travel-system CSV), ics (calendar).
+async def import_data(kind: Literal["people", "shifts", "trips", "ics", "legs", "itinerary"], body: ImportText, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Paste or post an export: people (HRIS CSV), shifts (scheduling CSV), trips (travel-system CSV), ics (calendar),
+    legs (itinerary CSV from the travel system), itinerary (a pasted confirmation, one leg per line).
     Rows carry their provenance; what cannot be placed is reported, never guessed."""
     require_role(x_toc_role, IMPORTERS, "Importing")
     from . import imports as I
@@ -1192,6 +1224,8 @@ async def import_data(kind: Literal["people", "shifts", "trips", "ics"], body: I
     if kind == "people": result = await I.import_people(session, body.text, body.source or "hris:csv")
     elif kind == "shifts": result = await I.import_shifts(session, body.text, body.source or "scheduling:csv")
     elif kind == "trips": result = await I.import_trips(session, body.text, actor, body.source or "travel_system:csv")
+    elif kind == "legs": result = await I.import_legs(session, body.text, actor, body.source or "travel_system:csv")
+    elif kind == "itinerary": result = await I.import_itinerary(session, body.text, actor, body.source or "itinerary:paste")
     else: result = await I.import_ics(session, body.text, actor, body.source or "calendar:ics")
     await sync_standing_requirements(session)
     await get_ledger().append_event(content_id="import", event_type="cop.import", actor_type="human", actor_id=actor,

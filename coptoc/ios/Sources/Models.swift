@@ -63,7 +63,14 @@ struct Person: Decodable, Identifiable, Hashable {
     var traveling: Bool { status == "traveling" }
 }
 
+struct Leg: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, label: String, ref: String?, fromName: String?, toName: String, toLat: Double, toLon: Double
+    var startAt: String, endAt: String, status: String, note: String, source: String
+    var icon: String { kind == "flight" ? "✈" : kind == "lodging" ? "🏨" : "🚗" }
+}
+
 struct Trip: Decodable, Identifiable, Hashable {
+    var legs: [Leg]?, currentLeg: Leg?
     var id: String, personId: String, personName: String, isVip: Bool
     var originLocationId: String, originName: String, originLat: Double, originLon: Double
     var destLocationId: String?, destName: String, destLat: Double, destLon: Double

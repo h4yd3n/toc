@@ -267,6 +267,7 @@ function PanelHead({ code, title, hint, inline, children }: { code: string; titl
 }
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
+const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
 function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
   sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
   act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
@@ -397,6 +398,16 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
           <div className="kv"><span>Return</span>{new Date(trip.return_at).toUTCString().slice(5, 22)} <span className="dim">({rel(trip.return_at, now)})</span></div>
           <div className="kv"><span>Purpose</span>{trip.purpose}</div>
           <div className="kv"><span>Source</span><code>{trip.source}</code></div>
+          {trip.legs.length > 0 && <>
+            <div className="section-label">ITINERARY · {trip.legs.length} legs{trip.current_leg && <> · now: {trip.current_leg.label || trip.current_leg.to_name}</>}</div>
+            <ol className="legs">{trip.legs.map(l => (
+              <li key={l.id} className={`leg ${l.status}`} title={l.note || l.source}>
+                <span className="leg-when">{new Date(l.start_at).toUTCString().slice(5, 22)}</span>
+                <span className="leg-kind">{LEG_ICON[l.kind]}</span>
+                <span className="leg-what"><b>{l.label || l.to_name}</b>{l.kind === 'lodging' ? <> · until {new Date(l.end_at).toUTCString().slice(5, 16)}</> : <> · {l.from_name} → {l.to_name}</>}{l.ref && <span className="dim"> · {l.ref}</span>}</span>
+                <span className={`chip ${l.status === 'current' ? 'active' : l.status === 'done' ? 'dim' : 'planned'}`}>{l.status === 'current' ? 'NOW' : l.status.toUpperCase()}</span>
+              </li>))}</ol>
+          </>}
         </>}
         {(p.threat_ids_in_area.length > 0 || p.confirmed_threat_ids.length > 0) && <>
           <div className="section-label">THREATS IN AREA</div>

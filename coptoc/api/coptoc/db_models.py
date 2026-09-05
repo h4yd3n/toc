@@ -90,6 +90,28 @@ class TripRow(Base):
     source: Mapped[str] = mapped_column(String, default="calendar")  # provenance: calendar | travel_system | manual | event
 
 
+class TripLegRow(Base):
+    """§6: one leg of a trip's itinerary — a flight, a ground move, or a night's lodging. Optional on every trip: present
+    when the travel system or an EA supplied it, absent otherwise. Never required, never inferred."""
+    __tablename__ = "cop_trip_legs"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(ForeignKey("cop_trips.id"), index=True)
+    kind: Mapped[str] = mapped_column(String)  # flight | ground | lodging
+    label: Mapped[str] = mapped_column(String, default="")  # carrier + number, property, or provider ("UA 954", "Ritz-Carlton Riyadh", "Car service")
+    ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # confirmation / record locator
+    from_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    from_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    from_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    to_name: Mapped[str] = mapped_column(String)  # for lodging: the property; the traveler's position while the leg is current
+    to_lat: Mapped[float] = mapped_column(Float)
+    to_lon: Mapped[float] = mapped_column(Float)
+    start_at: Mapped[datetime] = mapped_column(DateTime)
+    end_at: Mapped[datetime] = mapped_column(DateTime)
+    note: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String, default="manual")
+    created_by: Mapped[str] = mapped_column(String, default="seed")
+
+
 class ThreatRow(Base):
     """S2. Synthetic rows are seed data; real rows come from Sigtoc collectors (GDACS today)."""
     __tablename__ = "cop_threats"

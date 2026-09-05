@@ -19,7 +19,11 @@ import kotlinx.serialization.Serializable
                                 val checkinAgeH: Double? = null, val checkinStale: Boolean = false, val lastCheckinNote: String? = null, val threatIdsInArea: List<String> = emptyList(),
                                 val phone: String? = null, val email: String? = null, val incidentStatus: String? = null, val availability: String = "available")
 @Serializable data class OperationSummary(val id: String, val title: String = "", val status: String = "planned", val tasksTotal: Int = 0, val tasksDone: Int = 0, val blocked: Int = 0, val resourcesOpen: Int = 0, val pct: Int = 0, val fromProductId: String? = null)
-@Serializable data class Trip(val id: String, val personId: String, val personName: String = "", val isVip: Boolean = false, val originName: String = "", val originLat: Double = 0.0, val originLon: Double = 0.0,
+@Serializable data class Leg(val id: String, val kind: String, val label: String = "", val ref: String? = null, val fromName: String? = null, val toName: String = "", val toLat: Double = 0.0, val toLon: Double = 0.0,
+                             val startAt: String = "", val endAt: String = "", val status: String = "planned", val note: String = "", val source: String = "") {
+    val icon get() = when (kind) { "flight" -> "✈"; "lodging" -> "🏨"; else -> "🚗" }
+}
+@Serializable data class Trip(val legs: List<Leg> = emptyList(), val currentLeg: Leg? = null, val id: String, val personId: String, val personName: String = "", val isVip: Boolean = false, val originName: String = "", val originLat: Double = 0.0, val originLon: Double = 0.0,
                               val destName: String = "", val destLat: Double = 0.0, val destLon: Double = 0.0, val departAt: String = "", val returnAt: String = "", val purpose: String = "", val status: String = "planned",
                               val eventId: String? = null, val operation: OperationSummary? = null)
 @Serializable data class CopEvent(val id: String, val name: String, val eventType: String = "", val venueName: String = "", val venueLat: Double = 0.0, val venueLon: Double = 0.0, val startAt: String = "", val endAt: String = "",

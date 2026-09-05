@@ -278,6 +278,7 @@ struct AgendaRow: View {
                         if let op = t.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) } }
                     Text("\(t.originName.split(separator: " ").first.map(String.init) ?? "") → \(t.destName.split(separator: ",").first.map(String.init) ?? "") · ret \(ISO.rel(t.returnAt, now: store.now))").font(.system(size: 12, design: .monospaced))
                     Text(t.purpose).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    if let l = t.currentLeg { Text("\(l.icon) \(l.label.isEmpty ? l.toName : l.label) · \(l.kind == "lodging" ? "until \(ISO.rel(l.endAt, now: store.now))" : "→ \(l.toName) \(ISO.rel(l.endAt, now: store.now))")").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.blue).lineLimit(1) }
                 }.padding(.horizontal, 14).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.foregroundStyle(.primary).buttonStyle(.plain)
         }

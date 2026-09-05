@@ -448,3 +448,12 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .mspan.ev { background: rgba(192,132,252,.22); color: #e9d5ff; border: 1px solid rgba(192,132,252,.5); } .mspan.ev.gap { border-left: 3px solid var(--red); }
 .mspan.tr { background: rgba(59,130,246,.16); color: #bfdbfe; border: 1px solid rgba(96,165,250,.35); height: 12px; line-height: 11px; font-size: 9.5px; } .mspan.tr.vip { color: #fde68a; }
 .mspan.cont { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: 0; } .mspan.more { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: 0; }
+
+/* §6 itinerary legs on the person detail */
+.legs { list-style: none; margin: 0; padding: 0 14px 6px; }
+.leg { display: grid; grid-template-columns: 96px 16px 1fr auto; gap: 8px; align-items: baseline; padding: 4px 0; border-left: 2px solid var(--line-2); padding-left: 8px; font-size: 11px; }
+.leg.current { border-left-color: var(--blue-2); }
+.leg.done { opacity: .55; }
+.leg-when { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.leg-kind { text-align: center; }
+.chip.dim { color: var(--dim); }

@@ -3,14 +3,14 @@ are computed here, never stored. Three decisions are encoded and labeled below."
 import json
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db_models import LedgerEventRow
 from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
-from .db_models import (AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
+from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
 SEVERITY_RANK = {"low": 0, "moderate": 1, "elevated": 2, "critical": 3}
@@ -60,6 +60,31 @@ def trip_status(t: TripRow, now: datetime) -> str:
         return "active"
     return "planned"
 
+def leg_status(lg: TripLegRow, now: datetime) -> str:
+    if lg.end_at <= now:
+        return "done"
+    if lg.start_at <= now:
+        return "current"
+    return "planned"
+
+def leg_position(legs: List[TripLegRow], now: datetime) -> Optional[Tuple[float, float]]:
+    """Where the itinerary says the traveler is: the current leg's destination (a flight is placed at its arrival airport,
+    lodging at the property); between legs, where the last one ended. None when there is no itinerary."""
+    if not legs:
+        return None
+    current = next((lg for lg in legs if leg_status(lg, now) == "current"), None)
+    if current:
+        return current.to_lat, current.to_lon
+    done = [lg for lg in legs if leg_status(lg, now) == "done"]
+    if done:
+        return done[-1].to_lat, done[-1].to_lon
+    return None
+
+def leg_out(lg: TripLegRow, now: datetime) -> Dict[str, Any]:
+    return {"id": lg.id, "kind": lg.kind, "label": lg.label, "ref": lg.ref, "from_name": lg.from_name, "from_lat": lg.from_lat, "from_lon": lg.from_lon,
+            "to_name": lg.to_name, "to_lat": lg.to_lat, "to_lon": lg.to_lon, "start_at": iso(lg.start_at), "end_at": iso(lg.end_at),
+            "status": leg_status(lg, now), "note": lg.note, "source": lg.source}
+
 def event_status(e: EventRow, now: datetime) -> str:
     if e.end_at <= now:
         return "past"
@@ -87,6 +112,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     teams = (await session.execute(select(TeamRow))).scalars().all()
     people = (await session.execute(select(PersonRow))).scalars().all()
     trips = (await session.execute(select(TripRow))).scalars().all()
+    legs = (await session.execute(select(TripLegRow))).scalars().all()
     threats = (await session.execute(select(ThreatRow))).scalars().all()
     links = (await session.execute(select(ThreatLinkRow))).scalars().all()
     events = (await session.execute(select(EventRow))).scalars().all()
@@ -103,6 +129,9 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     loc_by_id = {l.id: l for l in locations}
     team_by_id = {t.id: t for t in teams}
     active_trip_by_person = {t.person_id: t for t in trips if trip_status(t, now) == "active"}
+    legs_by_trip: Dict[str, List[TripLegRow]] = {}
+    for lg in sorted(legs, key=lambda x: x.start_at):
+        legs_by_trip.setdefault(lg.trip_id, []).append(lg)
     confirmed = {}  # (target_type, target_id) -> [link]
     for lk in links:
         confirmed.setdefault((lk.target_type, lk.target_id), []).append(lk)
@@ -120,6 +149,9 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         # Derived position first (Decision 2)
         if trip:
             lat, lon, status, loc_id = trip.dest_lat, trip.dest_lon, "traveling", trip.dest_location_id
+            here = leg_position(legs_by_trip.get(trip.id, []), now)  # §6: the itinerary places the traveler more precisely than the destination
+            if here:
+                lat, lon = here
         else:
             lat, lon, status, loc_id = home.lat, home.lon, "at_post", home.id
         position_source, checkin_age_h, checkin_stale = "derived", None, False
@@ -188,6 +220,8 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "dest_location_id": t.dest_location_id, "dest_name": t.dest_name, "dest_lat": t.dest_lat, "dest_lon": t.dest_lon,
             "depart_at": iso(t.depart_at), "return_at": iso(t.return_at), "purpose": t.purpose, "status": st,
             "event_id": t.event_id, "created_by": t.created_by, "source": t.source,
+            "legs": [leg_out(lg, now) for lg in legs_by_trip.get(t.id, [])],
+            "current_leg": next((leg_out(lg, now) for lg in legs_by_trip.get(t.id, []) if leg_status(lg, now) == "current"), None),
         })
 
     att_by_event: Dict[str, List[str]] = {}

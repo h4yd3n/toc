@@ -51,14 +51,14 @@ export function PlanningPanel({ role, busy, act, onClose, onSelect, reload, snap
 
 /** §13 — paste an export: HRIS CSV, schedule CSV, travel CSV, or a calendar ICS. */
 export function ImportDrawer({ busy, act, onDone }: { busy: string | null; act: Act; onDone: () => void }) {
-  const [kind, setKind] = useState<'people' | 'shifts' | 'trips' | 'ics'>('people')
+  const [kind, setKind] = useState<'people' | 'shifts' | 'trips' | 'ics' | 'legs' | 'itinerary'>('people')
   const [text, setText] = useState('')
   const [result, setResult] = useState<import('./types').ImportResult | null>(null)
-  const hint: Record<string, string> = { people: 'id,name,role,team_name,is_vip,phone,email', shifts: 'email,on_shift,shift_role', trips: 'email,origin_location_id,dest_location_id,dest_name,dest_lat,dest_lon,depart_at,return_at,purpose,booking_ref', ics: 'BEGIN:VCALENDAR … an export from Google/Outlook/Apple Calendar' }
+  const hint: Record<string, string> = { people: 'id,name,role,team_name,is_vip,phone,email', shifts: 'email,on_shift,shift_role', trips: 'email,origin_location_id,dest_location_id,dest_name,dest_lat,dest_lon,depart_at,return_at,purpose,booking_ref', ics: 'BEGIN:VCALENDAR … an export from Google/Outlook/Apple Calendar', legs: 'trip_id|booking_ref|email,kind,label,ref,from_name,from_lat,from_lon,to_name,to_lat,to_lon,start_at,end_at,note', itinerary: 'TRIP trip_001  (or TRAVELER email)\nFLIGHT UA 954 SFO-LHR 2026-09-04 18:10 - 2026-09-05 12:25 conf K7X2ZQ\nHOTEL Ritz-Carlton Riyadh @24.6905,46.6250 2026-09-05 - 2026-09-08 conf 88112\nGROUND Car service RUH-@24.6905,46.6250:hotel 2026-09-05 23:40 - 2026-09-06 00:30' }
   return (
     <div className="dform">
       <div className="dform-head">IMPORT <span className="dim">exports from the systems of record · rows carry their provenance</span></div>
-      <div className="row-btns"><select value={kind} onChange={e => { setKind(e.target.value as typeof kind); setResult(null) }}><option value="people">People (HRIS CSV)</option><option value="shifts">Shifts (schedule CSV)</option><option value="trips">Trips (travel CSV)</option><option value="ics">Events (calendar ICS)</option></select></div>
+      <div className="row-btns"><select value={kind} onChange={e => { setKind(e.target.value as typeof kind); setResult(null) }}><option value="people">People (HRIS CSV)</option><option value="shifts">Shifts (schedule CSV)</option><option value="trips">Trips (travel CSV)</option><option value="ics">Events (calendar ICS)</option><option value="legs">Itinerary legs (travel CSV)</option><option value="itinerary">Itinerary (pasted confirmation)</option></select></div>
       <textarea rows={5} placeholder={hint[kind]} value={text} onChange={e => setText(e.target.value)} />
       {result && <div className="small" style={{ color: result.errors.length ? 'var(--amber)' : 'var(--green)' }}>{Object.entries(result).filter(([k, v]) => typeof v === 'number').map(([k, v]) => `${k} ${v}`).join(' · ')}{result.errors.map((e, i) => <div key={i} className="dim">{e}</div>)}</div>}
       <div className="row-btns"><button className="mini ok" disabled={!!busy || text.trim().length < 5} onClick={() => act('importing', () => api.importText(kind, text).then(setResult))}>IMPORT</button><button className="mini" onClick={onDone}>CLOSE</button></div>

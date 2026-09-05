@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db_models import (AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
+from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
 def now_utc() -> datetime:
@@ -115,6 +115,37 @@ def _trips(now):
         TripRow(id="trip_007", person_id="p_007", origin_location_id="loc_sf", dest_location_id="loc_dc2",
                 dest_name="DC-East (Virginia)", dest_lat=39.0438, dest_lon=-77.4874,
                 depart_at=h(-20), return_at=d(2), purpose="Site security audit", source="manual:ea"),
+    ]
+
+def _legs(now):
+    """§6 itineraries. Present where the travel system supplied them, absent otherwise — the CFO's London trip has none."""
+    h = lambda x: now + timedelta(hours=x); d = lambda x: now + timedelta(days=x)
+    A = {"SFO": ("San Francisco SFO", 37.6213, -122.3790), "LHR": ("London Heathrow LHR", 51.4700, -0.4543), "RUH": ("Riyadh RUH", 24.9576, 46.6988),
+         "HND": ("Tokyo Haneda HND", 35.5494, 139.7798), "SIN": ("Singapore SIN", 1.3644, 103.9915), "DXB": ("Dubai DXB", 25.2532, 55.3657), "IAD": ("Washington Dulles IAD", 38.9531, -77.4565)}
+    def fl(tid, i, label, ref, a, b, s, e, src="travel_system:concur"):
+        return TripLegRow(id=f"leg_{tid[-3:]}_{i}", trip_id=tid, kind="flight", label=label, ref=ref, from_name=A[a][0], from_lat=A[a][1], from_lon=A[a][2], to_name=A[b][0], to_lat=A[b][1], to_lon=A[b][2], start_at=s, end_at=e, source=src)
+    def ho(tid, i, label, ref, lat, lon, s, e, src="travel_system:concur"):
+        return TripLegRow(id=f"leg_{tid[-3:]}_{i}", trip_id=tid, kind="lodging", label=label, ref=ref, to_name=label, to_lat=lat, to_lon=lon, start_at=s, end_at=e, source=src)
+    def gr(tid, i, label, a, lat, lon, to, s, e, src="travel_system:concur"):
+        return TripLegRow(id=f"leg_{tid[-3:]}_{i}", trip_id=tid, kind="ground", label=label, from_name=A[a][0], from_lat=A[a][1], from_lon=A[a][2], to_name=to, to_lat=lat, to_lon=lon, start_at=s, end_at=e, source=src)
+    return [
+        # CEO → Riyadh (departed yesterday): two flights, a car, the hotel until the return
+        fl("trip_001", 1, "UA 954", "K7X2ZQ", "SFO", "LHR", d(-1), h(-14)),
+        fl("trip_001", 2, "BA 263", "K7X2ZQ", "LHR", "RUH", h(-12), h(-5)),
+        gr("trip_001", 3, "Car service", "RUH", 24.6905, 46.6250, "Ritz-Carlton Riyadh", h(-5), h(-4)),
+        ho("trip_001", 4, "Ritz-Carlton Riyadh", "88112", 24.6905, 46.6250, h(-4), d(2)),
+        # CTO → Tokyo (in the air 30h ago): one flight, the hotel
+        fl("trip_003", 1, "JL 1", "R4M9PP", "SFO", "HND", h(-30), h(-19)),
+        ho("trip_003", 2, "Palace Hotel Tokyo", "R4M9PP", 35.6847, 139.7620, h(-18), d(4)),
+        # CSO → Singapore (departed 8h ago): still airborne — the pin sits at the arrival airport
+        fl("trip_004", 1, "SQ 31", "T2Q8LA", "SFO", "SIN", h(-8), h(9)),
+        ho("trip_004", 2, "Fullerton Hotel Singapore", "T2Q8LA", 1.2863, 103.8531, h(10), d(3)),
+        # COO → Dubai (in 3 days): planned
+        fl("trip_005", 1, "EK 226", "Z9C1WW", "SFO", "DXB", d(3), d(3) + timedelta(hours=16)),
+        ho("trip_005", 2, "Address Downtown Dubai", "Z9C1WW", 25.1934, 55.2774, d(3) + timedelta(hours=17), d(6)),
+        # An ordinary traveler's site audit trip: the same fields, entered by an EA
+        fl("trip_007", 1, "UA 2310", None, "SFO", "IAD", h(-20), h(-15), "manual:ea"),
+        ho("trip_007", 2, "Hyatt Regency Reston", None, 38.9586, -77.3570, h(-14), d(2), "manual:ea"),
     ]
 
 # (id, name, type, venue_location_id, venue_name, lat, lon, start_days, duration_days, description, attendees)
@@ -279,7 +310,7 @@ async def reseed(session: AsyncSession) -> None:
     await _seed_case(session, now_utc())
     await _seed_directed(session, now_utc())
     await _seed_operation(session, now_utc())
-    for model in (AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    for model in (AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
@@ -296,6 +327,7 @@ async def reseed(session: AsyncSession) -> None:
     session.add_all(people)
     await session.flush()
     session.add_all(_trips(now))
+    session.add_all(_legs(now))
     people_by_id = {p.id: p for p in people}
     team_loc = {t[0]: t[2] for t in TEAMS}
     for eid, name, etype, vloc, vname, vlat, vlon, start_d, dur, desc, attendees in EVENTS:
