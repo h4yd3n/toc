@@ -9,7 +9,7 @@ const STYLE = 'https://tiles.openfreemap.org/styles/dark'
 
 // Where a wall that remembers nothing and cannot reach the API opens: the Bay Area.
 const BAY_AREA = { center: [-122.16, 37.72] as [number, number], zoom: 8 }
-const BOARD_KEY = 'toc.board'
+const BOARD_KEY = 'toc.board.2'   // bumped when home station replaced the fixed defaults, so a browser remembering the old one starts over
 
 /** The board this browser was left on. A wall that remembers is never pulled somewhere by the server's default. */
 function savedBoard(): { center: [number, number]; zoom: number } | null {

@@ -44,7 +44,7 @@ private object Board {
     /// Where a phone that remembers nothing and cannot reach the API opens: the Bay Area.
     val bayArea: CameraPosition = CameraPosition.Builder().target(LatLng(37.72, -122.16)).zoom(8.0).build()
 
-    private const val PREFS = "toc.map"
+    private const val PREFS = "toc.map.2"   // bumped when home station replaced the fixed defaults, so a phone remembering the old one starts over
     fun load(ctx: android.content.Context) {
         if (position != null) return
         val p = ctx.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)

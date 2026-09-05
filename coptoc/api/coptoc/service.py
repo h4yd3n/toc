@@ -61,12 +61,11 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 # A map board in a TOC does not move because someone walked up to it, so the board a station is left on is the board
 # it opens on: the clients remember it per device and only ask the server where to look when they have no memory.
 # When they ask, the answer is the AO if the Battle Captain declared one (TOC_AO = "lat,lon" or "lat,lon,radius_km"),
-# otherwise the deployment's home ground — the Bay Area for a company, Baghdad for a unit. Both are opinions about
-# who is likely running this, not measurements: they are here to be overridden by TOC_AO, never to be defended.
-HOME_GROUND = {
-    "corporate": {"center_lat": 37.72, "center_lon": -122.16, "radius_km": 70.0},   # SF, Oakland, San Jose in one frame
-    "military":  {"center_lat": 33.31, "center_lon": 44.36,   "radius_km": 40.0},   # Baghdad
-}
+# otherwise home station — the site of type "hq". That is the company's headquarters on the corporate profile and the
+# brigade TOC on the military one, read from the data rather than written down here, so a deployment that moves its
+# headquarters moves the board with it. Restricted sites never set the frame, so every station opens on the same
+# board whether or not the viewer is cleared for the residence layer.
+HQ_VIEW_RADIUS_KM = 30.0   # a display choice: the headquarters and the ground around it, not the whole footprint
 
 
 def declared_ao() -> Optional[Dict[str, Any]]:
@@ -85,9 +84,21 @@ def declared_ao() -> Optional[Dict[str, Any]]:
     return {"center_lat": lat, "center_lon": lon, "radius_km": radius, "source": "ao"}
 
 
-def default_view() -> Dict[str, Any]:
-    """Where a station with no memory of its own should look: the declared AO, else this profile's home ground."""
-    return declared_ao() or {**HOME_GROUND.get(toc_profile(), HOME_GROUND["corporate"]), "source": "profile"}
+def home_station(locations: List[LocationRow]) -> Optional[LocationRow]:
+    """The headquarters: the site of type "hq", else whatever site we have, else nothing to look at yet."""
+    open_sites = [l for l in locations if l.sensitivity != "restricted"]
+    return next((l for l in open_sites if l.type == "hq"), None) or (open_sites[0] if open_sites else None)
+
+
+def default_view(locations: List[LocationRow]) -> Dict[str, Any]:
+    """Where a station with no memory of its own should look: the declared AO, else home station."""
+    ao = declared_ao()
+    if ao:
+        return ao
+    hq = home_station(locations)
+    if hq is None:
+        return {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
+    return {"center_lat": hq.lat, "center_lon": hq.lon, "radius_km": HQ_VIEW_RADIUS_KM, "source": "hq"}
 
 def trip_status(t: TripRow, now: datetime) -> str:
     if t.return_at <= now:
@@ -433,7 +444,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     return {
-        "profile": toc_profile(), "sections": sections_config(), "view": default_view(), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
+        "profile": toc_profile(), "sections": sections_config(), "view": default_view(locations), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
