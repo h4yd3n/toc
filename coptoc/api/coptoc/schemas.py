@@ -90,6 +90,23 @@ class TaskingCreate(BaseModel):
     priority: Literal["routine", "priority", "urgent"] = "routine"
     notes: str = ""
 
+class AreaRatingIn(BaseModel):
+    indicator: str
+    rating: Literal["green", "amber", "red", "unknown"] = "unknown"
+    note: str = ""
+
+class AreaCreate(BaseModel):
+    place: Optional[str] = None            # required unless location_id names a site
+    location_id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    ratings: List[AreaRatingIn] = []
+    summary: str = ""
+
+class AreaUpdate(BaseModel):
+    ratings: Optional[List[AreaRatingIn]] = None
+    summary: Optional[str] = None
+
 class TaskingUpdate(BaseModel):
     status: Optional[Literal["requested", "accepted", "scheduled", "complete", "declined"]] = None
     result: Optional[str] = None

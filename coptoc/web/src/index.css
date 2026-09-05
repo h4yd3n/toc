@@ -619,3 +619,24 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .cmdk li .ks { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; } .cmdk li.none { display: block; }
 .cmdk-foot { font: 10px var(--mono); letter-spacing: .06em; padding: 6px 16px; border-top: 1px solid var(--line); }
 .gear.kbd { font-family: var(--mono); }
+
+/* ---- §5.6a the rated area assessment: the strip, the cards, the matrix ---- */
+.ablocks { display: inline-flex; gap: 2px; } .ab { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--line-2); }
+.ab.green { background: var(--green); } .ab.amber { background: var(--amber); } .ab.red { background: var(--red); } .ab.unknown { background: var(--line-2); }
+.astrip { display: inline-flex; align-items: center; gap: 8px; } .astrip.jump { cursor: pointer; } .astrip.jump:hover .ablocks { outline: 1px solid var(--blue-2); outline-offset: 2px; }
+.chip.unknown { color: var(--dim); border-style: dashed; }
+.kv.area { align-items: center; } .kv.area .mini { margin-left: auto; }
+.list .row.area { display: block; margin: 4px 10px; padding: 7px 10px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel-2); border-left-width: 3px; }
+.list .row.area.red { border-left-color: var(--red); } .list .row.area.amber { border-left-color: var(--amber); } .list .row.area.green { border-left-color: var(--green); }
+.list .row.area .l1, .list .row.area .l2 { display: flex; align-items: center; gap: 8px; } .list .row.area .l2 { margin-top: 4px; } .list .row.area .name { font-weight: 600; } .list .row.area .l2 .mini { margin-left: auto; padding: 1px 5px; }
+.detail.arate { width: 600px; border-color: rgba(245,158,11,.5); } .detail.arate.red { border-color: rgba(239,68,68,.55); } .detail.arate.green { border-color: rgba(34,197,94,.45); } .detail.arate.compare { width: 820px; }
+.arate-head { display: flex; flex-direction: column; gap: 5px; margin: 6px 0; } .arate-head select, .arate-head input, .arate-summary { font: 12px var(--sans); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 4px; color: var(--text); padding: 6px; }
+.arate-summary { width: 100%; box-sizing: border-box; margin: 6px 0; resize: vertical; }
+.arows { list-style: none; margin: 8px 0 0; padding: 0; }
+.arow { display: grid; grid-template-columns: 200px auto 1fr; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); border-left: 3px solid transparent; padding-left: 6px; font-size: 12px; }
+.arow.rt-red { border-left-color: var(--red); } .arow.rt-amber { border-left-color: var(--amber); } .arow.rt-green { border-left-color: var(--green); }
+.alabel { font-weight: 600; } .anote { font-size: 11.5px; color: #c4d0dc; } input.anote { font: 11.5px var(--sans); background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 4px; color: var(--text); padding: 4px 6px; min-width: 0; }
+.rts { display: inline-flex; gap: 3px; } .rt { width: 24px; height: 22px; border-radius: 4px; border: 1px solid var(--line-2); font: 800 10px var(--mono); color: var(--dim); background: transparent; opacity: .6; }
+.rt.on { opacity: 1; color: #000; } .rt.green.on { background: var(--green); border-color: var(--green); } .rt.amber.on { background: var(--amber); border-color: var(--amber); } .rt.red.on { background: var(--red); border-color: var(--red); color: #fff; } .rt.unknown.on { background: var(--line-2); color: var(--text); }
+.matrix.arate td.cell { cursor: default; } .matrix.arate td.cell .note { font-size: 11px; color: #c4d0dc; margin-top: 3px; }
+.matrix.arate td.rt-red { background: rgba(239,68,68,.06); } .matrix.arate td.rt-amber { background: rgba(245,158,11,.05); }

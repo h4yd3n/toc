@@ -25,8 +25,10 @@ from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, Deli
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
 from .taskings import TaskingRow, out as tasking_out
+from . import areas as toc_areas
+from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -231,6 +233,76 @@ async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_s
     await get_ledger().append_event(content_id="setting:TOC_PROFILE", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
                                     new_state=body.profile, reason=f"Profile set to {body.profile}; sample data reloaded", metadata={"name": "TOC_PROFILE"})
     return {"profile": body.profile, "dataset": dataset_for(body.profile)}
+
+
+# ---------------------------------------------------------------- §5.6a the rated area assessment: what S2 judges about a place
+
+@router.get("/areas/indicators")
+async def area_indicators():
+    """The indicator list this deployment rates a place on — the profile's default unless TOC_AREA_INDICATORS says otherwise."""
+    from .sections import profile
+    return {"profile": profile(), "indicators": toc_areas.indicators(profile())}
+
+
+@router.get("/areas")
+async def list_areas(all: bool = Query(False, description="include superseded versions"), session: AsyncSession = Depends(get_session)):
+    q = select(AreaRatingRow) if all else select(AreaRatingRow).where(AreaRatingRow.status == "current")
+    now = now_utc()
+    return sorted((toc_areas.out(a, now) for a in (await session.execute(q)).scalars()), key=lambda a: (a["status"] != "current", a["place"], a["assessed_at"] or ""))
+
+
+@router.get("/areas/{area_id}")
+async def get_area_rating(area_id: str, session: AsyncSession = Depends(get_session)):
+    return toc_areas.out(await one_or_404(session, AreaRatingRow, area_id, "area assessment"), now_utc())
+
+
+@router.post("/areas", status_code=201)
+async def assess_area(body: AreaCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """S2 rates a place. A new assessment of a place supersedes the current one; the old one stays, marked superseded."""
+    from .sections import profile
+    require_role(x_toc_role, {"battle_captain", "analyst"}, "Assessing a place", section="S2")
+    place, lat, lon = (body.place or "").strip(), body.lat, body.lon
+    if body.location_id:
+        loc = await one_or_404(session, LocationRow, body.location_id, "location")
+        place, lat, lon = place or loc.name, lat if lat is not None else loc.lat, lon if lon is not None else loc.lon
+    if not place:
+        raise HTTPException(422, "a place needs a name, or a site on the wall")
+    now = now_utc(); actor = actor_from(x_toc_actor)
+    ratings = toc_areas.normalize([r.model_dump() for r in body.ratings], toc_areas.indicators(profile()))
+    prev = None
+    for a in (await session.execute(select(AreaRatingRow).where(AreaRatingRow.status == "current"))).scalars():
+        if (body.location_id and a.location_id == body.location_id) or toc_areas.same_place(a.place, place):
+            a.status = "superseded"; a.updated_at = now; prev = a
+    row = AreaRatingRow(id=f"area_{uuid.uuid4().hex[:8]}", place=place, location_id=body.location_id, lat=lat, lon=lon, ratings_json=json.dumps(ratings), summary=body.summary.strip(),
+                        assessed_by=actor, assessed_at=now, updated_at=now, supersedes=prev.id if prev else None)
+    session.add(row); await session.commit()
+    o = toc_areas.out(row, now)
+    await get_ledger().append_event(content_id=row.id, event_type="cop.area.assessed", actor_type="human", actor_id=actor, old_state=prev.id if prev else None, new_state=o["worst"],
+                                    reason=f"{place}: {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green" + (f"; worst {o['worst_indicator']}" if o["worst_indicator"] else "") + (" (supersedes the last)" if prev else ""),
+                                    metadata={"location_id": body.location_id, "counts": o["counts"]})
+    return o
+
+
+@router.patch("/areas/{area_id}")
+async def update_area_rating(area_id: str, body: AreaUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Correct a current assessment in place — a note, a rating — without a new version. Superseded ones are history."""
+    from .sections import profile
+    require_role(x_toc_role, {"battle_captain", "analyst"}, "Amending an area assessment", section="S2")
+    row = await one_or_404(session, AreaRatingRow, area_id, "area assessment")
+    if row.status != "current":
+        raise HTTPException(409, "this assessment has been superseded; assess the place again instead")
+    if body.ratings is not None:
+        current = {r["indicator"]: r for r in json.loads(row.ratings_json or "[]")}
+        for r in body.ratings:
+            current[r.indicator] = {"indicator": r.indicator, "rating": r.rating, "note": r.note}
+        row.ratings_json = json.dumps(toc_areas.normalize(list(current.values()), toc_areas.indicators(profile())))
+    if body.summary is not None:
+        row.summary = body.summary.strip()
+    row.updated_at = now_utc(); await session.commit()
+    o = toc_areas.out(row, now_utc())
+    await get_ledger().append_event(content_id=row.id, event_type="cop.area.updated", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=o["worst"],
+                                    reason=f"{row.place}: assessment amended — {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green")
+    return o
 
 
 # ---------------------------------------------------------------- §5.10 taskings: work moving between sections

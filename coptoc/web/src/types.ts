@@ -4,7 +4,14 @@ export type Severity = 'low' | 'moderate' | 'elevated' | 'critical'
 export type LocationType = 'hq' | 'office' | 'datacenter' | 'residence' | 'venue'
 export type Confidence = 'low' | 'moderate' | 'high' | 'insufficient'
 
+export type Rating = 'green' | 'amber' | 'red' | 'unknown'
+export interface AreaRatingLine { indicator: string; label: string; rating: Rating; note: string }
+/** §5.6a what S2 judges about a place, indicator by indicator. */
+export interface AreaRating { id: string; place: string; location_id: string | null; lat: number | null; lon: number | null; ratings: AreaRatingLine[]; summary: string; assessed_by: string; assessed_at: string; updated_at: string
+  status: 'current' | 'superseded'; supersedes: string | null; counts: Record<Rating, number>; worst: Rating; worst_indicator: string | null; age_days: number; stale: boolean }
+export interface AreaCompact { id: string; place: string; worst: Rating; worst_indicator: string | null; counts: Record<Rating, number>; strip: Rating[]; assessed_by: string; assessed_at: string; age_days: number; stale: boolean }
 export interface Location {
+  area?: AreaCompact | null
   s4_status?: Health | null; s4_lines?: number; s4_red?: number; s4_amber?: number; s4_inbound?: number; s6_status?: Health | null; s6_systems?: number; s6_down?: number; s6_degraded?: number; s6_in_use?: string | null
   id: string; name: string; type: LocationType; lat: number; lon: number
   city: string; country: string; posture: Posture; effective_posture: Posture; defcon?: number; sensitivity: 'standard' | 'restricted'
@@ -40,14 +47,14 @@ export interface Leg {
   from_name: string | null; from_lat: number | null; from_lon: number | null; to_name: string; to_lat: number; to_lon: number
   start_at: string; end_at: string; status: 'done' | 'current' | 'planned'; note: string; source: string
 }
-export interface Trip { operation?: OperationSummary | null; legs: Leg[]; current_leg: Leg | null;
+export interface Trip { operation?: OperationSummary | null; legs: Leg[]; current_leg: Leg | null; area?: AreaCompact | null;
   id: string; person_id: string; person_name: string; person_short?: string; is_vip: boolean
   origin_location_id: string; origin_name: string; origin_lat: number; origin_lon: number
   dest_location_id: string | null; dest_name: string; dest_lat: number; dest_lon: number
   depart_at: string; return_at: string; purpose: string; status: 'planned' | 'active' | 'complete'
   event_id: string | null; created_by: string; source: string
 }
-export interface CopEvent { operation?: OperationSummary | null; coverage?: Coverage;
+export interface CopEvent { operation?: OperationSummary | null; coverage?: Coverage; area?: AreaCompact | null;
   id: string; name: string; event_type: string; venue_location_id: string | null
   venue_name: string; venue_lat: number; venue_lon: number; start_at: string; end_at: string
   status: 'upcoming' | 'active' | 'past'; days_until: number; description: string; security_plan: string | null
@@ -107,7 +114,7 @@ export interface SystemLine { id: string; name: string; category: string; locati
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
 /** Where the wall opens: the declared AO, else the box holding our sites, else nothing known yet. */
 export interface View { center_lat: number | null; center_lon: number | null; radius_km: number | null; source: 'ao' | 'force' | 'none' }
-export interface Snapshot { warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
+export interface Snapshot { areas: AreaRating[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }

@@ -1,4 +1,4 @@
-import type { Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -110,6 +110,12 @@ export const uploadPreview = async (section: string, file: File): Promise<Upload
   return r.json()
 }
 export const uploadCommit = (section: string, body: { upload_id: string; sheet: string; mapping: Record<string, string | null>; kind?: string }) => req<ImportResult & { section: string; sheet: string }>('POST', `/v1/cop/upload/${section}/commit`, body)
+
+// §5.6a the rated area assessment
+export const areaIndicators = () => req<{ profile: string; indicators: { id: string; label: string }[] }>('GET', '/v1/cop/areas/indicators')
+export const listAreaRatings = (all = false) => req<AreaRating[]>('GET', `/v1/cop/areas${all ? '?all=true' : ''}`)
+export const assessArea = (body: { place?: string; location_id?: string; lat?: number; lon?: number; summary?: string; ratings: { indicator: string; rating: string; note: string }[] }) => req<AreaRating>('POST', '/v1/cop/areas', body)
+export const amendArea = (id: string, body: { summary?: string; ratings?: { indicator: string; rating: string; note: string }[] }) => req<AreaRating>('PATCH', `/v1/cop/areas/${id}`, body)
 
 // §5.10 taskings
 export const raiseTasking = (body: Partial<Tasking> & { title: string; from_section: string; to_section: string }) => req<Tasking>('POST', '/v1/cop/taskings', body)

@@ -18,6 +18,7 @@ import { TaskingBox } from './Taskings'
 import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
 import { ContextRow, RollCallStrip } from './Strips'
 import { CommandBar, buildCommands } from './CommandBar'
+import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } from './Areas'
 import * as api from './api'
 import type { UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -28,7 +29,7 @@ const LOG_LABEL: Record<string, string> = {
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
-  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
+  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗', 'cop.area.assessed': 'AREA', 'cop.area.updated': 'AREA',
 }
 
 function rel(iso: string | null, now: number): string {
@@ -101,6 +102,7 @@ export default function App() {
   const [briefReload, setBriefReload] = useState(0)
   const [cov, setCov] = useState<Coverage | null>(null)   // §3.2 the S2 headline: collection coverage
   const [cmd, setCmd] = useState(false)                    // ⌘K
+  const [areaMode, setAreaMode] = useState<AreaMode | null>(null)   // §5.6a the rated area assessment over the map
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
@@ -256,7 +258,8 @@ export default function App() {
         {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
         {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
         {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
-        {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} onOp={setOpId} role={role} />}
+        {areaMode && snap && <RatedAreaPanel mode={areaMode} areas={snap.areas ?? []} locations={snap.locations} role={role} busy={busy} act={act} onClose={() => setAreaMode(null)} onSelect={s => { setSel(s); setAreaMode(null) }} />}
+        {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && !areaMode && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} onOp={setOpId} role={role} onArea={m => { setAreaMode(m); setShowBrief(false) }} />}
         {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
@@ -329,6 +332,7 @@ export default function App() {
               <AssessmentActions a={a} busy={busy} act={act} />
             </li>))}
         </ul>
+        {snap && <AreasSection areas={snap.areas ?? []} locations={snap.locations} role={role} onOpen={m => { setAreaMode(m); setShowBrief(false) }} onSelect={setSel} />}
         <Question q="What we still need to know" count={`${s?.open_pirs ?? 0} open PIRs`} />
         <ul className="list cards">
           {snap?.pirs.map(p => (
@@ -398,9 +402,9 @@ function PanelHead({ code, title, hint, inline, children, onClose }: { code: str
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
-function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
+function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, role, onOp }: {
   sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
-  act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
+  act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void; onArea: (m: AreaMode) => void; role: Role; onOp: (id: string) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
   const threatRows = (ids: string[], confirmed: string[], target: { type: 'location' | 'person'; id: string }) => ids.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
@@ -486,6 +490,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
           <div className="section-label">THREATS IN AREA <span className="dim">proximity suggests · analyst confirms</span></div>
           <ul className="people">{threatRows(Array.from(new Set([...l.confirmed_threat_ids, ...l.threat_ids_in_area])), l.confirmed_threat_ids, { type: 'location', id: l.id })}</ul>
         </>}
+        <div className="kv area"><span>Place</span>{l.area ? <AreaStrip a={l.area} onOpen={() => onArea({ kind: 'view', id: l.area!.id })} /> : <span className="dim">not rated</span>}{['battle_captain', 'analyst'].includes(role) && <button className="mini" onClick={() => onArea({ kind: 'new', location_id: l.id })} title="S2 rates this place, indicator by indicator">{l.area ? 'REASSESS' : 'RATE'}</button>}</div>
         <div className="d-actions">{draftBtn('location', l.id)} {rollCallBtn({ location_id: l.id })}</div>
         {visiting.length > 0 && <><div className="section-label">VISITING</div>
           <ul className="people">{visiting.map(p => <PersonRow key={p.id} p={p} onClick={() => onSelect({ type: 'person', id: p.id })} />)}</ul></>}
@@ -524,6 +529,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
         {trip && <>
           <div className="section-label">TRIP · {trip.id}{ev && <> · <a onClick={() => onSelect({ type: 'event', id: ev.id })}>{ev.name}</a></>}</div>
           <div className="kv"><span>To</span><b>{trip.dest_name}</b></div>
+          {trip.area && <div className="kv area"><span>Place</span><AreaStrip a={trip.area} onOpen={() => onArea({ kind: 'view', id: trip.area!.id })} /></div>}
           <div className="kv"><span>Depart</span>{new Date(trip.depart_at).toUTCString().slice(5, 22)} <span className="dim">({rel(trip.depart_at, now)})</span></div>
           <div className="kv"><span>Return</span>{new Date(trip.return_at).toUTCString().slice(5, 22)} <span className="dim">({rel(trip.return_at, now)})</span></div>
           <div className="kv"><span>Purpose</span>{trip.purpose}</div>
@@ -560,6 +566,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
         <div className="kv"><span>Brief</span>{e.description}</div>
         <div className="kv"><span>Source</span><code>{e.source}</code></div>
         {e.security_plan && <div className="kv"><span>Sec plan</span>{e.security_plan}</div>}
+        {e.area && <div className="kv area"><span>Place</span><AreaStrip a={e.area} onOpen={() => onArea({ kind: 'view', id: e.area!.id })} /></div>}
         {e.coverage && <div className="kv"><span>Coverage</span><span className={e.coverage.gap > 0 ? 'bad' : 'ok'}>{e.coverage.assigned}/{e.coverage.required}</span> {e.coverage.people.map(p => `${p.name} (${p.role})`).join(', ') || 'nobody assigned'} <span className="dim">· {e.coverage.rule}</span></div>}
         {e.threat_ids_in_area.length > 0 && <><div className="section-label">THREATS IN AREA</div>
           <ul className="people">{e.threat_ids_in_area.map(id => byId.threat.get(id)).filter(Boolean).map(t => (

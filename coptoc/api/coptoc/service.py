@@ -13,6 +13,7 @@ from shared.db_models import LedgerEventRow
 from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
 from . import names
 from .taskings import TaskingRow, summarize as taskings_summary
+from .areas import AreaRatingRow, compact as area_compact, out as area_out, same_place
 from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -158,6 +159,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     shipments = (await session.execute(select(ShipmentRow))).scalars().all()
     systems = (await session.execute(select(SystemRow))).scalars().all()
     taskings = (await session.execute(select(TaskingRow))).scalars().all()
+    area_rows = (await session.execute(select(AreaRatingRow).where(AreaRatingRow.status == "current"))).scalars().all()
     threats = (await session.execute(select(ThreatRow))).scalars().all()
     links = (await session.execute(select(ThreatLinkRow))).scalars().all()
     events = (await session.execute(select(EventRow))).scalars().all()
@@ -250,6 +252,14 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
                 "s4_lines": len(lines), "s4_red": sum(1 for x in lines if x["status"] == "red"), "s4_amber": sum(1 for x in lines if x["status"] == "amber"), "s4_inbound": len(inbound),
                 "s6_status": worst([x["health"] for x in sys_]) if sys_ else None, "s6_systems": len(sys_), "s6_down": sum(1 for x in sys_ if x["status"] == "down"),
                 "s6_degraded": sum(1 for x in sys_ if x["status"] == "degraded"), "s6_in_use": pace["in_use"] if pace else None}
+    # §5.6a the analyst's rating of each place rides on the site, and on every trip and event going there
+    areas_out = sorted((area_out(a, now) for a in area_rows), key=lambda a: (-{"red": 3, "amber": 2, "green": 1, "unknown": 0}[a["worst"]], a["place"]))
+    area_by_loc = {a["location_id"]: a for a in areas_out if a["location_id"]}
+    def area_for(loc_id: Optional[str], name: str) -> Optional[Dict[str, Any]]:
+        a = area_by_loc.get(loc_id) if loc_id else None
+        if not a:
+            a = next((x for x in areas_out if same_place(x["place"], name) or same_place(x["place"], name.split(",")[0])), None)
+        return area_compact(a) if a else None
     locations_out = []
     for l in locations:
         in_area = [t.id for t in threats if haversine_km(l.lat, l.lon, t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM]
@@ -260,6 +270,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "id": l.id, "name": l.name, "type": l.type, "lat": l.lat, "lon": l.lon, "city": l.city,
             "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity,
             "threat_ids_in_area": in_area, "confirmed_threat_ids": [lk.threat_id for lk in my_links],
+            "area": area_for(l.id, l.name),
             **counts[l.id], **site_health(l.id),
         })
     for po in people_out:
@@ -284,6 +295,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "dest_location_id": t.dest_location_id, "dest_name": t.dest_name, "dest_lat": t.dest_lat, "dest_lon": t.dest_lon,
             "depart_at": iso(t.depart_at), "return_at": iso(t.return_at), "purpose": t.purpose, "status": st,
             "event_id": t.event_id, "created_by": t.created_by, "source": t.source,
+            "area": area_for(t.dest_location_id, t.dest_name),
             "legs": [leg_out(lg, now) for lg in legs_by_trip.get(t.id, [])],
             "current_leg": next((leg_out(lg, now) for lg in legs_by_trip.get(t.id, []) if leg_status(lg, now) == "current"), None),
         })
@@ -315,6 +327,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "security_count": sum(1 for i in ids if team_by_id[people_by_id_row(people, i).team_id].is_security),
             "trips_generated": trips_by_event.get(e.id, 0), "source": e.source,
             "coverage": coverage_for(e, ids, person_by_id, cov_by_event.get(e.id, [])),
+            "area": area_for(e.venue_location_id, e.venue_name),
             "threat_ids_in_area": [t.id for t in threats if haversine_km(e.venue_lat, e.venue_lon, t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM],
         })
 
@@ -438,7 +451,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
-        "operations": operations_out,
+        "operations": operations_out, "areas": areas_out,
     }
 
 
