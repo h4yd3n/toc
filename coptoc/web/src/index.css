@@ -457,3 +457,26 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .leg-when { font-family: var(--mono); font-size: 10px; color: var(--dim); }
 .leg-kind { text-align: center; }
 .chip.dim { color: var(--dim); }
+
+/* §7 / §8 — the background boards */
+.rail-btn .dot { position: absolute; top: -4px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--green); border: 1px solid var(--panel); }
+.rail-btn .dot.amber { background: var(--amber); } .rail-btn .dot.red { background: var(--red); animation: flashpulse 1.4s ease-in-out infinite; }
+.s4-summary { display: flex; align-items: center; gap: 10px; padding: 8px 14px 2px; }
+.s4-summary .grp { margin-left: auto; display: flex; gap: 4px; }
+.chip.btn { cursor: pointer; background: transparent; } .chip.btn.on { color: var(--blue-2); border-color: rgba(96,165,250,.6); background: rgba(59,130,246,.12); }
+.sev.ok { color: var(--green); background: rgba(34,197,94,.12); }
+.list .row.supply .qty, .list .row .mono { font-family: var(--mono); font-size: 10.5px; }
+.list .row .qty { margin-left: auto; white-space: nowrap; }
+.bar.small { width: 54px; height: 4px; flex: none; }
+.bar.small span.amber { background: var(--amber); } .bar.small span.red { background: var(--red); }
+.list .row .acts { display: flex; gap: 4px; margin-left: 6px; }
+.list .row .acts .mini { margin-left: 0; }
+.mini.warn { color: var(--amber); border-color: rgba(245,158,11,.5); background: rgba(245,158,11,.1); }
+.list .row .sub { font-size: 10px; margin-top: 1px; }
+.list.pace .nets { display: flex; gap: 3px; margin-left: auto; }
+.net { font-family: var(--mono); font-size: 9px; font-weight: 800; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 3px; border: 1px solid var(--line-2); color: var(--dim); }
+.net.up { color: var(--green); border-color: rgba(34,197,94,.5); } .net.degraded { color: var(--amber); border-color: rgba(245,158,11,.5); } .net.down { color: var(--red); border-color: rgba(239,68,68,.6); text-decoration: line-through; }
+.net.inuse { background: rgba(34,197,94,.18); }
+.list .row.two { flex-direction: column; align-items: stretch; gap: 3px; cursor: default; }
+.list .row.two .l1, .list .row.two .l2 { display: flex; align-items: center; gap: 8px; }
+.list .row.two .l2 .acts { margin-left: auto; }

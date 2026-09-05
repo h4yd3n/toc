@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -287,7 +289,11 @@ fun OperationSheet(op: Operation, st: WallState, store: Store, onClose: () -> Un
 
 // ---------------------------------------------------------------- the phone: four tabs, like iOS
 
-enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) { COP("COP", Icons.Filled.Place), S1("S1", Icons.Filled.Person), S2("S2", Icons.Filled.Search), S3("S3", Icons.Filled.DateRange) }
+enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) { COP("COP", Icons.Filled.Place), S1("S1", Icons.Filled.Person), S2("S2", Icons.Filled.Search), S3("S3", Icons.Filled.DateRange), S4("S4", Icons.Filled.Build), S6("S6", Icons.Filled.Call) }
+fun qty(d: Double): String = if (d == Math.floor(d) && Math.abs(d) < 1e12) "%,d".format(d.toLong()) else "%.1f".format(d)
+fun healthColor(h: String) = when (h) { "red" -> Palette.red; "amber" -> Palette.amber; else -> Palette.green }
+/** The enabled sections, in wall order: six tabs for an operations center, four for a commercial desk (`TOC_SECTIONS`). */
+fun enabledTabs(snap: Snapshot?): List<Tab> = Tab.values().filter { t -> t == Tab.COP || (snap?.sections?.firstOrNull { it.code == t.label }?.enabled ?: (t != Tab.S4 && t != Tab.S6)) }
 
 @Composable
 fun PhoneScreen(st: WallState, store: Store) {
@@ -306,6 +312,8 @@ fun PhoneScreen(st: WallState, store: Store) {
                     Tab.S1 -> Column(Modifier.fillMaxSize()) { S1Panel(st, store) }
                     Tab.S2 -> Column(Modifier.fillMaxSize()) { S2Panel(st, store) }
                     Tab.S3 -> Column(Modifier.fillMaxSize()) { S3Phone(st, store) }
+                    Tab.S4 -> Column(Modifier.fillMaxSize()) { S4Phone(st, store) }
+                    Tab.S6 -> Column(Modifier.fillMaxSize()) { S6Phone(st, store) }
                 }
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
                 st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
@@ -316,12 +324,14 @@ fun PhoneScreen(st: WallState, store: Store) {
         // the tab bar: a floating capsule over the content, like the iOS tab bar
         Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 24.dp, vertical = 10.dp).fillMaxWidth()
             .background(Palette.panel.copy(alpha = .94f), RoundedCornerShape(50)).border(0.5.dp, Palette.line, RoundedCornerShape(50)).padding(4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-            Tab.values().forEach { t ->
+            enabledTabs(snap).forEach { t ->
                 val on = t == tab
                 val badge = when (t) { Tab.S1 -> snap?.incidents?.count { it.status == "open" } ?: 0; Tab.S2 -> snap?.summary?.warningsPending ?: 0; else -> 0 }
+                val dot = when (t) { Tab.S4 -> snap?.summary?.s4Status; Tab.S6 -> snap?.summary?.s6Status; else -> null }?.takeIf { it != "green" }
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Palette.panel2 else Color.Transparent).clickable { tab = t; store.select(null) }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box { Icon(t.icon, contentDescription = t.label, tint = if (on) Palette.blue2 else Palette.dim, modifier = Modifier.size(22.dp))
-                        if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp) }
+                        if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp)
+                        dot?.let { Box(Modifier.offset(x = 16.dp, y = (-3).dp).size(8.dp).background(healthColor(it), RoundedCornerShape(50))) } }
                     Text(t.label, color = if (on) Palette.blue2 else Palette.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                 }
             }
@@ -485,4 +495,87 @@ fun dayOfRow(r: AgendaRow): java.time.LocalDate? {
     val today = java.time.LocalDate.now()
     fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrDefault(today)
     return when (r) { is AgendaRow.Ev -> dayOf(r.e.startAt); is AgendaRow.Tr -> maxOf(dayOf(r.t.departAt), today); else -> null }
+}
+
+
+// ---------------------------------------------------------------- §7 S4 Logistics and §8 S6 Signal on the phone
+
+@Composable
+fun ColumnScope.S4Phone(st: WallState, store: Store) {
+    val b = st.snap?.s4; val title = st.snap?.sections?.firstOrNull { it.code == "S4" }?.title ?: "LOGISTICS"
+    var all by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<SupplyLine?>(null) }
+    var onHand by remember { mutableStateOf("") }
+    val canEdit = st.role in listOf("battle_captain", "logistics"); val busy = st.busy != null
+    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
+        item { Label("S4 · $title", "Supply & equipment"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S4" })
+            if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip("S4 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
+                Text("${b.counts.red} red · ${b.counts.amber} amber · ${b.counts.inbound} inbound" + (if (b.counts.late > 0) " · ${b.counts.late} late" else ""), color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+                Mini(if (all) "EXCEPTIONS" else "ALL") { all = !all } } }
+        if (b == null) { item { Text("No logistics board yet.", Modifier.padding(14.dp), color = Palette.dim, fontSize = 12.sp) }; return@LazyColumn }
+        val lines = if (all) b.supplies else b.supplies.filter { it.status != "green" }
+        item { Label("SUPPLY & EQUIPMENT", "${lines.size}" + if (all) "" else " of ${b.supplies.size}") }
+        if (lines.isEmpty()) item { Text("All lines at or above required.", Modifier.padding(horizontal = 14.dp), color = Palette.dim, fontSize = 11.sp) }
+        items(lines, key = { it.id }) { x -> RowItem(selected = false, onClick = { if (canEdit) { editing = x; onHand = qty(x.onHand).replace(",", "") } }) {
+            Chip(if (x.status == "green") "OK" else x.status.take(3).uppercase(), healthColor(x.status), filled = x.status != "green")
+            Column(Modifier.weight(1f)) { Text(x.item, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text(x.locationName + (if (x.note.isNotEmpty()) " · ${x.note}" else ""), color = Palette.dim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) { Text("${qty(x.onHand)}/${qty(x.required)} ${x.unit}", color = Palette.text, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                Box(Modifier.width(54.dp).height(4.dp).background(Palette.line, RoundedCornerShape(50))) { Box(Modifier.fillMaxWidth(minOf(100, x.pct) / 100f).height(4.dp).background(healthColor(x.status), RoundedCornerShape(50))) } } } }
+        val inbound = b.shipments.filter { it.status !in listOf("arrived", "cancelled") }
+        item { Label("INBOUND", "${inbound.size}") }
+        if (inbound.isEmpty()) item { Text("Nothing inbound.", Modifier.padding(horizontal = 14.dp), color = Palette.dim, fontSize = 11.sp) }
+        items(inbound, key = { it.id }) { x -> Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Chip(when (x.priority) { "urgent" -> "URG"; "priority" -> "PRI"; else -> "RTN" }, healthColor(x.health), filled = x.health != "green")
+                Text(x.description, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text(x.status.replace('_', ' ').uppercase(), color = if (x.health == "green") Palette.dim else healthColor(x.health), fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+            Text("${x.quantity} → ${x.toName} · " + (if (x.hoursToEta < 0) "${(-x.hoursToEta).toInt()}h late" else "ETA ${x.hoursToEta.toInt()}h") + (if (x.note.isNotEmpty()) " · ${x.note}" else ""), color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (canEdit) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (x.status != "in_transit") Mini("MOVING", Palette.blue2, !busy) { store.act("updating shipment") { updateShipment(x.id, "in_transit") } }
+                if (x.status != "delayed") Mini("DELAYED", Palette.amber, !busy) { store.act("updating shipment") { updateShipment(x.id, "delayed") } }
+                Mini("ARRIVED", Palette.green, !busy) { store.act("updating shipment") { updateShipment(x.id, "arrived") } } }
+            HorizontalDivider(thickness = 0.5.dp, color = Palette.line) } }
+    }
+    editing?.let { x -> AlertDialog(onDismissRequest = { editing = null }, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
+        title = { Text("${x.item} · ${x.locationName}", fontSize = 14.sp) },
+        text = { OutlinedTextField(onHand, { onHand = it }, label = { Text("On hand (${x.unit})") }, singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal)) },
+        confirmButton = { TextButton({ onHand.toDoubleOrNull()?.let { v -> store.act("updating the supply line") { updateSupply(x.id, v, null) } }; editing = null }) { Text("SAVE", color = Palette.blue2) } },
+        dismissButton = { TextButton({ editing = null }) { Text("CANCEL", color = Palette.dim) } }) }
+}
+
+@Composable
+fun ColumnScope.S6Phone(st: WallState, store: Store) {
+    val b = st.snap?.s6; val title = st.snap?.sections?.firstOrNull { it.code == "S6" }?.title ?: "SIGNAL"
+    var all by remember { mutableStateOf(false) }
+    val canEdit = st.role in listOf("battle_captain", "signal"); val busy = st.busy != null
+    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
+        item { Label("S6 · $title", "Comms & systems"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S6" })
+            if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip("S6 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
+                Text("${b.counts.down} down · ${b.counts.degraded} degraded · ${b.counts.total} systems", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+                Mini(if (all) "EXCEPTIONS" else "ALL") { all = !all } } }
+        if (b == null) { item { Text("No signal board yet.", Modifier.padding(14.dp), color = Palette.dim, fontSize = 12.sp) }; return@LazyColumn }
+        item { Label("PACE", "how to reach each site") }
+        items(b.pace.entries.sortedBy { it.key }.map { it.value }) { p -> Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(p.locationName, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            listOf("primary", "alternate", "contingency", "emergency").forEach { r -> val stt = p.nets[r]
+                Box(Modifier.size(18.dp).background(if (p.inUse == r) Palette.green.copy(alpha = .18f) else Color.Transparent, RoundedCornerShape(3.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(3.dp)), contentAlignment = Alignment.Center) {
+                    Text(r.take(1).uppercase(), color = when (stt) { "up" -> Palette.green; "degraded" -> Palette.amber; "down" -> Palette.red; else -> Palette.dim }, fontSize = 9.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace,
+                        textDecoration = if (stt == "down") androidx.compose.ui.text.style.TextDecoration.LineThrough else null) } }
+            Text(p.inUse?.let { "on ${it.uppercase()}" } ?: "NO NET", color = if (p.inUse == null) Palette.red else Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(96.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End) } }
+        val systems = if (all) b.systems else b.systems.filter { it.health != "green" }
+        item { Label("SYSTEMS", "${systems.size}" + if (all) "" else " of ${b.systems.size}") }
+        if (systems.isEmpty()) item { Text("Everything up.", Modifier.padding(horizontal = 14.dp), color = Palette.dim, fontSize = 11.sp) }
+        items(systems, key = { it.id }) { x -> Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) { Chip(when (x.status) { "up" -> "UP"; "degraded" -> "DEG"; else -> "DOWN" }, healthColor(x.health), filled = x.health != "green")
+                Column(Modifier.weight(1f)) { Text(x.name, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold); Text(x.locationName + (x.pace?.let { " · ${it.uppercase()}" } ?: "") + (if (x.note.isNotEmpty() && x.status != "up") " · ${x.note}" else ""), color = Palette.dim, fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+                Text(if (x.hours < 48) "${x.hours.toInt()}h" else "${(x.hours / 24).toInt()}d", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace) }
+            if (canEdit) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (x.status != "up") Mini("UP", Palette.green, !busy) { store.act("updating system") { updateSystem(x.id, "up", null) } }
+                if (x.status != "degraded") Mini("DEGRADED", Palette.amber, !busy) { store.act("updating system") { updateSystem(x.id, "degraded", null) } }
+                if (x.status != "down") Mini("DOWN", Palette.red, !busy) { store.act("updating system") { updateSystem(x.id, "down", null) } } }
+            HorizontalDivider(thickness = 0.5.dp, color = Palette.line) } }
+        val open = st.snap?.incidents?.filter { it.status == "open" } ?: emptyList()
+        if (open.isNotEmpty()) { item { Label("ACCOUNTABILITY · OPEN ROLL CALLS", "${open.size}") }
+            items(open, key = { it.id }) { i -> RowItem(selected = false, onClick = { store.select(Selection.IncidentSel(i.id)) }) { Text(i.title, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text("${i.accounted}/${i.total}", color = if (i.pct == 100) Palette.green else Palette.red, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } } }
+    }
 }

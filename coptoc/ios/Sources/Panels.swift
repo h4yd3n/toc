@@ -363,3 +363,141 @@ struct DayHeader: View {
             Text(days == 0 ? "TODAY" : days == 1 ? "TOMORROW" : days < 0 ? "STARTED" : "IN \(days) DAYS").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim) }
     }
 }
+
+
+// MARK: - §7 S4 Logistics and §8 S6 Signal — the background boards on the phone
+
+func healthColor(_ h: String) -> Color { h == "red" ? Theme.red : h == "amber" ? Theme.amber : Theme.green }
+
+struct LogisticsScreen: View {
+    @Environment(COPStore.self) private var store
+    @State private var all = false
+    @State private var editing: SupplyLine? = nil
+    @State private var onHandText = ""
+    var body: some View {
+        let board = store.snapshot?.s4
+        let title = store.snapshot?.sections?.first { $0.code == "S4" }?.title ?? "LOGISTICS"
+        List {
+            Section {
+                PanelHead(code: "S4", title: title, hint: "Supply & equipment")
+                EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S4" })
+                if let b = board {
+                    HStack(spacing: 8) { Chip(text: "S4 \(b.status.uppercased())", color: healthColor(b.status), filled: b.status != "green")
+                        Text("\(b.counts.red) red · \(b.counts.amber) amber · \(b.counts.inbound) inbound" + (b.counts.late > 0 ? " · \(b.counts.late) late" : "")).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                        Spacer(); Button(all ? "EXCEPTIONS" : "ALL") { all.toggle() }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue) }
+                }
+            }.listRowBackground(Theme.bg).listRowSeparator(.hidden)
+            if let b = board {
+                let lines = all ? b.supplies : b.supplies.filter { $0.status != "green" }
+                Section(header: SectionLabel(text: "SUPPLY & EQUIPMENT · \(lines.count)" + (all ? "" : " OF \(b.supplies.count)"))) {
+                    if lines.isEmpty { Text("All lines at or above required.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+                    ForEach(lines) { x in
+                        Button { if store.client.role == "battle_captain" || store.client.role == "logistics" { editing = x; onHandText = String(format: "%g", x.onHand) } } label: {
+                            HStack(spacing: 8) {
+                                Chip(text: x.status == "green" ? "OK" : x.status.prefix(3).uppercased(), color: healthColor(x.status), filled: x.status != "green")
+                                VStack(alignment: .leading, spacing: 2) { Text(x.item).font(.system(size: 12, weight: .semibold)); Text(x.locationName + (x.note.isEmpty ? "" : " · \(x.note)")).font(.system(size: 10)).foregroundStyle(Theme.dim).lineLimit(1) }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 3) {
+                                    Text("\(String(format: "%g", x.onHand))/\(String(format: "%g", x.required)) \(x.unit)").font(.system(size: 10, design: .monospaced))
+                                    GeometryReader { g in ZStack(alignment: .leading) { Capsule().fill(Theme.line); Capsule().fill(healthColor(x.status)).frame(width: g.size.width * CGFloat(min(100, x.pct)) / 100) } }.frame(width: 54, height: 4)
+                                }
+                            }
+                        }.buttonStyle(.plain)
+                    }
+                }.listRowBackground(Theme.bg)
+                let inbound = b.shipments.filter { !["arrived", "cancelled"].contains($0.status) }
+                Section(header: SectionLabel(text: "INBOUND · \(inbound.count)")) {
+                    if inbound.isEmpty { Text("Nothing inbound.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+                    ForEach(inbound) { x in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 8) { Chip(text: x.priority == "urgent" ? "URG" : x.priority == "priority" ? "PRI" : "RTN", color: healthColor(x.health), filled: x.health != "green"); Text(x.description).font(.system(size: 12, weight: .semibold)); Spacer()
+                                Text(x.status.replacingOccurrences(of: "_", with: " ").uppercased()).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(x.health == "green" ? Theme.dim : healthColor(x.health)) }
+                            Text("\(x.quantity) → \(x.toName) · " + (x.hoursToEta < 0 ? "\(Int(-x.hoursToEta.rounded()))h late" : "ETA \(Int(x.hoursToEta.rounded()))h") + (x.note.isEmpty ? "" : " · \(x.note)")).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).lineLimit(2)
+                            if store.client.role == "battle_captain" || store.client.role == "logistics" {
+                                HStack(spacing: 6) {
+                                    if x.status != "in_transit" { Button("MOVING") { store.act("updating shipment") { try await store.client.updateShipment(x.id, status: "in_transit") } }.tint(Theme.blue) }
+                                    if x.status != "delayed" { Button("DELAYED") { store.act("updating shipment") { try await store.client.updateShipment(x.id, status: "delayed") } }.tint(Theme.amber) }
+                                    Button("ARRIVED") { store.act("updating shipment") { try await store.client.updateShipment(x.id, status: "arrived") } }.tint(Theme.green)
+                                }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+                            }
+                        }
+                    }
+                }.listRowBackground(Theme.bg)
+            } else { Text("No logistics board yet.").font(.system(size: 11)).foregroundStyle(Theme.dim).listRowBackground(Theme.bg) }
+            Color.clear.frame(height: 70).listRowBackground(Theme.bg)
+        }
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+        .alert("On hand", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
+            TextField("On hand", text: $onHandText).keyboardType(.decimalPad)
+            Button("Save") { if let x = editing, let v = Double(onHandText) { store.act("updating the supply line") { try await store.client.updateSupply(x.id, onHand: v, note: nil) } }; editing = nil }
+            Button("Cancel", role: .cancel) { editing = nil }
+        } message: { Text("\(editing?.item ?? "") at \(editing?.locationName ?? "") (\(editing?.unit ?? ""))") }
+    }
+}
+
+struct SignalScreen: View {
+    @Environment(COPStore.self) private var store
+    @State private var all = false
+    var body: some View {
+        let board = store.snapshot?.s6
+        let title = store.snapshot?.sections?.first { $0.code == "S6" }?.title ?? "SIGNAL"
+        let canEdit = store.client.role == "battle_captain" || store.client.role == "signal"
+        List {
+            Section {
+                PanelHead(code: "S6", title: title, hint: "Comms & systems")
+                EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S6" })
+                if let b = board {
+                    HStack(spacing: 8) { Chip(text: "S6 \(b.status.uppercased())", color: healthColor(b.status), filled: b.status != "green")
+                        Text("\(b.counts.down) down · \(b.counts.degraded) degraded · \(b.counts.total) systems").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                        Spacer(); Button(all ? "EXCEPTIONS" : "ALL") { all.toggle() }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue) }
+                }
+            }.listRowBackground(Theme.bg).listRowSeparator(.hidden)
+            if let b = board {
+                Section(header: SectionLabel(text: "PACE · HOW TO REACH EACH SITE")) {
+                    ForEach(b.pace.keys.sorted(), id: \.self) { site in
+                        let p = b.pace[site]!
+                        HStack(spacing: 8) {
+                            Text(p.locationName).font(.system(size: 12, weight: .semibold)); Spacer()
+                            ForEach(["primary", "alternate", "contingency", "emergency"], id: \.self) { r in
+                                let st = p.nets[r]
+                                Text(String(r.prefix(1)).uppercased()).font(.system(size: 9, weight: .heavy, design: .monospaced)).frame(width: 18, height: 18)
+                                    .foregroundStyle(st == "up" ? Theme.green : st == "degraded" ? Theme.amber : st == "down" ? Theme.red : Theme.dim)
+                                    .background(p.inUse == r ? Theme.green.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 3))
+                                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.line)).strikethrough(st == "down")
+                            }
+                            Text(p.inUse.map { "on \($0.uppercased())" } ?? "NO NET").font(.system(size: 9, design: .monospaced)).foregroundStyle(p.inUse == nil ? Theme.red : Theme.dim).frame(width: 90, alignment: .trailing)
+                        }
+                    }
+                }.listRowBackground(Theme.bg)
+                let systems = all ? b.systems : b.systems.filter { $0.health != "green" }
+                Section(header: SectionLabel(text: "SYSTEMS · \(systems.count)" + (all ? "" : " OF \(b.systems.count)"))) {
+                    if systems.isEmpty { Text("Everything up.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+                    ForEach(systems) { x in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 8) {
+                                Chip(text: x.status == "up" ? "UP" : x.status == "degraded" ? "DEG" : "DOWN", color: healthColor(x.health), filled: x.health != "green")
+                                VStack(alignment: .leading, spacing: 1) { Text(x.name).font(.system(size: 12, weight: .semibold)); Text(x.locationName + (x.pace.map { " · \($0.uppercased())" } ?? "") + (x.note.isEmpty || x.status == "up" ? "" : " · \(x.note)")).font(.system(size: 10)).foregroundStyle(Theme.dim).lineLimit(2) }
+                                Spacer(); Text(x.hours < 48 ? "\(Int(x.hours.rounded()))h" : "\(Int((x.hours / 24).rounded()))d").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                            }
+                            if canEdit {
+                                HStack(spacing: 6) {
+                                    if x.status != "up" { Button("UP") { store.act("updating system") { try await store.client.updateSystem(x.id, status: "up", note: nil) } }.tint(Theme.green) }
+                                    if x.status != "degraded" { Button("DEGRADED") { store.act("updating system") { try await store.client.updateSystem(x.id, status: "degraded", note: nil) } }.tint(Theme.amber) }
+                                    if x.status != "down" { Button("DOWN") { store.act("updating system") { try await store.client.updateSystem(x.id, status: "down", note: nil) } }.tint(Theme.red) }
+                                }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+                            }
+                        }
+                    }
+                }.listRowBackground(Theme.bg)
+                let open = (store.snapshot?.incidents ?? []).filter { $0.status == "open" }
+                if !open.isEmpty {
+                    Section(header: SectionLabel(text: "ACCOUNTABILITY · OPEN ROLL CALLS · \(open.count)")) {
+                        ForEach(open) { i in Button { store.selection = .incident(i.id) } label: { HStack { Text(i.title).font(.system(size: 12, weight: .semibold)); Spacer(); Text("\(i.accounted)/\(i.total)").font(.system(size: 11, design: .monospaced)).foregroundStyle(i.pct == 100 ? Theme.green : Theme.red) } }.buttonStyle(.plain) }
+                    }.listRowBackground(Theme.bg)
+                }
+            } else { Text("No signal board yet.").font(.system(size: 11)).foregroundStyle(Theme.dim).listRowBackground(Theme.bg) }
+            Color.clear.frame(height: 70).listRowBackground(Theme.bg)
+        }
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+    }
+}

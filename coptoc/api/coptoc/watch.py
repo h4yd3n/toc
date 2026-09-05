@@ -26,7 +26,7 @@ DAY_NIGHT = [
 ]
 PATTERNS = {"follow_the_sun": FOLLOW_THE_SUN, "day_night": DAY_NIGHT}
 OVERLAP_MINUTES = 30
-SECTIONS = ("S1", "S2", "S3", "S6")
+SECTIONS = ("S1", "S2", "S3", "S4", "S6")
 
 
 class WatchConfigRow(Base):
@@ -151,6 +151,7 @@ LOG_BUCKETS = {
     "cop.event.created": "operations", "cop.event.updated": "operations", "cop.event.cancelled": "operations", "cop.event.attendees_added": "operations",
     "cop.assessment.drafted": "intel", "cop.assessment.status": "intel", "cop.pir.created": "intel", "cop.pir.updated": "intel",
     "cop.person.shift": "personnel", "cop.watch.estimate": "estimates",
+    "cop.s4.supply": "logistics", "cop.s4.shipment": "logistics", "cop.s6.system": "signal",
     "s2.requirement.created": "intel", "s2.requirement.updated": "intel", "s2.source.updated": "collection", "s2.requirements.synced": "estimates",
 }
 
@@ -169,7 +170,7 @@ async def build_brief(session: AsyncSession, snap: Dict[str, Any], row: WatchRow
         b = LOG_BUCKETS.get(r.event_type, "other")
         if b not in ("estimates",):
             buckets.setdefault(b, []).append(e)
-    significant = {k: v for k, v in buckets.items() if k in ("posture", "threats", "roll_calls", "movement", "operations", "intel", "personnel", "collection")}
+    significant = {k: v for k, v in buckets.items() if k in ("posture", "threats", "roll_calls", "movement", "operations", "intel", "personnel", "collection", "logistics", "signal")}
     s = snap["summary"]
     nxt = next_slot(row.ends_at, json.loads(cfg.watches_json))
     def within(iso_s: Optional[str], a: datetime, b: datetime) -> bool:
@@ -192,6 +193,8 @@ async def build_brief(session: AsyncSession, snap: Dict[str, Any], row: WatchRow
         "assessments_in_review": [{"id": a["id"], "title": a["title"]} for a in snap["assessments"] if a["status"] == "review"],
         "open_pirs": [{"id": p["id"], "question": p["question"]} for p in snap["pirs"] if p["status"] in ("OPEN", "COLLECTING")],
         "stale_checkins": [{"id": p["id"], "name": p["name"]} for p in snap["people"] if p["checkin_stale"]],
+        "logistics": {"status": snap.get("s4", {}).get("status", "green"), "exceptions": snap.get("s4", {}).get("exceptions", [])},  # §7: by exception
+        "signal": {"status": snap.get("s6", {}).get("status", "green"), "exceptions": snap.get("s6", {}).get("exceptions", [])},    # §8: by exception
     }
     handover_items = [{"kind": "open_incident", **i} for i in status["open_incidents"]] + \
                      [{"kind": "during_handover", "id": e["id"], "summary": e["summary"], "at": e["at"]} for e in events if e["during_handover"]]

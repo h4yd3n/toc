@@ -9,6 +9,7 @@ import { DistributionBox, OperationPanel } from './Operation'
 import { FlashStrip, WarningsSection } from './Warnings'
 import { ImportDrawer, PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
+import { S4Panel, S6Panel } from './Sections'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -48,7 +49,9 @@ export default function App() {
   // The wall: the map has the room; S1 and S2 live on rails and slide out over the map, never over S3 or the log.
   // Labels and the header are toggles under DISPLAY, persisted per browser.
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
-  const [openPanel, setOpenPanel] = useState<'left' | 'right' | null>(null)
+  const [openPanel, setOpenPanel] = useState<'left' | 'right' | 's4' | 's6' | null>(null)
+  const sectionOn = (code: string) => snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')
+  const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const [showSettings, setShowSettings] = useState(false)
   const [showDefcon, setShowDefcon] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
@@ -105,7 +108,7 @@ export default function App() {
           <Stat label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat label="EVENTS" v={s?.upcoming_events} />
         </div>
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
-          <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option>
+          <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
         </select>
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
@@ -122,6 +125,8 @@ export default function App() {
       </nav>
       <nav className="rail rail-right">
         <button className={`rail-btn ${openPanel === 'right' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'right' ? null : 'right')} title="S2 Intelligence">S2{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
+        {sectionOn('S4') && <button className={`rail-btn ${openPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => setOpenPanel(openPanel === 's4' ? null : 's4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
+        {sectionOn('S6') && <button className={`rail-btn ${openPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => setOpenPanel(openPanel === 's6' ? null : 's6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
       </nav>
       <aside className={`left ${openPanel === 'left' ? 'open' : ''}`}>
         <PanelHead code="S1" title="PERSONNEL" hint="Blue Force">{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
@@ -179,6 +184,21 @@ export default function App() {
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
+      <aside className={`right ${openPanel === 's4' ? 'open' : ''}`}>
+        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" />
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
+        <S4Panel board={snap?.s4} role={role} busy={busy} act={act} />
+      </aside>
+      <aside className={`right ${openPanel === 's6' ? 'open' : ''}`}>
+        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" />
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
+        <S6Panel board={snap?.s6} role={role} busy={busy} act={act} />
+        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
+          <SectionLabel>ACCOUNTABILITY · OPEN ROLL CALLS <span className="dim">{snap.incidents.filter(i => i.status === 'open').length}</span></SectionLabel>
+          <ul className="list">{snap.incidents.filter(i => i.status === 'open').map(i => (
+            <li key={i.id} className="row rollcall" onClick={() => setSel({ type: 'incident', id: i.id })}><span className="name">{i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></li>))}</ul>
+        </>}
+      </aside>
       <aside className={`right ${openPanel === 'right' ? 'open' : ''}`}>
         <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc">
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>

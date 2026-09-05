@@ -265,7 +265,7 @@ def test_watch_is_derived_and_on_the_snapshot(client):
     assert w["name"] in ("Singapore", "Dublin", "San Francisco") and w["pattern"] == "follow_the_sun" and 0 <= w["elapsed_h"] <= 8
     assert w["next_watch"] != w["name"] and w["overlap_minutes"] == 30
     snap = client.get("/v1/cop/snapshot").json()
-    assert snap["watch"]["id"] == w["id"] and [e["section"] for e in snap["estimates"]] == ["S1", "S2", "S3", "S6"]
+    assert snap["watch"]["id"] == w["id"] and [e["section"] for e in snap["estimates"]] == ["S1", "S2", "S3", "S4", "S6"]
 
 def test_estimates_are_owned_per_section(client):
     assert client.patch("/v1/cop/watch/estimate/S2", json={"assessment": "x"}, headers={"X-TOC-Role": "ea"}).status_code == 403

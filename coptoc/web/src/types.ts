@@ -69,12 +69,12 @@ export interface Assessment {
   status: 'draft' | 'review' | 'approved' | 'superseded'; created_at: string; approved_by: string | null; approved_at: string | null
 }
 export interface LogEntry { id: string; at: string; type: string; actor: string; actor_type: string; subject: string; old: string | null; new: string | null; summary: string | null }
-export interface Summary {
+export interface Summary { s4_status?: Health; s6_status?: Health;
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
 }
-export type Role = 'battle_captain' | 'ep' | 'security' | 'analyst' | 'ea'
+export type Role = 'battle_captain' | 'ep' | 'security' | 'analyst' | 'ea' | 'logistics' | 'signal'
 export interface Watch {
   id: string; name: string; battle_captain: string | null; status: 'open' | 'pending_ack' | 'handed_over'
   started_at: string; ends_at: string; elapsed_h: number; remaining_h: number; overdue: boolean; in_overlap: boolean; overlap_minutes: number
@@ -95,7 +95,16 @@ export interface Brief {
   handover_items: ({ kind: 'open_incident'; id: string; title: string; accounted: number; total: number } | { kind: 'during_handover'; id: string; summary: string; at: string })[]
   outgoing_notes: string | null; nstr: boolean; acknowledgement: { required_item_ids: string[]; by: string | null; at: string | null }; generated_at: string
 }
-export interface Snapshot { warnings: Warning[];
+export type Health = 'green' | 'amber' | 'red'
+export interface SectionCfg { code: 'S1' | 'S2' | 'S3' | 'S4' | 'S6'; title: string; hint: string; enabled: boolean }
+export interface SupplyLine { id: string; location_id: string | null; location_name: string; category: string; item: string; on_hand: number; required: number; unit: string; pct: number; status: Health; note: string; updated_by: string; updated_at: string | null; source: string }
+export interface Shipment { id: string; description: string; category: string; quantity: string; from_name: string; to_location_id: string | null; to_name: string; eta: string; hours_to_eta: number
+  status: 'planned' | 'in_transit' | 'delayed' | 'arrived' | 'cancelled'; priority: 'routine' | 'priority' | 'urgent'; carrier: string; ref: string | null; health: Health; note: string; updated_by: string; updated_at: string | null }
+export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Shipment[]; exceptions: string[]; counts: { red: number; amber: number; inbound: number; late: number } }
+export interface SystemLine { id: string; name: string; category: string; location_id: string | null; location_name: string; pace: 'primary' | 'alternate' | 'contingency' | 'emergency' | null
+  status: 'up' | 'degraded' | 'down'; health: Health; since: string | null; hours: number; note: string; updated_by: string; updated_at: string | null; source: string }
+export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
+export interface Snapshot { warnings: Warning[]; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }

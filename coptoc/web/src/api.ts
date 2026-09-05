@@ -4,7 +4,7 @@ import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
 export const session = { role: 'battle_captain' as Role, actor: '' }
-const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant' }
+const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant', logistics: 'S4 Logistics', signal: 'S6 Signal' }
 const actor = () => `${ROLE_LABEL[session.role]} (web)`
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -82,3 +82,8 @@ export const assignCoverage = (eventId: string, person_id: string, role: string)
 export const removeCoverage = (eventId: string, personId: string) => req<unknown>('DELETE', `/v1/cop/events/${eventId}/coverage/${personId}`)
 export const setRequiredSecurity = (eventId: string, required_security: number) => req<unknown>('PATCH', `/v1/cop/events/${eventId}`, { required_security })
 export const importText = (kind: 'people' | 'shifts' | 'trips' | 'ics' | 'legs' | 'itinerary', text: string) => req<ImportResult>('POST', `/v1/cop/import/${kind}`, { text })
+
+// §7 / §8 — the background boards
+export const updateSupply = (id: string, body: { on_hand?: number; required?: number; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/supply/${id}`, body)
+export const updateShipment = (id: string, body: { status?: string; eta?: string; priority?: string; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/shipments/${id}`, body)
+export const updateSystem = (id: string, body: { status?: string; pace?: string; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/systems/${id}`, body)

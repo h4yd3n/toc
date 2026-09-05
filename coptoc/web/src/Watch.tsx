@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import * as api from './api'
 import type { Brief, Estimate, Role, Watch } from './types'
 
-const OWNERS: Record<string, Role[]> = { S1: ['battle_captain', 'security'], S2: ['battle_captain', 'analyst'], S3: ['battle_captain', 'security', 'ea'], S6: ['battle_captain'] }
+const OWNERS: Record<string, Role[]> = { S1: ['battle_captain', 'security'], S2: ['battle_captain', 'analyst'], S3: ['battle_captain', 'security', 'ea'], S4: ['battle_captain', 'logistics'], S6: ['battle_captain', 'signal'] }
 const hm = (h: number) => `${Math.floor(Math.abs(h))}h${String(Math.round((Math.abs(h) % 1) * 60)).padStart(2, '0')}`
 
 /** The watch chip in the posture bar: who has the floor, how far in, who's next. */
@@ -22,7 +22,7 @@ export function EstimateLine({ e, role, busy, act }: { e: Estimate | undefined; 
   const [editing, setEditing] = useState(false)
   const [a, setA] = useState(''); const [r, setR] = useState('')
   if (!e) return null
-  const canEdit = OWNERS[e.section].includes(role)
+  const canEdit = (OWNERS[e.section] ?? ['battle_captain']).includes(role)
   if (editing) return (
     <div className="estimate editing">
       <textarea value={a} onChange={ev => setA(ev.target.value)} placeholder={`${e.section} assesses…`} rows={2} />
@@ -30,7 +30,7 @@ export function EstimateLine({ e, role, busy, act }: { e: Estimate | undefined; 
       <div className="row-btns"><button className="mini ok" disabled={!!busy || !a.trim()} onClick={() => { act('updating estimate', () => api.setEstimate(e.section, a, r)); setEditing(false) }}>SAVE</button><button className="mini" onClick={() => setEditing(false)}>CANCEL</button></div>
     </div>)
   return (
-    <div className={`estimate ${e.assessment ? '' : 'empty'}`} onClick={() => { if (canEdit) { setA(e.assessment); setR(e.recommendation); setEditing(true) } }} title={canEdit ? 'Click to update — you own this estimate' : 'Owned by ' + OWNERS[e.section].join(' / ')}>
+    <div className={`estimate ${e.assessment ? '' : 'empty'}`} onClick={() => { if (canEdit) { setA(e.assessment); setR(e.recommendation); setEditing(true) } }} title={canEdit ? 'Click to update — you own this estimate' : 'Owned by ' + (OWNERS[e.section] ?? ['battle_captain']).join(' / ')}>
       <b>{e.section} assesses:</b> {e.assessment || <span className="dim">no assessment on record{canEdit ? ' — click to add' : ''}</span>}
       {e.recommendation && <div className="rec">↳ {e.recommendation}</div>}
       {e.updated_by && <span className="who dim">— {e.updated_by}</span>}

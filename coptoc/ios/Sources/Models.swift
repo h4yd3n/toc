@@ -10,7 +10,18 @@ struct Watch: Decodable {
 }
 struct Estimate: Decodable, Identifiable { var section: String, assessment: String, recommendation: String, updatedBy: String?, updatedAt: String?; var id: String { section } }
 
+struct SectionCfg: Decodable, Identifiable, Hashable { var code: String, title: String, hint: String, enabled: Bool; var id: String { code } }
+struct SupplyLine: Decodable, Identifiable, Hashable { var id: String, locationId: String?, locationName: String, category: String, item: String, onHand: Double, required: Double, unit: String, pct: Int, status: String, note: String, updatedBy: String }
+struct Shipment: Decodable, Identifiable, Hashable { var id: String, description: String, category: String, quantity: String, fromName: String, toName: String, eta: String, hoursToEta: Double, status: String, priority: String, carrier: String, ref: String?, health: String, note: String }
+struct S4Counts: Decodable, Hashable { var red: Int, amber: Int, inbound: Int, late: Int }
+struct S4Board: Decodable, Hashable { var status: String, supplies: [SupplyLine], shipments: [Shipment], exceptions: [String], counts: S4Counts }
+struct SystemLine: Decodable, Identifiable, Hashable { var id: String, name: String, category: String, locationId: String?, locationName: String, pace: String?, status: String, health: String, hours: Double, note: String, updatedBy: String }
+struct PaceSite: Decodable, Hashable { var locationName: String, nets: [String: String], inUse: String? }
+struct S6Counts: Decodable, Hashable { var down: Int, degraded: Int, total: Int }
+struct S6Board: Decodable, Hashable { var status: String, systems: [SystemLine], pace: [String: PaceSite], exceptions: [String], counts: S6Counts }
+
 struct Snapshot: Decodable {
+    var sections: [SectionCfg]?, s4: S4Board?, s6: S6Board?
     var generatedAt: String
     var restrictedIncluded: Bool
     var restrictedDenied: Bool?
@@ -36,6 +47,7 @@ struct Summary: Decodable {
     var totalPeople: Int, present: Int, traveling: Int, vipsTraveling: Int, securityOnShift: Int
     var activeThreats: Int, realThreats: Int, confirmedLinks: Int, checkedInFresh: Int, openPirs: Int, upcomingEvents: Int
     var openIncidents: Int, unaccounted: Int
+    var s4Status: String?, s6Status: String?
     var posture: String
     var flash: Int?, warningsPending: Int?, offDuty: Int?, unreachable: Int?
     var defcon: Int?, defconLevels: [DefconLevel]?

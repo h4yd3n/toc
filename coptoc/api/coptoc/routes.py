@@ -18,8 +18,9 @@ from .comms import Dispatcher, public_url
 from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
+from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -193,6 +194,113 @@ async def assessments(session: AsyncSession = Depends(get_session)):
 async def ops_log(limit: int = 50, session: AsyncSession = Depends(get_session)):
     """The battle log — every write to the COP, hash-chained per subject."""
     return (await build_snapshot(session, log_limit=limit))["log"]
+
+
+# ---------------------------------------------------------------- S4 Logistics and S6 Signal (§7, §8): the background sections, by exception
+
+S4_OWNERS = {"battle_captain", "logistics"}
+S6_OWNERS = {"battle_captain", "signal"}
+
+
+@router.post("/supply", status_code=201)
+async def create_supply(body: SupplyCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S4_OWNERS, "Adding a supply line")
+    if body.location_id:
+        await one_or_404(session, LocationRow, body.location_id, "location")
+    row = SupplyRow(id=f"sup_{uuid.uuid4().hex[:8]}", location_id=body.location_id, category=body.category, item=body.item, on_hand=body.on_hand, required=body.required,
+                    unit=body.unit, note=body.note, updated_by=actor_from(x_toc_actor), updated_at=now_utc(), source="manual")
+    session.add(row); await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s4.supply", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=f"{body.on_hand:g}/{body.required:g}",
+                                    reason=f"{body.item}: {body.on_hand:g}/{body.required:g} {body.unit} on hand", metadata={"location_id": body.location_id})
+    return {"id": row.id, "status": "created"}
+
+
+@router.patch("/supply/{supply_id}")
+async def update_supply(supply_id: str, body: SupplyUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S4_OWNERS, "Updating a supply line")
+    row = await one_or_404(session, SupplyRow, supply_id, "supply line")
+    old = f"{row.on_hand:g}/{row.required:g}"
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(row, k, v)
+    row.updated_by, row.updated_at = actor_from(x_toc_actor), now_utc()
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s4.supply", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=f"{row.on_hand:g}/{row.required:g}",
+                                    reason=f"{row.item}: {row.on_hand:g}/{row.required:g} {row.unit} on hand" + (f" — {row.note}" if body.note else ""), metadata={"location_id": row.location_id})
+    return {"id": row.id, "status": "updated"}
+
+
+@router.delete("/supply/{supply_id}")
+async def delete_supply(supply_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S4_OWNERS, "Removing a supply line")
+    row = await one_or_404(session, SupplyRow, supply_id, "supply line")
+    await session.delete(row); await session.commit()
+    await get_ledger().append_event(content_id=supply_id, event_type="cop.s4.supply", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="removed", reason=f"{row.item} removed from the board")
+    return {"id": supply_id, "status": "removed"}
+
+
+@router.post("/shipments", status_code=201)
+async def create_shipment(body: ShipmentCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S4_OWNERS, "Adding a shipment")
+    to = await one_or_404(session, LocationRow, body.to_location_id, "destination") if body.to_location_id else None
+    row = ShipmentRow(id=f"shp_{uuid.uuid4().hex[:8]}", description=body.description, category=body.category, quantity=body.quantity, from_name=body.from_name,
+                      to_location_id=body.to_location_id, to_name=body.to_name or (to.name if to else ""), eta=naive(body.eta), status=body.status, priority=body.priority,
+                      carrier=body.carrier, ref=body.ref, note=body.note, updated_by=actor_from(x_toc_actor), updated_at=now_utc(), source="manual")
+    session.add(row); await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s4.shipment", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=body.status,
+                                    reason=f"{body.description} → {row.to_name}: {body.status.replace('_', ' ')}, ETA {naive(body.eta):%d %b %H:%M}Z", metadata={"priority": body.priority})
+    return {"id": row.id, "status": "created"}
+
+
+@router.patch("/shipments/{shipment_id}")
+async def update_shipment(shipment_id: str, body: ShipmentUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S4_OWNERS, "Updating a shipment")
+    row = await one_or_404(session, ShipmentRow, shipment_id, "shipment")
+    old = row.status
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(row, k, naive(v) if k == "eta" else v)
+    row.updated_by, row.updated_at = actor_from(x_toc_actor), now_utc()
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s4.shipment", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=row.status,
+                                    reason=f"{row.description} → {row.to_name}: {row.status.replace('_', ' ')}, ETA {row.eta:%d %b %H:%M}Z" + (f" — {row.note}" if body.note else ""), metadata={"priority": row.priority})
+    return {"id": row.id, "status": "updated"}
+
+
+@router.post("/systems", status_code=201)
+async def create_system(body: SystemCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S6_OWNERS, "Adding a system")
+    if body.location_id:
+        await one_or_404(session, LocationRow, body.location_id, "location")
+    row = SystemRow(id=f"sys_{uuid.uuid4().hex[:8]}", name=body.name, category=body.category, location_id=body.location_id, pace=body.pace, status=body.status,
+                    since=now_utc(), note=body.note, updated_by=actor_from(x_toc_actor), updated_at=now_utc(), source="manual")
+    session.add(row); await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s6.system", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=body.status,
+                                    reason=f"{body.name}: {body.status.upper()}", metadata={"location_id": body.location_id, "pace": body.pace})
+    return {"id": row.id, "status": "created"}
+
+
+@router.patch("/systems/{system_id}")
+async def update_system(system_id: str, body: SystemUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S6_OWNERS, "Updating a system")
+    row = await one_or_404(session, SystemRow, system_id, "system")
+    old = row.status
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(row, k, v)
+    if row.status != old:
+        row.since = now_utc()  # the clock restarts when the state changes
+    row.updated_by, row.updated_at = actor_from(x_toc_actor), now_utc()
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s6.system", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=row.status,
+                                    reason=f"{row.name}: {row.status.upper()}" + (f" — {row.note}" if body.note else ""), metadata={"location_id": row.location_id, "pace": row.pace})
+    return {"id": row.id, "status": "updated"}
+
+
+@router.delete("/systems/{system_id}")
+async def delete_system(system_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, S6_OWNERS, "Removing a system")
+    row = await one_or_404(session, SystemRow, system_id, "system")
+    await session.delete(row); await session.commit()
+    await get_ledger().append_event(content_id=system_id, event_type="cop.s6.system", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="removed", reason=f"{row.name} removed from the board")
+    return {"id": system_id, "status": "removed"}
 
 
 # ---------------------------------------------------------------- S3 writes: trips
@@ -814,7 +922,7 @@ async def close_incident(incident_id: str, body: IncidentClose, session: AsyncSe
 
 # ---------------------------------------------------------------- §3.1 the watch
 
-ESTIMATE_OWNERS = {"S1": {"battle_captain", "security"}, "S2": {"battle_captain", "analyst"}, "S3": {"battle_captain", "security", "ea"}, "S6": {"battle_captain"}}
+ESTIMATE_OWNERS = {"S1": {"battle_captain", "security"}, "S2": {"battle_captain", "analyst"}, "S3": {"battle_captain", "security", "ea"}, "S4": {"battle_captain", "logistics"}, "S6": {"battle_captain", "signal"}}
 
 
 @router.get("/watch")

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db_models import LedgerEventRow
 from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
+from .sections import SupplyRow, ShipmentRow, SystemRow, s4_summary, s6_summary, sections_config
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
@@ -113,6 +114,9 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     people = (await session.execute(select(PersonRow))).scalars().all()
     trips = (await session.execute(select(TripRow))).scalars().all()
     legs = (await session.execute(select(TripLegRow))).scalars().all()
+    supplies = (await session.execute(select(SupplyRow))).scalars().all()
+    shipments = (await session.execute(select(ShipmentRow))).scalars().all()
+    systems = (await session.execute(select(SystemRow))).scalars().all()
     threats = (await session.execute(select(ThreatRow))).scalars().all()
     links = (await session.execute(select(ThreatLinkRow))).scalars().all()
     events = (await session.execute(select(EventRow))).scalars().all()
@@ -364,9 +368,14 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "posture": POSTURES[worst_loc], "defcon": 5 - worst_loc,
         "defcon_levels": [{"defcon": DEFCON[p], "posture": p, "meaning": DEFCON_MEANING[p], "sites": sum(1 for l in locations_out if l["effective_posture"] == p)} for p in POSTURES],
     }
+    loc_name = {l.id: l.name for l in locations}
+    s4 = s4_summary([x for x in supplies if not x.location_id or x.location_id in loc_by_id], [x for x in shipments if not x.to_location_id or x.to_location_id in loc_by_id], loc_name, now)
+    s6 = s6_summary([x for x in systems if not x.location_id or x.location_id in loc_by_id], loc_name, now)
+    summary["s4_status"], summary["s6_status"] = s4["status"], s6["status"]
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     return {
+        "sections": sections_config(), "s4": s4, "s6": s6,
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,

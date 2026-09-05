@@ -49,6 +49,10 @@ struct COPClient {
         if let note { body["note"] = note }
         try await send("PATCH", "/v1/cop/incidents/\(incidentId)/roster/\(personId)", body)
     }
+    // §7 / §8 — the background boards
+    func updateSupply(_ id: String, onHand: Double, note: String?) async throws { var b: [String: Any] = ["on_hand": onHand]; if let note, !note.isEmpty { b["note"] = note }; try await send("PATCH", "/v1/cop/supply/\(id)", b) }
+    func updateShipment(_ id: String, status: String) async throws { try await send("PATCH", "/v1/cop/shipments/\(id)", ["status": status]) }
+    func updateSystem(_ id: String, status: String, note: String?) async throws { var b: [String: Any] = ["status": status]; if let note, !note.isEmpty { b["note"] = note }; try await send("PATCH", "/v1/cop/systems/\(id)", b) }
     func requestCheckins(incidentId: String) async throws { try await send("POST", "/v1/cop/incidents/\(incidentId)/request-checkins", [:]) }
     func closeIncident(id: String) async throws { try await send("PATCH", "/v1/cop/incidents/\(id)/close", [:]) }
 

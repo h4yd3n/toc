@@ -24,6 +24,58 @@ class TripUpdate(BaseModel):
     return_at: Optional[datetime] = None
     purpose: Optional[str] = None
 
+SupplyCategory = Literal["fuel", "water", "rations", "medical", "ammunition", "parts", "equipment", "other"]
+SystemCategory = Literal["comms", "network", "application", "power", "sensor", "other"]
+PaceRole = Literal["primary", "alternate", "contingency", "emergency"]
+
+class SupplyCreate(BaseModel):
+    location_id: Optional[str] = None
+    category: SupplyCategory = "other"
+    item: str
+    on_hand: float = Field(ge=0)
+    required: float = Field(ge=0)
+    unit: str = "ea"
+    note: str = ""
+
+class SupplyUpdate(BaseModel):
+    on_hand: Optional[float] = Field(default=None, ge=0)
+    required: Optional[float] = Field(default=None, ge=0)
+    unit: Optional[str] = None
+    note: Optional[str] = None
+
+class ShipmentCreate(BaseModel):
+    description: str
+    category: SupplyCategory = "other"
+    quantity: str = ""
+    from_name: str = ""
+    to_location_id: Optional[str] = None
+    to_name: str = ""
+    eta: datetime
+    status: Literal["planned", "in_transit", "delayed", "arrived", "cancelled"] = "planned"
+    priority: Literal["routine", "priority", "urgent"] = "routine"
+    carrier: str = ""
+    ref: Optional[str] = None
+    note: str = ""
+
+class ShipmentUpdate(BaseModel):
+    status: Optional[Literal["planned", "in_transit", "delayed", "arrived", "cancelled"]] = None
+    eta: Optional[datetime] = None
+    priority: Optional[Literal["routine", "priority", "urgent"]] = None
+    note: Optional[str] = None
+
+class SystemCreate(BaseModel):
+    name: str
+    category: SystemCategory = "comms"
+    location_id: Optional[str] = None
+    pace: Optional[PaceRole] = None
+    status: Literal["up", "degraded", "down"] = "up"
+    note: str = ""
+
+class SystemUpdate(BaseModel):
+    status: Optional[Literal["up", "degraded", "down"]] = None
+    pace: Optional[PaceRole] = None
+    note: Optional[str] = None
+
 class LegCreate(BaseModel):
     kind: Literal["flight", "ground", "lodging"]
     label: str = ""

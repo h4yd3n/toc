@@ -2,18 +2,25 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(COPStore.self) private var store
+    @State private var tab = "COP"
 
     var body: some View {
         @Bindable var store = store
         VStack(spacing: 0) {
             PostureBar(); FlashStrip()
-            TabView {
-                MapScreen().tabItem { Label("COP", systemImage: "map") }
-                PersonnelScreen().tabItem { Label("S1", systemImage: "person.3") }
-                IntelScreen().tabItem { Label("S2", systemImage: "eye") }
-                OpsScreen().tabItem { Label("S3", systemImage: "calendar") }
+            ZStack(alignment: .bottom) {
+                Group {
+                    switch tab {
+                    case "COP": MapScreen()
+                    case "S1": PersonnelScreen()
+                    case "S2": IntelScreen()
+                    case "S3": OpsScreen()
+                    case "S4": LogisticsScreen()
+                    default: SignalScreen()
+                    }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                TabBar(tab: $tab)
             }
-            .tint(Theme.blue)
         }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
@@ -123,5 +130,54 @@ struct Stat: View {
             Text(value.map(String.init) ?? "—").font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundStyle(color)
             Text(label).font(.system(size: 8, design: .monospaced)).tracking(1.2).foregroundStyle(Theme.dim)
         }
+    }
+}
+
+
+/// The tab bar, drawn by the app: the enabled staff sections in wall order, so a deployment with S4 and S6 gets six tabs and a
+/// commercial desk four — the native bar caps at five and hides the rest behind "More".
+struct TabBar: View {
+    @Environment(COPStore.self) private var store
+    @Binding var tab: String
+    static let icons = ["COP": "map", "S1": "person.3", "S2": "eye", "S3": "calendar", "S4": "shippingbox", "S6": "antenna.radiowaves.left.and.right"]
+    var tabs: [String] {
+        let cfg = store.snapshot?.sections ?? []
+        let on = { (c: String) in cfg.first { $0.code == c }?.enabled ?? (c != "S4" && c != "S6") }
+        return ["COP", "S1", "S2", "S3", "S4", "S6"].filter { $0 == "COP" || on($0) }
+    }
+    func badge(_ t: String) -> (Int, Color)? {
+        let s = store.snapshot?.summary
+        switch t {
+        case "S1": let n = (store.snapshot?.incidents ?? []).filter { $0.status == "open" }.count; return n > 0 ? (n, Theme.red) : nil
+        case "S2": let n = s?.warningsPending ?? 0; return n > 0 ? (n, Theme.red) : nil
+        case "S4": return (s?.s4Status ?? "green") == "green" ? nil : (0, healthColor(s?.s4Status ?? "green"))
+        case "S6": return (s?.s6Status ?? "green") == "green" ? nil : (0, healthColor(s?.s6Status ?? "green"))
+        default: return nil
+        }
+    }
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(tabs, id: \.self) { t in
+                let on = t == tab
+                Button { tab = t; store.selection = nil } label: {
+                    VStack(spacing: 3) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: Self.icons[t] ?? "square").font(.system(size: 20, weight: .medium)).frame(height: 24)
+                            if let (n, c) = badge(t) {
+                                if n > 0 { Text("\(n)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).padding(.horizontal, 4).padding(.vertical, 1).background(c, in: Capsule()).offset(x: 10, y: -6) }
+                                else { Circle().fill(c).frame(width: 8, height: 8).offset(x: 6, y: -3) }
+                            }
+                        }
+                        Text(t).font(.system(size: 10, weight: on ? .semibold : .regular))
+                    }
+                    .foregroundStyle(on ? Theme.blue : Theme.dim).frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .background(on ? Theme.line.opacity(0.9) : .clear, in: Capsule())
+                }.buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Theme.line, lineWidth: 0.5))
+        .padding(.horizontal, 20).padding(.bottom, 6)
     }
 }

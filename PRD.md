@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.19
+**Version:** 3.20
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -58,8 +58,8 @@ This is the organizing principle for the whole product. Every feature belongs to
 | **S1** | Personnel | Where everyone is, who's assigned where, who's on shift, how to reach them | **Blue Force Tracker** | **[BUILT]** |
 | **S2** | Intelligence | External and open-source threat intel, assessments, PIRs | **Sigtoc** | **[BUILT]** live GDACS collection, analyst-confirmed links, CLUE-style drafter with refuse-to-assess |
 | **S3** | Operations | Executive travel, corporate events, planned activity | **Ops Calendar** | **[BUILT]** travel + events (attendees generate trips), write API for EAs |
-| **S4** | Supply / Logistics | Equipment, residence security, security team kit | **Equipment Board** | **[DROPPED]** by the author, 2026-09-04 — S4 lives on only as resource asks inside an operation |
-| **S6** | Communications | Check-ins, accountability roll calls, incident comms | **Accountability** | **[BUILT]** check-in, roll call with call log, SMS + chat out, SMS in, escalation rule, FLASH alerting |
+| **S4** | Logistics | Supply, equipment, transportation | **Logistics Board** | **[BUILT]** supplies and equipment by site against a required level; inbound shipments; by exception |
+| **S6** | Signal | Communications, networks, systems, accountability | **Signal Board** | **[BUILT]** systems by site with PACE comms; roll calls and check-ins (§8) |
 
 S1 and S3 feed each other: S3 says who is going where and when; S1 shows where they are now. S2 overlays threats on both. S4 says what they have with them.
 
@@ -381,15 +381,21 @@ All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a
 
 ---
 
-## 7. S4 — Supply: Equipment Board **[DROPPED]**
+## 7. S4 — Logistics: Supply & Equipment Board **[BUILT]**
 
-Who has what. Mostly laptops and phones at a tech company, but for the security team it's kit, and for executive residences it's cameras, access control, and — where lawful and policy allows — armed coverage.
+Reinstated 2026-09-04 with §8 as the *background sections*, built for a generic operations center — military, government, police — where S4 and S6 are inside the TOC by doctrine. A commercial security desk hides them (§11.2).
 
-Dropped by the author on 2026-09-04 ("forget about S4 for now"). What survives is the S4 resource ask inside an operation (§5.10 #3).
+**The doctrine.** S1, S2, and S3 are what the Battle Captain lives in. S4 and S6 are managed by someone on the staff and speak only when something is wrong: a shipment the force is waiting on is late, fuel at a site is below the line, a system the TOC depends on is down. So they roll up to one status each — GREEN nothing to say, AMBER watch it, RED it is a problem now — and the wall shows only that roll-up (a dot on the rail button) until someone opens the panel. The exceptions ride into the handover brief (§3.1) and the INTSUM.
+
+**What S4 tracks.** *Supply lines*: a category (fuel, water, rations, medical, ammunition, parts, equipment, other), an item, what is on hand against what is required, at a site or force-wide. Below required is AMBER, below half of it RED. *Shipments*: what is inbound, from where, to which site, with an ETA, a status (planned / in transit / delayed / arrived / cancelled), and a priority; late or delayed is AMBER, an urgent one RED. Arrivals leave the board after a day. Owners: `battle_captain` and `logistics`. Everything is on the ledger (`cop.s4.*`), and S4 keeps a running estimate like every other section.
+
+**[LATER]** vehicle and equipment readiness by bumper number (FMC / PMC / NMC), fuel consumption against days of supply, and unit tracking from GPS telemetry on the COP (§4) — the pieces a military or police deployment adds first.
 
 ---
 
 ## 8. S6 — Communications: Accountability **[BUILT]**
+
+**[BUILT] — the signal board (2026-09-04).** Alongside accountability, S6 tracks the systems the TOC depends on: comms nets by PACE role (primary / alternate / contingency / emergency) per site, networks, applications, power, sensors, each up / degraded / down with a clock since the last change and a note. A primary net or power down is RED; anything else down or degraded is AMBER. The panel shows PACE per site — the best working net, so the Battle Captain knows how to reach each site *right now* — then the exceptions, then open roll calls. Owners: `battle_captain` and `signal`. Ledger: `cop.s6.system`.
 
 The TOC's first job when something happens at a site is to reach every person who is supposed to be there.
 That is a roll call, and it is the reason the S1 picture exists.
@@ -461,6 +467,10 @@ The native apps are native for a reason: the map has to be fluid and the animati
 2. **Sigtoc** — S2 exists to feed the wall; more collectors and a real drafter path come after the wall is solid.
 3. **Modtoc** — last. ROOST (osprey: rules engine used by Discord/Bluesky/Matrix; coop: review console used by Notion) covers most of this ground. Modtoc stays as-is; evaluate adopting ROOST before investing further.
 
+## 11.2 The section set is configuration
+
+`TOC_SECTIONS=S1,S2,S3,S4,S6` (default) lists the staff sections a deployment runs; `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` renames. S1–S3 cannot be switched off — the COP is built on them. The snapshot carries `sections`; the wall shows a rail button per enabled section, and the phones a tab: six for an operations center, four for a commercial desk that only tracks executives.
+
 ## 11.1 Repository Layout
 
 | Folder | Module | Role |
@@ -479,6 +489,14 @@ The native apps are native for a reason: the map has to be fluid and the animati
 | `Location` | `id`, `name`, `type` (hq / office / datacenter / residence / venue), `lat`, `lon`, `city`, `country`, `posture` (normal / guarded / elevated / high / critical), `sensitivity` |
 | `Team` | `id`, `name`, `location_id`, `function`, `is_security` |
 | `Person` | `id`, `name`, `role`, `team_id`, `is_vip`, `on_shift`, `shift_role` |
+
+**S4 / S6:**
+
+| Entity | Key fields |
+| :--- | :--- |
+| `SupplyLine` | `id`, `location_id` (null = force-wide), `category`, `item`, `on_hand`, `required`, `unit`, `note`; derived `status` (green / amber / red) |
+| `Shipment` | `id`, `description`, `category`, `quantity`, `from_name`, `to_location_id`, `eta`, `status`, `priority`, `carrier`, `ref`; derived `health` |
+| `System` | `id`, `name`, `category` (comms / network / application / power / sensor), `location_id` (null = enterprise), `pace`, `status` (up / degraded / down), `since`, `note`; derived `health` |
 
 **S3:**
 
@@ -570,6 +588,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.20** — S4 Logistics and S6 Signal reinstated as background sections for a generic operations center: supply lines, shipments, systems with PACE, roll-ups by exception, panels on the wall and tabs on the phones; the section set as configuration. iOS tab bar drawn by the app.
 - **v3.19** — S3 itineraries: optional legs (flight / ground / lodging) on every business trip; the traveler's position follows the current leg; CSV and pasted-confirmation imports; the phone calendar as a continuous day ribbon that unfolds into the month.
 - **v3.18** — the wall's layout decided: rails and slide-out panels over the map only, S3 and the log full width; posture as five levels read as DEFCON 5 → 1 with the levels menu; DISPLAY toggles. The recon-diamond identity.
 - **v3.17** — the rest of the document: the Warning product with S6 alerting, S1 availability states, NWS zone resolution, export adapters for HRIS / scheduling / travel / calendar / badge, long-range planning with coverage, Wikidata baseline; S2 panels and FLASH on iOS and Android. S4 dropped by the author.

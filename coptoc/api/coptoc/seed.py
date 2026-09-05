@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .sections import ShipmentRow, SupplyRow, SystemRow
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
@@ -90,6 +91,38 @@ def _people():
                     role = f"Head of {tname.split(' — ')[0]}"
                 rows.append(PersonRow(id=f"p_{n:03d}", name=nm, role=role, team_id=tid, phone=ph, email=em, source="hris:workday"))
     return rows
+
+def _sections(now):
+    """§7/§8 seed: the background boards. Mostly green, with the exceptions a Battle Captain should hear about."""
+    h = lambda x: now + timedelta(hours=x)
+    sup = lambda i, loc, cat, item, on, req, unit, note="": SupplyRow(id=f"sup_{i:03d}", location_id=loc, category=cat, item=item, on_hand=on, required=req, unit=unit, note=note, updated_at=h(-3), source="manual:s4")
+    supplies = [
+        sup(1, "loc_sf", "fuel", "Generator diesel", 1800, 1500, "L"), sup(2, "loc_sf", "water", "Bottled water", 96, 120, "cases", "Delivery Friday"),
+        sup(3, "loc_sf", "medical", "Trauma kits", 12, 12, "ea"), sup(4, "loc_sf", "equipment", "Handheld radios (charged)", 18, 24, "ea", "6 on the charger, 2 U/S"),
+        sup(5, "loc_dc2", "fuel", "Generator diesel", 400, 2000, "L", "Resupply inbound"), sup(6, "loc_dc2", "equipment", "Satellite phones", 2, 2, "ea"),
+        sup(7, "loc_nyc", "medical", "AEDs (serviceable)", 4, 4, "ea"), sup(8, "loc_ldn", "equipment", "Body armor sets", 6, 8, "ea"),
+        sup(9, None, "equipment", "Armored vehicles (mission capable)", 3, 4, "ea", "1 in maintenance, Riyadh"), sup(10, "loc_tyo", "rations", "Emergency rations (72h)", 40, 40, "person-days"),
+    ]
+    shp = lambda i, desc, cat, qty, frm, loc, eta, status, pri, carrier="", ref=None, note="": ShipmentRow(id=f"shp_{i:03d}", description=desc, category=cat, quantity=qty, from_name=frm, to_location_id=loc, eta=eta, status=status, priority=pri, carrier=carrier, ref=ref, note=note, updated_at=h(-1), source="manual:s4")
+    shipments = [
+        shp(1, "Generator diesel resupply", "fuel", "2,000 L", "Regional depot", "loc_dc2", h(6), "in_transit", "urgent", "Contract carrier", "DL-4471"),
+        shp(2, "Radio batteries + chargers", "equipment", "24 ea", "Vendor", "loc_tyo", h(-3), "delayed", "priority", "Courier", "RB-0092", "Customs hold at Narita"),
+        shp(3, "Bottled water", "water", "60 cases", "Local supplier", "loc_sf", h(30), "planned", "routine"),
+        shp(4, "Medical resupply", "medical", "6 kits", "Vendor", "loc_ldn", h(-20), "arrived", "routine"),
+    ]
+    sy = lambda i, name, cat, loc, pace, status, since, note="": SystemRow(id=f"sys_{i:03d}", name=name, category=cat, location_id=loc, pace=pace, status=status, since=since, note=note, updated_at=since, source="manual:s6")
+    systems = [
+        sy(1, "Corporate WAN / VPN", "network", None, None, "up", h(-400)), sy(2, "Mass notification (SMS + chat)", "application", None, None, "up", h(-300)),
+        sy(3, "Badge / access control", "application", "loc_dc2", None, "down", h(-2), "Controller reboot loop; vendor engaged"),
+        sy(4, "Video management system", "sensor", "loc_sf", None, "degraded", h(-5), "Two cameras offline, east lobby"),
+        sy(5, "Desk phones (VoIP)", "comms", "loc_sf", "primary", "up", h(-900)), sy(6, "Cellular (corporate mobiles)", "comms", "loc_sf", "alternate", "up", h(-900)),
+        sy(7, "Handheld radio net", "comms", "loc_sf", "contingency", "up", h(-900)), sy(8, "Satellite phone", "comms", "loc_sf", "emergency", "up", h(-900)),
+        sy(9, "Desk phones (VoIP)", "comms", "loc_dc2", "primary", "down", h(-2), "Same controller outage"), sy(10, "Cellular", "comms", "loc_dc2", "alternate", "up", h(-900)),
+        sy(11, "Handheld radio net", "comms", "loc_dc2", "contingency", "up", h(-900)), sy(12, "Satellite phone", "comms", "loc_dc2", "emergency", "up", h(-900)),
+        sy(13, "Site power (utility)", "power", "loc_dc2", None, "up", h(-900)), sy(14, "Backup generator", "power", "loc_dc2", None, "up", h(-900), "Fuel at 20% — see S4"),
+        sy(15, "Desk phones (VoIP)", "comms", "loc_ldn", "primary", "up", h(-900)), sy(16, "Cellular", "comms", "loc_ldn", "alternate", "degraded", h(-8), "Carrier outage, central London"),
+    ]
+    return supplies + shipments + systems
 
 def _trips(now):
     h = lambda x: now + timedelta(hours=x); d = lambda x: now + timedelta(days=x)
@@ -310,7 +343,7 @@ async def reseed(session: AsyncSession) -> None:
     await _seed_case(session, now_utc())
     await _seed_directed(session, now_utc())
     await _seed_operation(session, now_utc())
-    for model in (AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    for model in (SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
@@ -328,6 +361,7 @@ async def reseed(session: AsyncSession) -> None:
     await session.flush()
     session.add_all(_trips(now))
     session.add_all(_legs(now))
+    session.add_all(_sections(now))
     people_by_id = {p.id: p for p in people}
     team_loc = {t[0]: t[2] for t in TEAMS}
     for eid, name, etype, vloc, vname, vlat, vlon, start_d, dur, desc, attendees in EVENTS:
