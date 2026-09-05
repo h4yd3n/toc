@@ -58,7 +58,7 @@ export default function App() {
   const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
   useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
-  const toggleRight = (p: Exclude<RightPanel, null>) => setRightPanel(rightPanel === p ? null : p)
+  const toggleRight = (p: Exclude<RightPanel, null>) => { const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true })) }
   const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
   const [s3Flash, setS3Flash] = useState(false)
   const jump = (section: 'S1' | 'S2' | 'S3') => {  // a header counter opens its section
@@ -77,7 +77,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showDefcon, setShowDefcon] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
-  const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false })
+  const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: false, s6: false })
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
   const [users, setUsers] = useState<UserInfo[]>([])
@@ -172,6 +172,8 @@ export default function App() {
         <div className="layer-toggles">
           {(['locations', 'travelers', 'routes', 'threats', 'events'] as (keyof Layers)[]).map(k => (
             <button key={k} className={`tog ${layers[k] ? 'on' : ''}`} onClick={() => toggle(k)}>{k}</button>))}
+          {sectionOn('S4') && <button className={`tog sec4 ${layers.s4 ? 'on' : ''}`} onClick={() => toggle('s4')} title="S4 health on every site">S4</button>}
+          {sectionOn('S6') && <button className={`tog sec6 ${layers.s6 ? 'on' : ''}`} onClick={() => toggle('s6')} title="S6 health on every site">S6</button>}
           <button className={`tog restricted ${layers.residences ? (snap?.restricted_denied ? 'denied' : 'on') : ''}`} onClick={() => toggle('residences')} title={snap?.restricted_denied ? 'Restricted layer — your role is not cleared (Battle Captain / EP only)' : 'Restricted layer — off by default'}>⚿ residences{layers.residences && snap?.restricted_denied ? ' · DENIED' : ''}</button>
         </div>
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
@@ -231,13 +233,13 @@ export default function App() {
         <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>{can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}</PanelHead>
         {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
-        <S4Panel board={snap?.s4} role={role} busy={busy} act={act} />
+        <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
       </aside>
       <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`}>
         <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>{can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}</PanelHead>
         {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
-        <S6Panel board={snap?.s6} role={role} busy={busy} act={act} />
+        <S6Panel board={snap?.s6} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s6} toggleMap={() => toggle('s6')} />
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
           <SectionLabel>ACCOUNTABILITY · OPEN ROLL CALLS <span className="dim">{snap.incidents.filter(i => i.status === 'open').length}</span></SectionLabel>
           <ul className="list">{snap.incidents.filter(i => i.status === 'open').map(i => (

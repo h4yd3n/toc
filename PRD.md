@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.26
+**Version:** 3.27
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -111,6 +111,10 @@ The level meanings shown are the US military DEFCON definitions, as the example 
 table on the API. Counters beside it: personnel, traveling, VIP out, threats, confirmed.
 
 ---
+
+### 3.0 The map-first sections **[BUILT]** (2026-09-05)
+
+The author's direction: the picture is the product, and a section that is only a list is a spreadsheet inside the app. So every section is a *layer on the map* first and a *list you can dismiss* second. Each site carries its S4 and S6 health (the worst supply line or inbound shipment there; the worst system there and the PACE net in use), so S4 and S6 are layers that color the sites — red at FARP Eagle on fuel, amber at the brigade TOC on HF — with a badge that counts what is short or down; clusters wear the worst of their sites. A site with nothing tracked wears no badge, not a green one. On the wall the S4 and S6 layers are toggles beside the others, they switch on when their panel opens, and the panel filters to the selected site. On the phones every section tab is the map with that section's layer — S1 sites and travelers, S2 threats, S3 events and routes, S4 and S6 site health — and the section's list on a sheet with three rests: peek, half, full. Pull it down to see the picture; pull it up to read.
 
 ### 3.1 The watch — shifts, running estimates, and handover **[BUILT]**
 
@@ -608,6 +612,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.27** — §3.0 the map-first sections: site health from S4/S6 on the model, S4/S6 layers on the wall's map, every phone section tab as the map plus a pull-down sheet.
 - **v3.26** — names and ranks (LAST, First M. · RANK on a military desk; pay grades as the constant); sign-in profiles are the roles themselves.
 - **v3.25** — §13 the spreadsheet upload: Excel or CSV, header found under title rows, mapping proposed (model or headers), preview then commit; S1 roster builds the task organization from unit paths. Phone SETTINGS as submenus.
 - **v3.24** — §9 users and permissions: per-section view/edit, Battle Captain and admin flags, sign-in as a user, the admin's grid; header counters open their section; the phone header floats over the picture (clock left, DEFCON centered, gear right; the watch and counters as a card); the phone dock folds on scroll.

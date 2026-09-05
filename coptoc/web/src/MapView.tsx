@@ -125,9 +125,13 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
       const selected = c.members.some(x => selection && x.kind === selection.type && x.id === selection.id)
       if (c.members.length === 1 && locs.length === 1) {
         const l = locs[0].loc!
-        div.className = `mk mk-loc mk-${l.type} posture-${l.effective_posture}${selected ? ' selected' : ''}${l.threat_ids_in_area.length ? ' in-area' : ''}`
-        div.innerHTML = `<span class="glyph">${TYPE_GLYPH[l.type]}</span><span class="badge">${l.present}</span>${l.vips_present ? '<span class="vip">★</span>' : ''}`
-        div.title = `${l.name} — ${l.present} present / ${l.assigned} assigned`
+        // §3 the map-first sections: with the S4 or S6 layer on, the site wears that section's health
+        const sec = layers.s6 && l.s6_status ? `sec-${l.s6_status}` : layers.s4 && l.s4_status ? `sec-${l.s4_status}` : ''
+        div.className = `mk mk-loc mk-${l.type} posture-${l.effective_posture}${selected ? ' selected' : ''}${l.threat_ids_in_area.length ? ' in-area' : ''} ${sec}`
+        const chips = (layers.s4 && l.s4_status ? `<span class="sec s4 ${l.s4_status}" title="S4 ${l.s4_status}">S4${l.s4_red ? ' ' + l.s4_red : ''}</span>` : '') +
+                      (layers.s6 && l.s6_status ? `<span class="sec s6 ${l.s6_status}" title="S6 ${l.s6_status}${l.s6_in_use ? ' · on ' + l.s6_in_use : ''}">S6${l.s6_down ? ' ' + l.s6_down : ''}</span>` : '')
+        div.innerHTML = `<span class="glyph">${TYPE_GLYPH[l.type]}</span><span class="badge">${l.present}</span>${l.vips_present ? '<span class="vip">★</span>' : ''}${chips ? `<span class="secs">${chips}</span>` : ''}`
+        div.title = `${l.name} — ${l.present} present / ${l.assigned} assigned${l.s4_status ? ` · S4 ${l.s4_status}` : ''}${l.s6_status ? ` · S6 ${l.s6_status}${l.s6_in_use ? ' on ' + l.s6_in_use.toUpperCase() : ''}` : ''}`
         div.onclick = e => { e.stopPropagation(); onSelect({ type: 'location', id: l.id }) }
       } else if (c.members.length === 1 && ppl.length === 1) {
         const p = ppl[0].person!
@@ -145,8 +149,14 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
         const present = locs.reduce((a, x) => a + x.loc!.present, 0) + ppl.length
         const LEVELS = ['normal', 'guarded', 'elevated', 'high', 'critical']
         const worst = locs.reduce((a, x) => Math.max(a, LEVELS.indexOf(x.loc!.effective_posture)), 0)
-        div.className = `mk mk-cluster posture-${LEVELS[worst]}${selected ? ' selected' : ''}`
-        div.innerHTML = `<span class="count">${present}</span><span class="sub">${locs.length} site${locs.length === 1 ? '' : 's'}${ppl.length ? ` · ${ppl.length} tvl` : ''}${evs.length ? ` · ${evs.length} evt` : ''}</span>`
+        // a cluster wears the worst S4 / S6 health of its sites when that layer is on
+        const RANK = { green: 0, amber: 1, red: 2 } as Record<string, number>
+        const worstOf = (k: 's4_status' | 's6_status') => locs.map(x => x.loc![k]).filter(Boolean).sort((a, b) => RANK[b!] - RANK[a!])[0] ?? null
+        const h4 = layers.s4 ? worstOf('s4_status') : null, h6 = layers.s6 ? worstOf('s6_status') : null
+        const sec = h6 ? `sec-${h6}` : h4 ? `sec-${h4}` : ''
+        const chips = (h4 ? `<span class="sec s4 ${h4}">S4 ${locs.reduce((a, x) => a + (x.loc!.s4_red ?? 0), 0) || ''}</span>` : '') + (h6 ? `<span class="sec s6 ${h6}">S6 ${locs.reduce((a, x) => a + (x.loc!.s6_down ?? 0), 0) || ''}</span>` : '')
+        div.className = `mk mk-cluster posture-${LEVELS[worst]}${selected ? ' selected' : ''} ${sec}`
+        div.innerHTML = `<span class="count">${present}</span><span class="sub">${locs.length} site${locs.length === 1 ? '' : 's'}${ppl.length ? ` · ${ppl.length} tvl` : ''}${evs.length ? ` · ${evs.length} evt` : ''}</span>${chips ? `<span class="secs">${chips}</span>` : ''}`
         div.title = c.members.map(x => x.loc?.name ?? x.person?.name ?? x.event?.name).join('\n')
         div.onclick = e => { e.stopPropagation(); m.flyTo({ center: [c.lon, c.lat], zoom: Math.min(m.getZoom() + 2.5, 12), speed: 1.4 }) }
       }

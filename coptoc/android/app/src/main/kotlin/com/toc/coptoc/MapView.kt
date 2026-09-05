@@ -33,7 +33,8 @@ private fun hex(c: androidx.compose.ui.graphics.Color) = String.format("#%06X", 
 
 /** The map at the center of the wall: sites by posture, travelers, events, threat rings by severity. Tap selects. */
 @Composable
-fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier) {
+fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null) {
+    val latestLayer = remember { arrayOfNulls<String>(1) }; latestLayer[0] = layer
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context) }
@@ -65,7 +66,7 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
                 style.addLayer(SymbolLayer("blue-labels", "blue").withProperties(
                     textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
                     textOffset(arrayOf(0f, 1.3f)), textAllowOverlap(false), textOptional(true)))
-                applySnapshot(style, latest[0], latestRestricted[0])  // the first snapshot usually arrives before the style does
+                applySnapshot(style, latest[0], latestRestricted[0], latestLayer[0])  // the first snapshot usually arrives before the style does
                 map.addOnMapClickListener { p ->
                     val pt = map.projection.toScreenLocation(p)
                     val rect = android.graphics.RectF(pt.x - 24, pt.y - 24, pt.x + 24, pt.y + 24)
@@ -81,20 +82,25 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
         mapView
     }, modifier = modifier, update = {
         latest[0] = snap; latestRestricted[0] = restricted
-        mapHolder[0]?.style?.let { applySnapshot(it, snap, restricted) }
+        mapHolder[0]?.style?.let { applySnapshot(it, snap, restricted, layer) }
     })
 }
 
-private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean) = try {
-    applySnapshotInner(style, s, restricted)
+private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean, layer: String? = null) = try {
+    applySnapshotInner(style, s, restricted, layer)
 } catch (e: Exception) { android.util.Log.e("WallMap", "applySnapshot failed", e) }
 
-private fun applySnapshotInner(style: Style, s: Snapshot?, restricted: Boolean) {
+private fun applySnapshotInner(style: Style, s: Snapshot?, restricted: Boolean, layer: String? = null) {
     s ?: return
-    val threats = s.threats.map { t -> feature(t.lon, t.lat, "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm) }
-    val blue = s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l -> feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to l.name, "color" to hex(Palette.posture(l.effectivePosture))) } +
-            s.people.filter { it.status == "traveling" }.map { p -> feature(p.lon, p.lat, "id" to p.id, "kind" to "traveler", "label" to (p.shortName ?: p.name.split(" ").first()), "color" to hex(if (p.isVip) Palette.amber else Palette.blue2)) } +
-            s.events.map { e -> feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple)) }
+    // §3 the map-first sections: a section's layer shows only what that section owns; S4 / S6 color every site by its health
+    val showThreats = layer == null || layer == "S2"; val showTravelers = layer == null || layer == "S1" || layer == "S3"; val showEvents = layer == null || layer == "S3"
+    fun siteColor(l: Site): String { val h = when (layer) { "S4" -> l.s4Status; "S6" -> l.s6Status; else -> null }; return if (h != null) hex(healthColor(h)) else hex(Palette.posture(l.effectivePosture)) }
+    fun siteLabel(l: Site): String = when (layer) { "S4" -> l.s4Status?.let { "${l.name} · S4 ${it.uppercase()}" + (if (l.s4Red > 0) " (${l.s4Red})" else "") } ?: l.name
+        "S6" -> l.s6Status?.let { "${l.name} · S6 ${it.uppercase()}" + (l.s6InUse?.let { n -> " · on ${n.uppercase()}" } ?: "") } ?: l.name; else -> l.name }
+    val threats = if (!showThreats) emptyList() else s.threats.map { t -> feature(t.lon, t.lat, "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm) }
+    val blue = s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l -> feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to siteLabel(l), "color" to siteColor(l)) } +
+            (if (!showTravelers) emptyList() else s.people.filter { it.status == "traveling" }).map { p -> feature(p.lon, p.lat, "id" to p.id, "kind" to "traveler", "label" to (p.shortName ?: p.name.split(" ").first()), "color" to hex(if (p.isVip) Palette.amber else Palette.blue2)) } +
+            (if (!showEvents) emptyList() else s.events).map { e -> feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple)) }
     (style.getSource("threats") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(threats))
     (style.getSource("blue") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(blue))
     android.util.Log.i("WallMap", "applied ${threats.size} threats, ${blue.size} blue features; blue source present=${style.getSource("blue") != null}, layer present=${style.getLayer("blue-dots") != null}")

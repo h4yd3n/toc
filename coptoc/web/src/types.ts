@@ -5,6 +5,7 @@ export type LocationType = 'hq' | 'office' | 'datacenter' | 'residence' | 'venue
 export type Confidence = 'low' | 'moderate' | 'high' | 'insufficient'
 
 export interface Location {
+  s4_status?: Health | null; s4_lines?: number; s4_red?: number; s4_amber?: number; s4_inbound?: number; s6_status?: Health | null; s6_systems?: number; s6_down?: number; s6_degraded?: number; s6_in_use?: string | null
   id: string; name: string; type: LocationType; lat: number; lon: number
   city: string; country: string; posture: Posture; effective_posture: Posture; sensitivity: 'standard' | 'restricted'
   assigned: number; present: number; security_on_shift: number; vips_present: number
@@ -110,7 +111,7 @@ export interface Snapshot { warnings: Warning[]; me: Me; profile: 'military' | '
 }
 export type Selection =
   | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | null
-export interface Layers { locations: boolean; travelers: boolean; threats: boolean; routes: boolean; events: boolean; residences: boolean }
+export interface Layers { locations: boolean; travelers: boolean; threats: boolean; routes: boolean; events: boolean; residences: boolean; s4: boolean; s6: boolean }
 
 export interface Requirement {
   id: string; kind: 'standing' | 'directed'; subject_type: 'location' | 'trip' | 'event' | 'person' | 'place'; subject_id: string | null; subject_name: string

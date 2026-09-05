@@ -10,11 +10,11 @@ struct ContentView: View {
                 Group {
                     switch store.tab {
                     case "COP": MapScreen()
-                    case "S1": PersonnelScreen()
-                    case "S2": IntelScreen()
-                    case "S3": OpsScreen()
-                    case "S4": LogisticsScreen()
-                    default: SignalScreen()
+                    case "S1": SectionTab(section: "S1") { PersonnelScreen() }
+                    case "S2": SectionTab(section: "S2") { IntelScreen() }
+                    case "S3": SectionTab(section: "S3") { OpsScreen() }
+                    case "S4": SectionTab(section: "S4") { LogisticsScreen() }
+                    default: SectionTab(section: "S6") { SignalScreen() }
                     }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }  // the map runs under the header; lists start below it

@@ -74,3 +74,37 @@ extension View {
         onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in store.trackBarScroll(-y) }
     }
 }
+
+
+/// §3 the map-first sections: the picture behind, the section's list on a sheet with three rests — peek, half, full.
+struct SectionTab<Content: View>: View {
+    var section: String
+    @ViewBuilder var content: () -> Content
+    @State private var rest: CGFloat = 0.55
+    @State private var drag: CGFloat = 0
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .bottom) {
+                MapScreen(layer: section)
+                let h = max(90, min(g.size.height * 0.92, g.size.height * rest - drag))
+                VStack(spacing: 0) {
+                    VStack(spacing: 4) {
+                        Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 36, height: 4).padding(.top, 8)
+                        Text(rest <= 0.15 ? "\(section) · pull up" : "\(section)").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim).padding(.bottom, 4)
+                    }
+                    .frame(maxWidth: .infinity).contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 6).onChanged { v in drag = v.translation.height }.onEnded { v in
+                        let target = (g.size.height * rest - v.translation.height) / g.size.height
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { rest = target < 0.32 ? 0.12 : target < 0.75 ? 0.55 : 0.92; drag = 0 }
+                    })
+                    .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { rest = rest <= 0.15 ? 0.55 : rest < 0.75 ? 0.92 : 0.12 } }
+                    content().frame(maxHeight: .infinity)
+                }
+                .frame(height: h)
+                .background(Theme.bg.opacity(0.96), in: UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
+                .overlay(alignment: .top) { UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16).stroke(Theme.line, lineWidth: 0.5) }
+                .shadow(color: .black.opacity(0.4), radius: 12, y: -4)
+            }
+        }
+    }
+}

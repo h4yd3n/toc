@@ -73,6 +73,7 @@ struct Summary: Decodable {
 struct DefconLevel: Decodable, Identifiable, Hashable { var defcon: Int, posture: String, meaning: String, sites: Int; var id: Int { defcon } }
 
 struct Site: Decodable, Identifiable, Hashable {
+    var s4Status: String?, s6Status: String?, s4Red: Int?, s4Lines: Int?, s6Down: Int?, s6Systems: Int?, s6InUse: String?
     var id: String, name: String, type: String, lat: Double, lon: Double, city: String, country: String
     var posture: String, effectivePosture: String, sensitivity: String
     var assigned: Int, present: Int, securityOnShift: Int, vipsPresent: Int

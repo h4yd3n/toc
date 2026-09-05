@@ -102,3 +102,15 @@ def test_brief_and_estimates_carry_the_background_sections(client):
     r = client.patch("/v1/cop/watch/estimate/S4", json={"assessment": "Diesel at DC-East restored; batteries for Tokyo held at customs.", "recommendation": "Chase the customs hold."}, headers=S4)
     assert r.status_code == 200, r.text
     assert any(e["section"] == "S4" for e in client.get("/v1/cop/snapshot").json()["estimates"])
+
+
+def test_sites_carry_their_s4_and_s6_health(client):
+    client.post("/v1/cop/seed?dataset=cab")
+    locs = {l["id"]: l for l in client.get("/v1/cop/snapshot").json()["locations"]}
+    farp = locs["loc_farp"]
+    assert farp["s4_status"] == "red" and farp["s4_red"] == 1 and farp["s4_inbound"] == 1  # JP-8 short, the convoy inbound
+    assert farp["s6_status"] == "amber" and farp["s6_down"] == 1 and farp["s6_in_use"] == "primary"  # TACSAT down, on FM
+    bde = locs["loc_bde"]
+    assert bde["s6_status"] == "amber" and bde["s6_degraded"] >= 1 and bde["s6_in_use"] == "primary"
+    assert locs["loc_range"]["s4_status"] is None and locs["loc_range"]["s6_status"] is None  # nothing tracked there: no badge, not green
+    client.post("/v1/cop/seed?dataset=corporate")

@@ -13,6 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
 import kotlinx.coroutines.launch
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.clip
@@ -337,17 +341,17 @@ fun PhoneScreen(st: WallState, store: Store) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     Box(Modifier.fillMaxSize().background(Palette.bg)) {
         Column(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).fillMaxWidth().padding(top = if (tab == Tab.COP) 0.dp else with(density) { headerPx.toDp() })) {  // the map runs under the header; lists start below it
+            Box(Modifier.weight(1f).fillMaxWidth()) {  // the picture runs under the header on every tab; each section's sheet stops below it
                 when (tab) {
                     Tab.COP -> {
                         WallMap(snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize())
                         if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
-                    Tab.S1 -> Column(Modifier.fillMaxSize()) { S1Panel(st, store) }
-                    Tab.S2 -> Column(Modifier.fillMaxSize()) { S2Panel(st, store) }
-                    Tab.S3 -> Column(Modifier.fillMaxSize()) { S3Phone(st, store) }
-                    Tab.S4 -> Column(Modifier.fillMaxSize()) { S4Phone(st, store) }
-                    Tab.S6 -> Column(Modifier.fillMaxSize()) { S6Phone(st, store) }
+                    Tab.S1 -> SectionTab(st, store, "S1", headerPx) { S1Panel(st, store) }
+                    Tab.S2 -> SectionTab(st, store, "S2", headerPx) { S2Panel(st, store) }
+                    Tab.S3 -> SectionTab(st, store, "S3", headerPx) { S3Phone(st, store) }
+                    Tab.S4 -> SectionTab(st, store, "S4", headerPx) { S4Phone(st, store) }
+                    Tab.S6 -> SectionTab(st, store, "S6", headerPx) { S6Phone(st, store) }
                 }
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
             }
@@ -646,5 +650,33 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
         val open = st.snap?.incidents?.filter { it.status == "open" } ?: emptyList()
         if (open.isNotEmpty()) { item { Label("ACCOUNTABILITY · OPEN ROLL CALLS", "${open.size}") }
             items(open, key = { it.id }) { i -> RowItem(selected = false, onClick = { store.select(Selection.IncidentSel(i.id)) }) { Text(i.title, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); Text("${i.accounted}/${i.total}", color = if (i.pct == 100) Palette.green else Palette.red, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } } }
+    }
+}
+
+
+/** §3 the map-first sections: the picture behind with the section's layer, the section's list on a sheet with three rests — peek, half, full. */
+@Composable
+fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, content: @Composable ColumnScope.() -> Unit) {
+    var rest by remember { mutableStateOf(0.55f) }
+    var drag by remember { mutableStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val totalPx = with(density) { maxHeight.toPx() }
+        val avail = (totalPx - headerPx).coerceAtLeast(200f)
+        WallMap(st.snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section)
+        val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
+        val hPx = (avail * restAnim - drag).coerceIn(90f * density.density, avail * 0.92f)
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { hPx.toDp() })
+            .background(Palette.bg.copy(alpha = .96f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
+            Column(Modifier.fillMaxWidth()
+                .pointerInput(avail) { detectVerticalDragGestures(onDragEnd = { val target = (avail * rest - drag) / avail; rest = if (target < .32f) .12f else if (target < .75f) .55f else .92f; drag = 0f },
+                    onDragCancel = { drag = 0f }) { _, dy -> drag += dy } }
+                .pointerInput(Unit) { detectTapGestures { rest = if (rest <= .15f) .55f else if (rest < .75f) .92f else .12f } }
+                .padding(top = 8.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.size(36.dp, 4.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
+                Text(if (rest <= .15f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+            }
+            content()
+        }
     }
 }

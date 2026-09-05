@@ -526,3 +526,19 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .dform.upload .sample { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dform.upload .errs { margin: 4px 0 0 14px; padding: 0; }
 .bottom .dform.upload { position: absolute; z-index: 9; bottom: 8px; left: 8px; width: 560px; background: var(--panel); }
+
+/* §3 the map-first sections: S4 / S6 health on the site markers */
+.mk-loc .secs { position: absolute; bottom: -9px; left: -6px; display: flex; gap: 2px; }
+.mk-loc .sec { font-family: var(--mono); font-size: 8px; font-weight: 800; padding: 0 3px; height: 12px; line-height: 12px; border-radius: 3px; color: #fff; background: var(--green); }
+.mk-loc .sec.amber { background: var(--amber); color: #000; } .mk-loc .sec.red { background: var(--red); animation: flashpulse 1.4s ease-in-out infinite; }
+.mk-loc.sec-amber { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(245,158,11,.18), 0 0 16px rgba(245,158,11,.4); }
+.mk-loc.sec-red { border-color: var(--red); box-shadow: 0 0 0 3px rgba(239,68,68,.2), 0 0 20px rgba(239,68,68,.5); }
+.mk-loc.sec-green { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,197,94,.18), 0 0 14px rgba(34,197,94,.35); }
+.tog.sec4.on, .tog.sec6.on { color: #fff; background: var(--blue); }
+.site-filter { display: flex; align-items: center; gap: 8px; margin: 4px 14px; padding: 6px 10px; border: 1px dashed var(--line-2); border-radius: 6px; font-size: 11px; }
+.site-filter .mini { margin-left: auto; }
+.mk-cluster { position: relative; }
+.mk-cluster .secs { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; }
+.mk-cluster .sec { font-family: var(--mono); font-size: 8px; font-weight: 800; padding: 0 3px; height: 12px; line-height: 12px; border-radius: 3px; color: #fff; background: var(--green); white-space: nowrap; }
+.mk-cluster .sec.amber { background: var(--amber); color: #000; } .mk-cluster .sec.red { background: var(--red); }
+.mk-cluster.sec-red { border-color: var(--red); } .mk-cluster.sec-amber { border-color: var(--amber); }

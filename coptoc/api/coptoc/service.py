@@ -201,6 +201,20 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         })
 
     # Decision 3: proximity suggests. Compute "in area" for every site and every person.
+    # §3 the map-first sections: each site carries its S4 and S6 health so a section can be a layer on the picture
+    loc_name = {l.id: l.name for l in locations}
+    s4 = s4_summary([x for x in supplies if not x.location_id or x.location_id in loc_by_id], [x for x in shipments if not x.to_location_id or x.to_location_id in loc_by_id], loc_name, now)
+    s6 = s6_summary([x for x in systems if not x.location_id or x.location_id in loc_by_id], loc_name, now)
+    from .sections import STATUS_RANK, worst
+    def site_health(lid: str) -> Dict[str, Any]:
+        lines = [x for x in s4["supplies"] if x["location_id"] == lid]
+        inbound = [x for x in s4["shipments"] if x["to_location_id"] == lid and x["status"] in ("planned", "in_transit", "delayed")]
+        sys_ = [x for x in s6["systems"] if x["location_id"] == lid]
+        pace = s6["pace"].get(lid)
+        return {"s4_status": worst([x["status"] for x in lines] + [x["health"] for x in inbound]) if (lines or inbound) else None,
+                "s4_lines": len(lines), "s4_red": sum(1 for x in lines if x["status"] == "red"), "s4_amber": sum(1 for x in lines if x["status"] == "amber"), "s4_inbound": len(inbound),
+                "s6_status": worst([x["health"] for x in sys_]) if sys_ else None, "s6_systems": len(sys_), "s6_down": sum(1 for x in sys_ if x["status"] == "down"),
+                "s6_degraded": sum(1 for x in sys_ if x["status"] == "degraded"), "s6_in_use": pace["in_use"] if pace else None}
     locations_out = []
     for l in locations:
         in_area = [t.id for t in threats if haversine_km(l.lat, l.lon, t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM]
@@ -211,7 +225,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "id": l.id, "name": l.name, "type": l.type, "lat": l.lat, "lon": l.lon, "city": l.city,
             "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity,
             "threat_ids_in_area": in_area, "confirmed_threat_ids": [lk.threat_id for lk in my_links],
-            **counts[l.id],
+            **counts[l.id], **site_health(l.id),
         })
     for po in people_out:
         po["threat_ids_in_area"] = [t.id for t in threats if haversine_km(po["lat"], po["lon"], t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM]
@@ -379,9 +393,6 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "posture": POSTURES[worst_loc], "defcon": 5 - worst_loc,
         "defcon_levels": [{"defcon": DEFCON[p], "posture": p, "meaning": DEFCON_MEANING[p], "sites": sum(1 for l in locations_out if l["effective_posture"] == p)} for p in POSTURES],
     }
-    loc_name = {l.id: l.name for l in locations}
-    s4 = s4_summary([x for x in supplies if not x.location_id or x.location_id in loc_by_id], [x for x in shipments if not x.to_location_id or x.to_location_id in loc_by_id], loc_name, now)
-    s6 = s6_summary([x for x in systems if not x.location_id or x.location_id in loc_by_id], loc_name, now)
     summary["s4_status"], summary["s6_status"] = s4["status"], s6["status"]
     cfg = await get_config(session)
     wrow = await current_watch(session, now)

@@ -1,19 +1,20 @@
 // §7 S4 Logistics and §8 S6 Signal — the background boards. Mostly green; the wall shows the roll-up, the panel shows the detail.
 import { useState } from 'react'
 import * as api from './api'
-import type { Role, S4Board, S6Board, Shipment, SupplyLine, SystemLine } from './types'
+import type { Location, Role, S4Board, S6Board, Shipment, SupplyLine, SystemLine } from './types'
 
 const STATUS_CLASS: Record<string, string> = { green: 'green', amber: 'elevated', red: 'critical' }
 export const statusChip = (s: string, label?: string) => <span className={`chip ${STATUS_CLASS[s] ?? ''}`}>{(label ?? s).toUpperCase()}</span>
 const S4_ROLES: Role[] = ['battle_captain', 'logistics']
 const S6_ROLES: Role[] = ['battle_captain', 'signal']
 
-export function S4Panel({ board, role, busy, act }: { board: S4Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void }) {
+export function S4Panel({ board, role, busy, act, site, onClearSite, onMap, toggleMap }: { board: S4Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; site?: Location; onClearSite?: () => void; onMap?: boolean; toggleMap?: () => void }) {
   const [group, setGroup] = useState<'exceptions' | 'all'>('exceptions')
   const canEdit = S4_ROLES.includes(role)
   if (!board) return <div className="dim small" style={{ padding: 14 }}>No logistics board yet.</div>
-  const supplies = group === 'all' ? board.supplies : board.supplies.filter(x => x.status !== 'green')
-  const inbound = board.shipments.filter(x => !['arrived', 'cancelled'].includes(x.status))
+  const atSite = (id: string | null) => !site || id === site.id
+  const supplies = (group === 'all' ? board.supplies : board.supplies.filter(x => x.status !== 'green')).filter(x => atSite(x.location_id))
+  const inbound = board.shipments.filter(x => !['arrived', 'cancelled'].includes(x.status)).filter(x => atSite(x.to_location_id))
   const setOnHand = (x: SupplyLine) => {
     const v = window.prompt(`${x.item} at ${x.location_name} — on hand (${x.unit}):`, String(x.on_hand)); if (v === null || v.trim() === '' || isNaN(+v)) return
     const note = window.prompt('Note (optional):', '') ?? ''
@@ -23,8 +24,9 @@ export function S4Panel({ board, role, busy, act }: { board: S4Board | undefined
     <div className="s4-summary">
       {statusChip(board.status, `S4 ${board.status}`)}
       <span className="dim small">{board.counts.red} red · {board.counts.amber} amber · {board.counts.inbound} inbound{board.counts.late > 0 && <> · <b className="bad">{board.counts.late} late</b></>}</span>
-      <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}</span>
+      <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}{toggleMap && <button className={`chip btn ${onMap ? 'on' : ''}`} onClick={toggleMap} title="S4 health on every site of the picture">ON MAP</button>}</span>
     </div>
+    {site && <div className="site-filter">AT <b>{site.name}</b>{site.s4_status && statusChip(site.s4_status)}<button className="mini" onClick={onClearSite}>ALL SITES</button></div>}
     <div className="section-label">SUPPLY &amp; EQUIPMENT <span className="dim">{supplies.length}{group === 'exceptions' && ` of ${board.supplies.length}`}</span></div>
     <ul className="list">
       {supplies.length === 0 && <li className="row dim small">All lines at or above required.</li>}
@@ -65,11 +67,12 @@ function ShipmentRow({ x, canEdit, busy, act }: { x: Shipment; canEdit: boolean;
     </li>)
 }
 
-export function S6Panel({ board, role, busy, act }: { board: S6Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void }) {
+export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, toggleMap }: { board: S6Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; site?: Location; onClearSite?: () => void; onMap?: boolean; toggleMap?: () => void }) {
   const [group, setGroup] = useState<'exceptions' | 'all'>('exceptions')
   const canEdit = S6_ROLES.includes(role)
   if (!board) return <div className="dim small" style={{ padding: 14 }}>No signal board yet.</div>
-  const systems = group === 'all' ? board.systems : board.systems.filter(x => x.health !== 'green')
+  const systems = (group === 'all' ? board.systems : board.systems.filter(x => x.health !== 'green')).filter(x => !site || x.location_id === site.id)
+  const paceSites = Object.entries(board.pace).filter(([id]) => !site || id === site.id)
   const set = (x: SystemLine, status: SystemLine['status']) => {
     const note = status === 'up' ? '' : (window.prompt(`${x.name}: what is wrong?`, x.note) ?? '')
     act(`marking ${x.name} ${status}`, () => api.updateSystem(x.id, { status, ...(note ? { note } : {}) }))
@@ -78,11 +81,12 @@ export function S6Panel({ board, role, busy, act }: { board: S6Board | undefined
     <div className="s4-summary">
       {statusChip(board.status, `S6 ${board.status}`)}
       <span className="dim small">{board.counts.down} down · {board.counts.degraded} degraded · {board.counts.total} systems</span>
-      <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}</span>
+      <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}{toggleMap && <button className={`chip btn ${onMap ? 'on' : ''}`} onClick={toggleMap} title="S6 health on every site of the picture">ON MAP</button>}</span>
     </div>
+    {site && <div className="site-filter">AT <b>{site.name}</b>{site.s6_status && statusChip(site.s6_status)}<button className="mini" onClick={onClearSite}>ALL SITES</button></div>}
     <div className="section-label">PACE · HOW TO REACH EACH SITE</div>
     <ul className="list pace">
-      {Object.entries(board.pace).map(([site, p]) => (
+      {paceSites.map(([site, p]) => (
         <li key={site} className="row">
           <span className="name">{p.location_name}</span>
           <span className="nets">{(['primary', 'alternate', 'contingency', 'emergency'] as const).map(r => (
