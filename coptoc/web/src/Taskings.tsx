@@ -8,7 +8,9 @@ const SEC_TITLE: Record<SectionCode, string> = { S1: 'Personnel', S2: 'Intellige
 const KIND_ICON: Record<string, string> = { collection: '◎', comms: '((·))', supply: '⛽', movement: '➜', coverage: '⛨', other: '·' }
 const fmt = (iso: string | null) => iso ? new Date(iso).toUTCString().slice(5, 22) + 'Z' : ''
 
-export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSelect }: { section: SectionCode; board: TaskingBoard | undefined; canEdit: boolean; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; enabled: SectionCode[]; onSelect?: (t: Tasking) => void }) {
+const MADE_LABEL = { operation: 'OP', shipment: 'SHIPMENT', task: 'TASK' } as const
+
+export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSelect, onOp, onSection }: { section: SectionCode; board: TaskingBoard | undefined; canEdit: boolean; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; enabled: SectionCode[]; onSelect?: (t: Tasking) => void; onOp?: (id: string) => void; onSection?: (s: SectionCode) => void }) {
   const [raise, setRaise] = useState(false)
   const [showDone, setShowDone] = useState(false)
   const [f, setF] = useState({ to_section: (enabled.find(s => s !== section) ?? 'S3') as SectionCode, kind: 'other' as Tasking['kind'], title: '', asset: '', priority: 'routine' as Tasking['priority'], window_from: '', window_to: '', notes: '' })
@@ -26,6 +28,8 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
       <div className="l1">
         <span className={`sev ${t.health === 'green' ? 'ok' : t.health === 'amber' ? 'low' : 'critical'}`} title={t.priority}>{t.priority === 'urgent' ? 'URG' : t.priority === 'priority' ? 'PRI' : 'RTN'}</span>
         <span className="name"><span className="dim mono">{KIND_ICON[t.kind]} {mine ? `${t.from_section} →` : `→ ${t.to_section}`}</span> {t.title}</span>
+        {t.created_type && <button className="chip made" title={`accepting this ${t.kind} ask ${t.created_type === 'operation' ? 'opened an operation' : t.created_type === 'shipment' ? 'booked a shipment on the S4 board' : 'added a task to the subject\'s operation'}: ${t.created_name}`}
+          onClick={e => { e.stopPropagation(); if (t.created_type === 'shipment') onSection?.('S4'); else onOp?.(t.created_type === 'task' ? t.created_parent! : t.created_id!) }}>→ {MADE_LABEL[t.created_type]}</button>}
         <span className={`chip ${t.status === 'requested' ? 'open' : t.status === 'complete' ? 'green' : t.status === 'declined' ? 'dim' : 'active'}`}>{t.status.toUpperCase()}{t.overdue ? ' · LATE' : ''}</span>
       </div>
       <div className="l2">

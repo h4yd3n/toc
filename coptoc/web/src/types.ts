@@ -201,5 +201,6 @@ export type SectionCode = 'S1' | 'S2' | 'S3' | 'S4' | 'S6'
 export interface Tasking { id: string; kind: 'collection' | 'comms' | 'supply' | 'movement' | 'coverage' | 'other'; title: string; from_section: SectionCode; to_section: SectionCode
   subject_type: string | null; subject_id: string | null; subject_name: string; asset: string; window_from: string | null; window_to: string | null
   priority: 'routine' | 'priority' | 'urgent'; status: 'requested' | 'accepted' | 'scheduled' | 'complete' | 'declined'; notes: string; result: string
-  requested_by: string; requested_at: string; age_h: number; owned_by: string | null; updated_at: string; open: boolean; overdue: boolean; health: Health }
+  requested_by: string; requested_at: string; age_h: number; owned_by: string | null; updated_at: string; open: boolean; overdue: boolean; health: Health
+  created_type: 'operation' | 'shipment' | 'task' | null; created_id: string | null; created_parent: string | null; created_name: string }
 export interface TaskingBoard { items: Tasking[]; open: number; overdue: number; per_section: Record<string, { inbox: number; outbox: number; overdue: number }> }

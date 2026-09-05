@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.28
+**Version:** 3.29
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -101,6 +101,9 @@ row (a top-three cap was tried and rejected).
 - Every row in every panel is clickable and flies the map to that thing.
 - Selecting anything on the map opens its card over the map.
 - Panels are compact — counts, status colors, short names. Detail lives one click deeper.
+- **Rail badges (v3.29).** A closed rail still tells the story: each rail button carries one count — red for an exception (unaccounted names, warnings awaiting release, red supply lines or late shipments, systems down), amber for work the section owes, dim for the plain count otherwise.
+- **The strips under the header (v3.29).** A context row: where the board is cut (the declared AO or the home ground) and BMNT · sunrise · sunset · EENT computed from it, with DAY / TWILIGHT / NIGHT — arithmetic on the AO, never a feed. The FLASH row. And an open roll call, which takes the wall: a bar across the top with the count, the elapsed clock, the outstanding names as chips, and the one action that matters. At DEFCON 1, or with a critical warning released, the chrome goes red and the primary actions grow.
+- **⌘K (v3.29).** One field that finds anything on the picture — a name among 2,400, a site, an event, a threat, a tasking, or one of the wall's own actions — and opens it where it lives.
 - **DISPLAY toggles**, per browser or device: *lean labels* (drop panel hints, empty running-estimate lines, second lines) and *posture header* (posture first, five counters; FLASH, unaccounted, unreachable only when non-zero). Both default on.
 
 **Posture reads as DEFCON.** Five levels — normal, guarded, elevated, high, critical — shown as **DEFCON 5 → 1**.
@@ -165,6 +168,23 @@ outgoing Battle Captain. An empty brief and an affirmed nothing are different th
 **Relationship to the INTSUM.** The INTSUM (§5.6) is S2's daily product across all standing requirements. The shift
 change brief is the Battle Captain's product across all sections, once per watch. The S2 assessment line in the brief
 is drawn from the same picture the INTSUM summarizes.
+
+### 3.2 The hierarchy of a panel **[BUILT]** (2026-09-05, Decision W)
+
+The wall read as a terminal not because it is dark but because everything on it was a monospace row with a fraction in it. The fix is a hierarchy, applied to every panel the same way, with the dark monospace wall kept as it is:
+
+1. **One headline first.** Each panel opens with the number the Battle Captain asks for before any other — S1 *at post*, S2 *collection coverage*, S4 *lines at or above required*, S6 *systems up* — drawn large, with a bar. The S3 strip carries its own inline: events, how many are covered, trips active, the next thing.
+2. **The exceptions as tiles.** Under the headline, small counted tiles; a tile for an exception (unaccounted, unreachable, to release, late, down) is drawn only when it is non-zero. S2 shows its threats as four counted blocks by severity.
+3. **Ratios are bars.** Present over assigned per unit and per site, coverage per requirement, on hand over required. A bar reads from across the room; a fraction does not. The thresholds are the same everywhere.
+4. **Cards for what happens, rows for what is counted.** Taskings, warnings, shipments, and rated places are cards with a title line, one line of context, and their actions. Rosters, sites, units, and threats stay rows.
+5. **Sections are headed by the question they answer.** *How ready are we, by unit. Where we are. Who is moving. What is threatening us. What we have warned, or should. What we are asking. What we assess. What we know about places. What we still need to know. What is below the line. What is on its way. How to reach each site. What is down or degraded.* Proper-case sans for the question, monospace for the data line.
+6. **Color carries meaning only.** Green, amber, and red for state; blue for our own things; nothing else colored.
+
+Travelers group by destination, because the question is where our people are, not the alphabet.
+
+### 3.3 The strip through NOW **[BUILT]** (2026-09-05)
+
+The S3 strip is one time axis with NOW in it. The left quarter is *this watch so far*: every event on the ledger since the watch began, drawn as ticks in the colors the brief buckets them in, hour by hour, the summary on hover and the subject on click. The right is the horizon, compressed: the next 48 hours get a quarter of the width, the rest of the 90 days the remainder, so today is by hour and next month by week. Spans that began before now cross the line. The handover brief's first section, *significant events this shift*, is this left half read out; the snapshot carries it as `watch_log`.
 
 ## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
 
@@ -269,6 +289,8 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 
 **The Area Assessment compares; it does not score** (Decision I). Candidates are laid side by side on what is known, how well it is known, and what is missing. Each cell is one of three states: **reported** — a term from the fixed list, its band, a code-computed confidence, and the evidence; **quiet** — a tasked source is watching and has reported nothing, which is worth exactly as much as that source's reliability and is never a finding of safety; **gap** — nobody is watching, with the sources that could. Reporting up to 90 days before the window counts as describing the place. A product where nothing is known for any candidate refuses and cannot be approved (§5.5). Ranking is the human's.
 
+**The rated area assessment (v3.29, Decision X)** is the other half of the same product. Collection says what has been *reported* about a place; the analyst's rating says what S2 *judges* about it — against a fixed indicator list, green / amber / red per indicator, each with one line that says why, owned and dated. Still no composite: the picture is the row of ratings and the worst of them, and the reader ranks. The indicator list is configuration like the section titles — a brigade asks *routes, MEDEVAC reach, PACE, sustainment, ISR, host-nation, weather*; a corporate desk asks *transit corridors, trauma proximity, cyber redundancy, law-enforcement liaison* — set by the profile or `TOC_AREA_INDICATORS`. A place is a site on the wall or anywhere with a name; a new assessment supersedes the last, which stays as history on the ledger. Every site, trip, and event carries the strip for its place; the S2 panel lists every rated place worst first and compares any two side by side (`/v1/cop/areas`). The seed rates FARP Eagle, FOB Warrior, and Peason Ridge for the brigade, and Lisbon, Porto, and London for the corporate desk, in words that agree with what the S4 and S6 boards show.
+
 **The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. Drafted at a fixed time and released by the Battle Captain (Decision G).
 
 ### 5.7 Surfaces (Decision 3a) **[BUILT]** — `/v1/s2` API mounted in the wall and standalone (`make run-s2`); the S2 panel shows requirements, coverage, gaps, the directed form, and the source settings
@@ -324,7 +346,7 @@ at once, which is what a fusion cell is.
 
 ### 5.10a Taskings — work moving between sections **[BUILT]** (2026-09-05)
 
-The object that carries a request from one staff section to another: S2 asks S3 for a collection asset over an area (a drone over the FARP during the rotation); S3 asks S6 to confirm PACE for an operation; S3 asks S4 for fuel at a site; S3 asks S1 for gate security at a ceremony. A tasking has who asked and who owes, what it is for (an operation, event, requirement, site, or trip), the asset or capability wanted, a window, a priority, and a status — requested → accepted → scheduled → complete, or declined with a reason. Raising one needs edit on the section it comes from; answering needs edit on the section it goes to; the Battle Captain can do either. A tasking whose window has opened and is not complete is late, and reads red. Every step is on the ledger; the handover brief carries what is open per section. Each section's panel on the wall, and each section's tab on the phones, shows what that section owes (with ACCEPT / SCHEDULE / COMPLETE / DECLINE), what it is waiting on, and a RAISE form. **[LATER]** taskings that create things when accepted — a collection tasking that opens an S3 operation, a supply tasking that becomes a shipment.
+The object that carries a request from one staff section to another: S2 asks S3 for a collection asset over an area (a drone over the FARP during the rotation); S3 asks S6 to confirm PACE for an operation; S3 asks S4 for fuel at a site; S3 asks S1 for gate security at a ceremony. A tasking has who asked and who owes, what it is for (an operation, event, requirement, site, or trip), the asset or capability wanted, a window, a priority, and a status — requested → accepted → scheduled → complete, or declined with a reason. Raising one needs edit on the section it comes from; answering needs edit on the section it goes to; the Battle Captain can do either. A tasking whose window has opened and is not complete is late, and reads red. Every step is on the ledger; the handover brief carries what is open per section. Each section's panel on the wall, and each section's tab on the phones, shows what that section owes (with ACCEPT / SCHEDULE / COMPLETE / DECLINE), what it is waiting on, and a RAISE form. **Taskings create things when accepted (v3.29, Decision Y).** The tasking is the ask; the thing the owing section makes to answer it lives on that section's board. Accepting a *collection* tasking on a site, event, or trip opens an S3 operation with a collection skeleton (assign the asset, confirm the window and airspace, brief the requirement, fly and report to S2). Accepting a *supply* tasking books a planned shipment on the S4 board, categorised from the ask, due at the window. Accepting a *comms* or *coverage* (or movement / other) tasking whose subject already has an operation adds a task to it, owned by the answering section; with no operation it stays a plain ask. Each is linked both ways: completing the tasking closes what it made; the shipment arriving, the task done, or the operation closed completes the tasking with the result on it. Both objects log the link. The tasking card shows what it made as a chip that opens it.
 
 ### 5.11 The analyst's workbench — one graph, three views
 
@@ -601,6 +623,9 @@ COP never writes back to a source system.
 | T | Handover | **Generated brief → outgoing annotates → incoming acknowledges on the ledger; the watch does not transfer until acknowledged** | `/watch/handover`, `/watch/acknowledge` |
 | U | Overlap window | **30 minutes**; items arriving inside it are flagged and must be acknowledged by the incoming shift | `build_brief` → `required_item_ids`; `409` on acknowledge |
 | V | NSTR | **Explicit** — the outgoing Battle Captain affirms "nothing significant"; the affirmation is logged | `Handover.nstr` → ledger |
+| W | Digestibility (2026-09-05) | **Keep the dark monospace wall; fix the hierarchy** — one headline per panel, exceptions as tiles, ratios as bars, cards for what happens, sections headed by their question, color as meaning only. Not a Linear / Vercel restyle; the map stays full width. Rejected as fake instruments: SIGINT waveforms, drone feeds, kill switches, hash-chain badges, invented indices, airframe OR rates without equipment data | §3.2 |
+| X | Rated area assessment (2026-09-05) | **Analyst-owned RAG per indicator with one line of why, no composite**; indicator list per profile or `TOC_AREA_INDICATORS`; a new assessment supersedes the last; the strip rides on sites, trips, and events | §5.6, `coptoc/areas.py` |
+| Y | Taskings create things (2026-09-05) | **Collection → operation, supply → shipment, comms / coverage → a task on the subject's operation**; linked both ways so finishing either side completes the other; movement asks create nothing yet | §5.10a, `taskings.on_accept` |
 
 ---
 
@@ -616,6 +641,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.29** — §3.2 the hierarchy (headline, tiles, bars, cards, questions), §3.3 the strip through NOW with the watch log, the rated area assessment (§5.6, `/v1/cop/areas`), taskings that create operations, shipments, and tasks (§5.10a), rail badges, the context row with sun times, the roll call that takes the wall, red chrome at DEFCON 1, ⌘K; decisions W–Y.
 - **v3.28** — §5.10a taskings: the object that carries work between sections, with inbox / outbox and the raise form on every section panel and tab; open taskings in the handover brief.
 - **v3.27** — §3.0 the map-first sections: site health from S4/S6 on the model, S4/S6 layers on the wall's map, every phone section tab as the map plus a pull-down sheet.
 - **v3.26** — names and ranks (LAST, First M. · RANK on a military desk; pay grades as the constant); sign-in profiles are the roles themselves.

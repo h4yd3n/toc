@@ -24,7 +24,7 @@ from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, Deli
                         TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
-from .taskings import TaskingRow, out as tasking_out
+from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
 from . import areas as toc_areas
 from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
@@ -354,9 +354,18 @@ async def update_tasking(tasking_id: str, body: TaskingUpdate, session: AsyncSes
     if "status" in changes and changes["status"] in ("accepted", "scheduled", "complete", "declined") and not t.owned_by:
         t.owned_by = actor_from(x_toc_actor)
     t.updated_at = now_utc()
+    made, closed = None, None
+    if "status" in changes and changes["status"] in ("accepted", "scheduled") and not t.created_id:   # once, on the way in — a seeded accepted ask gets its object when it is scheduled
+        made = await tasking_on_accept(session, t, actor_from(x_toc_actor), t.updated_at)   # §5.10a the ask becomes a thing on the owing section's board
+    if "status" in changes and changes["status"] == "complete":
+        closed = await tasking_on_complete(session, t, actor_from(x_toc_actor), t.updated_at)
     await session.commit()
     await get_ledger().append_event(content_id=t.id, event_type="cop.tasking." + (changes.get("status") or "amended"), actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=t.status,
-                                    reason=f"{t.from_section} → {t.to_section}: {t.title} — {t.status}" + (f" · {t.result}" if t.result and "status" in changes else ""), metadata={"kind": t.kind, "priority": t.priority})
+                                    reason=f"{t.from_section} → {t.to_section}: {t.title} — {t.status}" + (f" · {t.result}" if t.result and "status" in changes else "") + (f" · opened {made['type']} {made['id']}" if made else "") + (f" · {closed}" if closed else ""),
+                                    metadata={"kind": t.kind, "priority": t.priority, **({"created": made} if made else {})})
+    if made:
+        await get_ledger().append_event(content_id=made["id"], event_type={"operation": "cop.operation.opened", "shipment": "cop.s4.shipment", "task": "cop.operation.task"}[made["type"]], actor_type="human", actor_id=actor_from(x_toc_actor),
+                                        new_state="planned" if made["type"] != "task" else "todo", reason=f"{made['name']} — from tasking {t.id} ({t.from_section} → {t.to_section})", metadata={"tasking": t.id})
     return tasking_out(t, now_utc())
 
 
@@ -578,9 +587,12 @@ async def update_shipment(shipment_id: str, body: ShipmentUpdate, session: Async
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(row, k, naive(v) if k == "eta" else v)
     row.updated_by, row.updated_at = actor_from(x_toc_actor), now_utc()
+    done = await tasking_complete_from(session, "shipment", row.id, row.updated_by, row.updated_at, f"Arrived: {row.description}") if row.status == "arrived" and old != "arrived" else None
     await session.commit()
     await get_ledger().append_event(content_id=row.id, event_type="cop.s4.shipment", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=row.status,
                                     reason=f"{row.description} → {row.to_name}: {row.status.replace('_', ' ')}, ETA {row.eta:%d %b %H:%M}Z" + (f" — {row.note}" if body.note else ""), metadata={"priority": row.priority})
+    if done:
+        await get_ledger().append_event(content_id=done.id, event_type="cop.tasking.complete", actor_type="human", actor_id=row.updated_by, old_state="scheduled", new_state="complete", reason=f"{done.from_section} → {done.to_section}: {done.title} — complete · {done.result}", metadata={"kind": done.kind})
     return {"id": row.id, "status": "updated"}
 
 
@@ -1506,9 +1518,12 @@ async def update_operation(op_id: str, body: OperationUpdate, session: AsyncSess
     if body.status:
         op.status = body.status
         if body.status in ("complete", "cancelled"): op.closed_at = now_utc()
+    done = await tasking_complete_from(session, "operation", op.id, actor_from(x_toc_actor), now_utc(), f"Operation complete: {op.title}") if body.status == "complete" and old != "complete" else None
     await session.commit()
     if body.status and body.status != old:
         await get_ledger().append_event(content_id=op.id, event_type="cop.operation.status", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=body.status, reason=f"{op.title} → {body.status}")
+    if done:
+        await get_ledger().append_event(content_id=done.id, event_type="cop.tasking.complete", actor_type="human", actor_id=actor_from(x_toc_actor), old_state="accepted", new_state="complete", reason=f"{done.from_section} → {done.to_section}: {done.title} — complete · {done.result}", metadata={"kind": done.kind})
     return await get_operation(op_id, session)
 
 
@@ -1535,10 +1550,13 @@ async def update_task(op_id: str, task_id: str, body: TaskUpdate, session: Async
         if v is not None: setattr(t, k, v)
     if body.due_at is not None: t.due_at = naive_dt(body.due_at)
     t.updated_by, t.updated_at = actor_from(x_toc_actor), now_utc()
+    done = await tasking_complete_from(session, "task", t.id, t.updated_by, t.updated_at, f"Done: {t.title}" + (f" — {body.note}" if body.note else "")) if body.status == "done" and old != "done" else None
     await session.commit()
     if body.status and body.status != old:
         await get_ledger().append_event(content_id=op_id, event_type="cop.operation.task", actor_type="human", actor_id=t.updated_by, old_state=old, new_state=body.status,
                                         reason=f"{t.title}: {body.status.upper()}" + (f" ({t.owner})" if t.owner else "") + (f" — {body.note}" if body.note else ""))
+    if done:
+        await get_ledger().append_event(content_id=done.id, event_type="cop.tasking.complete", actor_type="human", actor_id=t.updated_by, old_state="accepted", new_state="complete", reason=f"{done.from_section} → {done.to_section}: {done.title} — complete · {done.result}", metadata={"kind": done.kind})
     return task_dict(t)
 
 

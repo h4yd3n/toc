@@ -650,3 +650,6 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .tl-quiet { position: absolute; left: 6px; top: 0; font: 8.5px var(--mono); letter-spacing: .08em; }
 .tl-past { position: absolute; top: 0; bottom: 0; background: rgba(148,163,184,.04); }
 .tl-grid.now { border-left: 2px solid var(--red); z-index: 2; }
+
+/* §5.10a what a tasking made, as a chip that opens it */
+.chip.made { color: #c084fc; border-color: rgba(192,132,252,.5); cursor: pointer; } .chip.made:hover { background: rgba(192,132,252,.12); }

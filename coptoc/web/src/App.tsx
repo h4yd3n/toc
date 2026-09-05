@@ -30,6 +30,8 @@ const LOG_LABEL: Record<string, string> = {
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
   'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗', 'cop.area.assessed': 'AREA', 'cop.area.updated': 'AREA',
+  'cop.operation.opened': 'OP', 'cop.operation.status': 'OP', 'cop.operation.task': 'OP TASK', 'cop.s4.shipment': 'S4', 'cop.s4.supply': 'S4', 'cop.s6.system': 'S6',
+  'cop.tasking.raised': 'TASKING', 'cop.tasking.accepted': 'TASKING', 'cop.tasking.scheduled': 'TASKING', 'cop.tasking.complete': 'TASKING ✓', 'cop.tasking.declined': 'TASKING ✗', 'cop.tasking.amended': 'TASKING',
 }
 
 function rel(iso: string | null, now: number): string {
@@ -90,7 +92,7 @@ export default function App() {
   const me = snap?.me
   const can = (section: string, level: 'view' | 'edit' = 'view') => !me || me.user_id === null || me.battle_captain ? true : level === 'view' ? me.sections_visible.includes(section) : me.perms[section as 'S1'] === 'edit'
   const enabledSections = (['S1', 'S2', 'S3', 'S4', 'S6'] as const).filter(c => sectionOn(c))
-  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} />
+  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} onOp={id => { setOpId(id); setShowBrief(false) }} onSection={s => { if (s === 'S4' || s === 'S6') setRightPanel(s.toLowerCase() as 's4' | 's6'); else jump(s as 'S1' | 'S2' | 'S3') }} />
   const [showBrief, setShowBrief] = useState(false)
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
