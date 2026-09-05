@@ -131,7 +131,8 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
     var openUnits by remember { mutableStateOf(setOf<String>()) }
     val roots = snap.teams.filter { t -> t.parentId == null && snap.teams.any { it.parentId == t.id } }
     fun members(id: String): List<Person> = snap.people.filter { it.teamId == id } + snap.teams.filter { it.parentId == id }.flatMap { members(it.id) }
-    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {  // room for the floating tab bar
+    val s1State = androidx.compose.foundation.lazy.rememberLazyListState(); s1State.driveDock()
+    LazyColumn(Modifier.weight(1f), state = s1State, contentPadding = PaddingValues(bottom = 96.dp)) {  // room for the floating tab bar
         if (roots.isNotEmpty()) {  // §4 the task organization: brigade → battalions → companies
             item { Label("TASK ORGANIZATION", "present/assigned · ↗ away") }
             fun unit(t: Team, depth: Int) {
@@ -176,7 +177,8 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     Label(sectionHead(st.snap, "S2", "INTELLIGENCE"), "Sigtoc", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
-    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
+    val s2State = androidx.compose.foundation.lazy.rememberLazyListState(); s2State.driveDock()
+    LazyColumn(Modifier.weight(1f), state = s2State, contentPadding = PaddingValues(bottom = 96.dp)) {
         val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
         item { Label("WARNINGS", "${pending.size} awaiting release", action = { Mini("RUN RULE", enabled = st.busy == null) { store.act("running the warning rule") { runWarningRule() } } }) }
         items(pending, key = { it.id }) { w ->
@@ -344,17 +346,21 @@ fun PhoneScreen(st: WallState, store: Store) {
             }
         }
         // the tab bar: a floating capsule over the content, like the iOS tab bar
-        Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 24.dp, vertical = 10.dp).fillMaxWidth()
-            .background(Palette.panel.copy(alpha = .94f), RoundedCornerShape(50)).border(0.5.dp, Palette.line, RoundedCornerShape(50)).padding(4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+        val c = NavBarChrome.collapsed
+        val sidePad by androidx.compose.animation.core.animateDpAsState(if (c) 56.dp else 24.dp, label = "dockSide")
+        val iconSize by androidx.compose.animation.core.animateDpAsState(if (c) 18.dp else 22.dp, label = "dockIcon")
+        val vPad by androidx.compose.animation.core.animateDpAsState(if (c) 5.dp else 7.dp, label = "dockV")
+        Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = sidePad, vertical = if (c) 8.dp else 10.dp).fillMaxWidth().animateContentSize()
+            .background(Palette.panel.copy(alpha = .94f), RoundedCornerShape(50)).border(0.5.dp, Palette.line, RoundedCornerShape(50)).padding(if (c) 3.dp else 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
             enabledTabs(snap).forEach { t ->
                 val on = t == tab
                 val badge = when (t) { Tab.S1 -> snap?.incidents?.count { it.status == "open" } ?: 0; Tab.S2 -> snap?.summary?.warningsPending ?: 0; else -> 0 }
                 val dot = when (t) { Tab.S4 -> snap?.summary?.s4Status; Tab.S6 -> snap?.summary?.s6Status; else -> null }?.takeIf { it != "green" }
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Palette.panel2 else Color.Transparent).clickable { tab = t; store.select(null) }.padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box { Icon(t.icon, contentDescription = t.label, tint = if (on) Palette.blue2 else Palette.dim, modifier = Modifier.size(22.dp))
+                Column(Modifier.weight(1f).clip(RoundedCornerShape(50)).background(if (on) Palette.panel2 else Color.Transparent).clickable { tab = t; store.select(null); NavBarChrome.expand() }.padding(vertical = vPad), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box { Icon(t.icon, contentDescription = t.label, tint = if (on) Palette.blue2 else Palette.dim, modifier = Modifier.size(iconSize))
                         if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp)
                         dot?.let { Box(Modifier.offset(x = 16.dp, y = (-3).dp).size(8.dp).background(healthColor(it), RoundedCornerShape(50))) } }
-                    Text(if (t == Tab.COP) "COP" else sectionLabel(snap, t.label), color = if (on) Palette.blue2 else Palette.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                    androidx.compose.animation.AnimatedVisibility(!c) { Text(if (t == Tab.COP) "COP" else sectionLabel(snap, t.label), color = if (on) Palette.blue2 else Palette.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
                 }
             }
         }
@@ -437,7 +443,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val snap = st.snap ?: return
     val today = java.time.LocalDate.now()
     val rows = remember(snap) { agendaRows(snap) }
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState(); listState.driveDock()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var expanded by remember { mutableStateOf(false) }
     var month by remember { mutableStateOf<java.time.LocalDate?>(null) }
@@ -540,7 +546,8 @@ fun ColumnScope.S4Phone(st: WallState, store: Store) {
     var editing by remember { mutableStateOf<SupplyLine?>(null) }
     var onHand by remember { mutableStateOf("") }
     val canEdit = st.role in listOf("battle_captain", "logistics"); val busy = st.busy != null
-    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
+    val s4State = androidx.compose.foundation.lazy.rememberLazyListState(); s4State.driveDock()
+    LazyColumn(Modifier.weight(1f), state = s4State, contentPadding = PaddingValues(bottom = 96.dp)) {
         item { Label("S4 · $title", "Supply & equipment"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S4" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S4 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
@@ -580,7 +587,8 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
     val b = st.snap?.s6; val title = st.snap?.sections?.firstOrNull { it.code == "S6" }?.title ?: "SIGNAL"
     var all by remember { mutableStateOf(false) }
     val canEdit = st.role in listOf("battle_captain", "signal"); val busy = st.busy != null
-    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
+    val s6State = androidx.compose.foundation.lazy.rememberLazyListState(); s6State.driveDock()
+    LazyColumn(Modifier.weight(1f), state = s6State, contentPadding = PaddingValues(bottom = 96.dp)) {
         item { Label("S6 · $title", "Comms & systems"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S6" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S6 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")

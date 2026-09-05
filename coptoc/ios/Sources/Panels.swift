@@ -49,7 +49,7 @@ struct PersonnelScreen: View {
                 }
             }.listRowBackground(Theme.panel)
         }
-        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg).drivesDock(store)
     }
 }
 
@@ -150,7 +150,7 @@ struct IntelScreen: View {
                 }
             }.listRowBackground(Theme.panel)
         }
-        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg).drivesDock(store)
     }
 }
 
@@ -233,6 +233,7 @@ struct OpsScreen: View {
                     Color.clear.frame(height: 90)
                 }
             }
+            .drivesDock(store)
             .coordinateSpace(name: "agenda")
             .onPreferenceChange(DayTopKey.self) { new in withAnimation(.easeInOut(duration: 0.25)) { tops.merge(new) { $1 } } }
             .onPreferenceChange(ScrollTopKey.self) { y in scrollY = y; if y < -8, expanded { withAnimation(.easeInOut(duration: 0.25)) { expanded = false } } }
@@ -427,7 +428,7 @@ struct LogisticsScreen: View {
             } else { Text("No logistics board yet.").font(.system(size: 11)).foregroundStyle(Theme.dim).listRowBackground(Theme.bg) }
             Color.clear.frame(height: 70).listRowBackground(Theme.bg)
         }
-        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg).drivesDock(store)
         .alert("On hand", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
             TextField("On hand", text: $onHandText).keyboardType(.decimalPad)
             Button("Save") { if let x = editing, let v = Double(onHandText) { store.act("updating the supply line") { try await store.client.updateSupply(x.id, onHand: v, note: nil) } }; editing = nil }
@@ -499,7 +500,7 @@ struct SignalScreen: View {
             } else { Text("No signal board yet.").font(.system(size: 11)).foregroundStyle(Theme.dim).listRowBackground(Theme.bg) }
             Color.clear.frame(height: 70).listRowBackground(Theme.bg)
         }
-        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg).drivesDock(store)
     }
 }
 

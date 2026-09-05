@@ -4,12 +4,12 @@ options:
   bundleIdPrefix: com.h4yd3n
   createIntermediateGroups: true
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
 targets:
   TOC:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     sources:
       - path: Sources
     settings:

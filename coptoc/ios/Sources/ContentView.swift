@@ -69,8 +69,11 @@ struct PostureBar: View {
                 Spacer()
                 Menu {
                     if store.client.role == "battle_captain" {
-                        Picker("Profile", selection: Binding(get: { store.snapshot?.profile ?? "military" }, set: { pendingProfile = $0 })) {
-                            Text("Military · S1–S6, the brigade").tag("military"); Text("Corporate · S1–S3").tag("corporate")
+                        // Buttons, not a Picker: a Picker's binding can fire without a tap; these fire only when chosen, and then ask.
+                        let current = store.snapshot?.profile ?? "military"
+                        Section("Profile") {
+                            Button { if current != "military" { pendingProfile = "military" } } label: { Label("Military · S1–S6, the brigade", systemImage: current == "military" ? "checkmark" : "") }
+                            Button { if current != "corporate" { pendingProfile = "corporate" } } label: { Label("Corporate · S1–S3", systemImage: current == "corporate" ? "checkmark" : "") }
                         }
                     }
                     Picker("Role", selection: Binding(get: { store.client.role }, set: { store.client.role = $0; Task { await store.load() } })) {
@@ -171,28 +174,29 @@ struct TabBar: View {
         }
     }
     var body: some View {
+        let c = store.barCollapsed
         HStack(spacing: 0) {
             ForEach(tabs, id: \.self) { t in
                 let on = t == tab
-                Button { tab = t; store.selection = nil } label: {
-                    VStack(spacing: 3) {
+                Button { tab = t; store.selection = nil; store.expandBar() } label: {
+                    VStack(spacing: c ? 0 : 3) {
                         ZStack(alignment: .topTrailing) {
-                            Image(systemName: Self.icons[t] ?? "square").font(.system(size: 20, weight: .medium)).frame(height: 24)
+                            Image(systemName: Self.icons[t] ?? "square").font(.system(size: c ? 17 : 20, weight: .medium)).frame(height: c ? 20 : 24)
                             if let (n, c) = badge(t) {
                                 if n > 0 { Text("\(n)").font(.system(size: 9, weight: .bold)).foregroundStyle(.white).padding(.horizontal, 4).padding(.vertical, 1).background(c, in: Capsule()).offset(x: 10, y: -6) }
                                 else { Circle().fill(c).frame(width: 8, height: 8).offset(x: 6, y: -3) }
                             }
                         }
-                        Text(t == "COP" ? "COP" : store.sectionLabel(t)).font(.system(size: 10, weight: on ? .semibold : .regular))
+                        if !c { Text(t == "COP" ? "COP" : store.sectionLabel(t)).font(.system(size: 10, weight: on ? .semibold : .regular)).transition(.opacity) }
                     }
-                    .foregroundStyle(on ? Theme.blue : Theme.dim).frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .foregroundStyle(on ? Theme.blue : Theme.dim).frame(maxWidth: .infinity).padding(.vertical, c ? 5 : 8)
                     .background(on ? Theme.line.opacity(0.9) : .clear, in: Capsule())
                 }.buttonStyle(.plain)
             }
         }
-        .padding(4)
+        .padding(c ? 3 : 4)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().stroke(Theme.line, lineWidth: 0.5))
-        .padding(.horizontal, 20).padding(.bottom, 6)
+        .padding(.horizontal, c ? 48 : 20).padding(.bottom, c ? 4 : 6)
     }
 }

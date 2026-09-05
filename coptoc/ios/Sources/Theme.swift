@@ -66,3 +66,11 @@ struct EstimateLine: View {
         }
     }
 }
+
+
+extension View {
+    /// Feed this container's scroll offset to the dock (iOS 18 scroll geometry — List rows do not report their frames while scrolling).
+    func drivesDock(_ store: COPStore) -> some View {
+        onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in store.trackBarScroll(-y) }
+    }
+}

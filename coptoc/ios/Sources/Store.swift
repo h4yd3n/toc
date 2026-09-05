@@ -1,3 +1,4 @@
+import SwiftUI
 import Foundation
 import Observation
 
@@ -21,6 +22,16 @@ final class COPStore {
     var postureHeader: Bool = UserDefaults.standard.object(forKey: "toc.postureHeader") as? Bool ?? true { didSet { UserDefaults.standard.set(postureHeader, forKey: "toc.postureHeader") } }
 
     var client = COPClient()
+    // The collapsing dock (ported from SoriStory's NavBarChrome): scrolling down folds the tab bar — labels go,
+    // icons shrink, the capsule narrows; any upward scroll or a tab tap springs it back. Never folds near the top.
+    var barCollapsed = false
+    private var lastBarY: CGFloat = 0
+    func trackBarScroll(_ y: CGFloat) {
+        let delta = y - lastBarY; lastBarY = y
+        if y > -16 { setBar(false) } else if delta < -4 { setBar(true) } else if delta > 3 { setBar(false) }
+    }
+    func expandBar() { lastBarY = 0; setBar(false) }
+    private func setBar(_ v: Bool) { guard barCollapsed != v else { return }; withAnimation(.spring(response: 0.34, dampingFraction: 0.85)) { barCollapsed = v } }
     private var polling = false
 
     func start() async {
