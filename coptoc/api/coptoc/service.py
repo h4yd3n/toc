@@ -65,7 +65,14 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 # brigade TOC on the military one, read from the data rather than written down here, so a deployment that moves its
 # headquarters moves the board with it. Restricted sites never set the frame, so every station opens on the same
 # board whether or not the viewer is cleared for the residence layer.
-HQ_VIEW_RADIUS_KM = 30.0   # a display choice: the headquarters and the ground around it, not the whole footprint
+# Two display choices, not measurements. The board opens on the headquarters and widens to take in the subordinate
+# units around it, so a commander sees "that is the TOC, and there are my units" without touching anything. A site
+# beyond REGIONAL_KM is a different problem — a rotation, a deployment, an office on another continent — and it does
+# not get to pull the board out to a view where nothing is legible. Everyone can pan and zoom from there, and the
+# board they leave is the one they come back to.
+HQ_VIEW_RADIUS_KM = 30.0     # the floor: a lone headquarters is framed with its own ground, not its own rooftop
+REGIONAL_KM = 250.0          # "around the headquarters" — roughly a day's move
+VIEW_PADDING = 1.25          # a margin outside the farthest unit we framed
 
 
 def declared_ao() -> Optional[Dict[str, Any]]:
@@ -91,14 +98,17 @@ def home_station(locations: List[LocationRow]) -> Optional[LocationRow]:
 
 
 def default_view(locations: List[LocationRow]) -> Dict[str, Any]:
-    """Where a station with no memory of its own should look: the declared AO, else home station."""
+    """Where a station with no memory of its own should look: the declared AO, else home station and the units around it."""
     ao = declared_ao()
     if ao:
         return ao
     hq = home_station(locations)
     if hq is None:
         return {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
-    return {"center_lat": hq.lat, "center_lon": hq.lon, "radius_km": HQ_VIEW_RADIUS_KM, "source": "hq"}
+    nearby = [haversine_km(hq.lat, hq.lon, l.lat, l.lon) for l in locations if l.sensitivity != "restricted"]
+    reach = max((d for d in nearby if d <= REGIONAL_KM), default=0.0)
+    return {"center_lat": hq.lat, "center_lon": hq.lon,
+            "radius_km": max(reach * VIEW_PADDING, HQ_VIEW_RADIUS_KM), "source": "hq"}
 
 def trip_status(t: TripRow, now: datetime) -> str:
     if t.return_at <= now:
