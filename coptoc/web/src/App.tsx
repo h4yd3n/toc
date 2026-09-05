@@ -50,7 +50,13 @@ export default function App() {
   // The wall: the map has the room; S1 and S2 live on rails and slide out over the map, never over S3 or the log.
   // Labels and the header are toggles under DISPLAY, persisted per browser.
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
-  const [openPanel, setOpenPanel] = useState<'left' | 'right' | 's4' | 's6' | 'settings' | null>(null)
+  // Panels stay up until closed or displaced by another on the same rail; the choice survives a reload.
+  type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
+  const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
+  const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
+  useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
+  const toggleRight = (p: Exclude<RightPanel, null>) => setRightPanel(rightPanel === p ? null : p)
+  const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
   const sectionOn = (code: string) => snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const [showSettings, setShowSettings] = useState(false)
@@ -111,7 +117,7 @@ export default function App() {
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
         </select>
-        {role === 'battle_captain' && <button className={`gear ${openPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => setOpenPanel(openPanel === 'settings' ? null : 'settings')}>⚙ SETTINGS</button>}
+        {role === 'battle_captain' && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -122,16 +128,16 @@ export default function App() {
       <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
       <nav className="rail rail-left">
-        <button className={`rail-btn ${openPanel === 'left' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'left' ? null : 'left')} title="S1 Personnel">S1</button>
-        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setOpenPanel('left')} title="open roll calls">S6</button>}
+        <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title="S1 Personnel">S1</button>
+        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        <button className={`rail-btn ${openPanel === 'right' ? 'on' : ''}`} onClick={() => setOpenPanel(openPanel === 'right' ? null : 'right')} title="S2 Intelligence">S2{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
-        {sectionOn('S4') && <button className={`rail-btn ${openPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => setOpenPanel(openPanel === 's4' ? null : 's4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
-        {sectionOn('S6') && <button className={`rail-btn ${openPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => setOpenPanel(openPanel === 's6' ? null : 's6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
+        <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title="S2 Intelligence">S2{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
+        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
+        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
       </nav>
-      <aside className={`left ${openPanel === 'left' ? 'open' : ''}`}>
-        <PanelHead code="S1" title="PERSONNEL" hint="Blue Force">{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
+      <aside className={`left ${leftOpen ? 'open' : ''}`}>
+        <PanelHead code="S1" title="PERSONNEL" hint="Blue Force" onClose={() => setLeftOpen(false)}>{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
         {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         <div className="layer-toggles">
@@ -173,7 +179,7 @@ export default function App() {
         </ul>
       </aside>
 
-      <main className="center" onClick={() => { setOpenPanel(null); setShowSettings(false) }}>
+      <main className="center" onClick={() => setShowSettings(false)}>
         <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
         {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
         {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
@@ -186,17 +192,17 @@ export default function App() {
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
-      <aside className={`right wide ${openPanel === 'settings' ? 'open' : ''}`}>
-        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" />
+      <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`}>
+        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
-      <aside className={`right ${openPanel === 's4' ? 'open' : ''}`}>
-        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" />
+      <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`}>
+        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)} />
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
         <S4Panel board={snap?.s4} role={role} busy={busy} act={act} />
       </aside>
-      <aside className={`right ${openPanel === 's6' ? 'open' : ''}`}>
-        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" />
+      <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`}>
+        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)} />
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
         <S6Panel board={snap?.s6} role={role} busy={busy} act={act} />
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
@@ -205,8 +211,8 @@ export default function App() {
             <li key={i.id} className="row rollcall" onClick={() => setSel({ type: 'incident', id: i.id })}><span className="name">{i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></li>))}</ul>
         </>}
       </aside>
-      <aside className={`right ${openPanel === 'right' ? 'open' : ''}`}>
-        <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc">
+      <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`}>
+        <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
@@ -288,8 +294,8 @@ function Stat({ label, v, accent }: { label: string; v?: number; accent?: string
   // data-k lets the header toggle keep five counters without changing the markup order
   return <div className={`stat ${accent ?? ''}`} data-k={label}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
 }
-function PanelHead({ code, title, hint, inline, children }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode }) {
-  return <div className={`panel-head ${inline ? 'inline' : ''}`}><span className="code">{code}</span><span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}</div>
+function PanelHead({ code, title, hint, inline, children, onClose }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode; onClose?: () => void }) {
+  return <div className={`panel-head ${inline ? 'inline' : ''}`}><span className="code">{code}</span><span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>
 }
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
