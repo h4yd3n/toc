@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import kotlinx.coroutines.launch
+import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
@@ -388,16 +390,23 @@ fun agendaRows(snap: Snapshot): List<AgendaRow> {
 @Composable
 fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    Label("S3 · OPERATIONS", "Calendar")
-    EstimateLine(snap.estimates.firstOrNull { it.section == "S3" })
-    var picked by remember { mutableStateOf<java.time.LocalDate?>(null) }
-    val allRows = remember(snap) { agendaRows(snap) }
-    val rows = remember(allRows, picked) { picked?.let { d -> allRows.filter { r -> (r is AgendaRow.Day && r.day == d) || (r !is AgendaRow.Day && r !is AgendaRow.Gap && dayOfRow(r) == d) } } ?: allRows }
-    val markedDays = remember(allRows) { allRows.filterIsInstance<AgendaRow.Day>().map { it.day }.toSet() }
+    val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+    val rows = remember(snap) { agendaRows(snap) }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var expanded by remember { mutableStateOf(false) }
+    var month by remember { mutableStateOf<java.time.LocalDate?>(null) }
+    // the day at the top of the list is the cursor the strip follows
+    val cursor by remember { androidx.compose.runtime.derivedStateOf { val i = listState.firstVisibleItemIndex - 1; rows.take(maxOf(i + 1, 0)).asReversed().firstNotNullOfOrNull { r -> (r as? AgendaRow.Day)?.day ?: dayOfRow(r) } ?: today } }
+    androidx.compose.runtime.LaunchedEffect(listState.firstVisibleItemIndex) { if (listState.firstVisibleItemIndex > 1) expanded = false }
+    val markedDays = remember(rows) { rows.filterIsInstance<AgendaRow.Day>().map { it.day }.toSet() }
     val eventDays = remember(snap) { snap.events.flatMap { e -> val a = runCatching { java.time.Instant.parse(e.startAt).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrNull(); val b = runCatching { java.time.Instant.parse(e.endAt).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrNull()
         if (a == null || b == null) emptyList() else generateSequence(a) { it.plusDays(1) }.takeWhile { !it.isAfter(b) }.toList() }.toSet() }
-    LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
-        item { MonthGrid(markedDays, eventDays, picked, onPick = { d -> picked = if (picked == d) null else d }) }
+    CalendarStrip(cursor = cursor, today = today, marked = markedDays, eventDays = eventDays, expanded = expanded, month = month,
+        onToggle = { expanded = !expanded; month = null }, onMonth = { m -> month = m },
+        onPick = { d -> val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
+    LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
+        item { Label("S3 · OPERATIONS", "Agenda"); EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
         items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
             when (val r = rows[i]) {
                 is AgendaRow.Day -> Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -423,41 +432,40 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
     }
 }
 
+/** The calendar strip: one week that follows the scroll; tap the month name and it unfolds into the month. */
+@Composable
+fun CalendarStrip(cursor: java.time.LocalDate, today: java.time.LocalDate, marked: Set<java.time.LocalDate>, eventDays: Set<java.time.LocalDate>, expanded: Boolean, month: java.time.LocalDate?,
+                  onToggle: () -> Unit, onMonth: (java.time.LocalDate) -> Unit, onPick: (java.time.LocalDate) -> Unit) {
+    val shown = (if (expanded) month else null) ?: cursor.withDayOfMonth(1)
+    Column(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 10.dp, vertical = 6.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(shown.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US)).uppercase() + (if (expanded) "  ▴" else "  ▾"), Modifier.clickable { onToggle() }, color = Palette.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.8.sp)
+            Spacer(Modifier.weight(1f))
+            if (expanded) { Text("‹", Modifier.clickable { onMonth(shown.minusMonths(1)) }.padding(horizontal = 8.dp), color = Palette.dim, fontSize = 16.sp); Text("›", Modifier.clickable { onMonth(shown.plusMonths(1)) }.padding(horizontal = 8.dp), color = Palette.dim, fontSize = 16.sp) }
+            else Text(if (cursor == today) "TODAY" else "${java.time.temporal.ChronoUnit.DAYS.between(today, cursor)} DAYS OUT", color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+        }
+        Row { listOf("M", "T", "W", "T", "F", "S", "S").forEach { d -> Text(d, Modifier.weight(1f), color = Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
+        @Composable fun cell(d: java.time.LocalDate) {
+            val isToday = d == today; val isCursor = d == cursor
+            val bg by androidx.compose.animation.animateColorAsState(if (isCursor) Palette.blue else Color.Transparent, label = "cursor")
+            Column(Modifier.clickable { onPick(d) }.padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Box(Modifier.size(26.dp).background(bg, RoundedCornerShape(50)).border(if (isToday) 1.5.dp else 0.dp, if (isToday) Palette.red else Color.Transparent, RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
+                    Text("${d.dayOfMonth}", color = if (isCursor) Color.Black else if (d.isBefore(today)) Palette.dim else Palette.text, fontSize = 12.sp, fontWeight = if (isToday || isCursor) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace) }
+                Box(Modifier.size(5.dp).background(if (d in eventDays) Palette.purple else if (d in marked) Palette.blue2 else Color.Transparent, RoundedCornerShape(50))) }
+        }
+        if (expanded) {
+            val offset = (shown.dayOfWeek.value + 6) % 7; val count = shown.lengthOfMonth(); val rowsN = (offset + count + 6) / 7
+            for (r in 0 until rowsN) Row { for (c in 0 until 7) { val i = r * 7 + c - offset; Box(Modifier.weight(1f)) { if (i in 0 until count) cell(shown.plusDays(i.toLong())) } } }
+        } else {
+            val weekStart = cursor.minusDays(((cursor.dayOfWeek.value + 6) % 7).toLong())
+            Row { for (i in 0 until 7) Box(Modifier.weight(1f)) { cell(weekStart.plusDays(i.toLong())) } }
+        }
+    }
+    HorizontalDivider(thickness = 0.5.dp, color = Palette.line)
+}
 
 fun dayOfRow(r: AgendaRow): java.time.LocalDate? {
     val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
     fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrDefault(today)
     return when (r) { is AgendaRow.Ev -> dayOf(r.e.startAt); is AgendaRow.Tr -> maxOf(dayOf(r.t.departAt), today); else -> null }
-}
-
-/** A compact month grid: this month and next, Monday first, marks on days with events (purple) or trips (blue), today
- * ringed, the picked day filled. Tap a day to show only that day below; tap it again for everything. */
-@Composable
-fun MonthGrid(marked: Set<java.time.LocalDate>, eventDays: Set<java.time.LocalDate>, picked: java.time.LocalDate?, onPick: (java.time.LocalDate) -> Unit) {
-    val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (m in 0..1) {
-            val first = today.plusMonths(m.toLong()).withDayOfMonth(1)
-            val offset = (first.dayOfWeek.value + 6) % 7
-            val count = first.lengthOfMonth(); val rows = (offset + count + 6) / 7
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Text(first.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US)).uppercase(), color = Palette.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.8.sp)
-                    Spacer(Modifier.weight(1f)); if (picked != null && m == 0) Mini("ALL DAYS") { onPick(picked) } }
-                Row { listOf("M", "T", "W", "T", "F", "S", "S").forEach { d -> Text(d, Modifier.weight(1f), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
-                for (r in 0 until rows) Row {
-                    for (c in 0 until 7) {
-                        val i = r * 7 + c - offset
-                        if (i in 0 until count) {
-                            val d = first.plusDays(i.toLong()); val isToday = d == today; val isPicked = d == picked
-                            Column(Modifier.weight(1f).clickable { onPick(d) }.padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Box(Modifier.size(26.dp).background(if (isPicked) Palette.blue else Color.Transparent, RoundedCornerShape(50)).border(if (isToday) 1.5.dp else 0.dp, if (isToday) Palette.red else Color.Transparent, RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
-                                    Text("${i + 1}", color = if (isPicked) Color.Black else if (d.isBefore(today)) Palette.dim else Palette.text, fontSize = 12.sp, fontWeight = if (isToday || isPicked) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace) }
-                                Box(Modifier.size(5.dp).background(if (d in eventDays) Palette.purple else if (d in marked) Palette.blue2 else Color.Transparent, RoundedCornerShape(50)))
-                            }
-                        } else Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-    }
 }

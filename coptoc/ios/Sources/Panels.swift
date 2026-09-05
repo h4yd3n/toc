@@ -177,75 +177,161 @@ struct AssessmentCard: View {
 
 struct OpsScreen: View {
     @Environment(COPStore.self) private var store
-    @State private var pickedDay: Date? = nil
-    /// Days that hold an event (any day inside the event's window), for the purple marks on the grid.
+    @State private var tops: [Date: CGFloat] = [:] // last known top of each day header in the agenda's space — the strip follows the one that just passed the top
+    @State private var scrollY: CGFloat = 0        // top of the content; below zero once the agenda has scrolled
+    @State private var expanded = false            // the strip unfolded into the month
+    @State private var month: Date? = nil          // the month shown when unfolded (defaults to the cursor's)
+    let cal = Calendar(identifier: .gregorian)
+    struct AgendaItem: Identifiable { enum Kind { case event(CopEvent), trip(Trip) }; var id: String; var day: Date; var kind: Kind }
+    var agenda: [(day: Date, items: [AgendaItem])] {
+        guard let snap = store.snapshot else { return [] }
+        var items: [AgendaItem] = snap.events.compactMap { e in ISO.date(e.startAt).map { AgendaItem(id: e.id, day: cal.startOfDay(for: $0), kind: .event(e)) } }
+        items += snap.trips.filter { $0.eventId == nil }.compactMap { t in ISO.date(t.departAt).map { AgendaItem(id: t.id, day: cal.startOfDay(for: max($0, cal.startOfDay(for: store.now))), kind: .trip(t)) } }
+        let grouped = Dictionary(grouping: items, by: \.day)
+        return grouped.keys.sorted().map { (day: $0, items: grouped[$0]!.sorted { a, b in if case .event = a.kind, case .trip = b.kind { return true }; return a.id < b.id }) }
+    }
     var eventDays: Set<Date> {
-        var out = Set<Date>(); let cal = Calendar(identifier: .gregorian)
+        var out = Set<Date>()
         for e in store.snapshot?.events ?? [] { guard let a = ISO.date(e.startAt), let b = ISO.date(e.endAt) else { continue }
             var d = cal.startOfDay(for: a); while d <= b { out.insert(d); d = cal.date(byAdding: .day, value: 1, to: d)! } }
         return out
     }
-    /// One row per day that has something, in order, with a gap line when days go by with nothing.
-    struct AgendaItem: Identifiable { enum Kind { case event(CopEvent), trip(Trip) }; var id: String; var day: Date; var kind: Kind }
-    var agenda: [(day: Date, items: [AgendaItem])] {
-        guard let snap = store.snapshot else { return [] }
-        var items: [AgendaItem] = snap.events.compactMap { e in ISO.date(e.startAt).map { AgendaItem(id: e.id, day: Calendar(identifier: .gregorian).startOfDay(for: $0), kind: .event(e)) } }
-        items += snap.trips.filter { $0.eventId == nil }.compactMap { t in ISO.date(t.departAt).map { AgendaItem(id: t.id, day: Calendar(identifier: .gregorian).startOfDay(for: max($0, Calendar.current.startOfDay(for: store.now))), kind: .trip(t)) } }
-        let grouped = Dictionary(grouping: items, by: \.day)
-        return grouped.keys.sorted().map { (day: $0, items: grouped[$0]!.sorted { a, b in if case .event = a.kind, case .trip = b.kind { return true }; return a.id < b.id }) }
+    static func key(_ d: Date) -> String { "d:\(Int(d.timeIntervalSince1970))" }
+    var cursorDay: Date {  // the day whose header is at or above the top of the agenda; today before anything has scrolled
+        tops.filter { $0.value <= 24 }.max { $0.value < $1.value }?.key ?? agenda.first?.day ?? cal.startOfDay(for: store.now)
     }
     var body: some View {
-        List {
-            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Calendar"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }) }.listRowBackground(Theme.panel)
-            Section { MonthGrid(marked: Set(agenda.map(\.day)), eventDays: eventDays, now: store.now, picked: $pickedDay) }.listRowBackground(Theme.panel)
-            let days = pickedDay.map { d in agenda.filter { $0.day == d } } ?? agenda
-            ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
-                if idx > 0, let gap = Calendar(identifier: .gregorian).dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
-                    Text("— nothing for \(gap - 1) day\(gap - 1 == 1 ? "" : "s") —").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity).listRowBackground(Theme.bg)
-                }
-                Section(header: DayHeader(day: d.day, now: store.now)) {
-                    ForEach(d.items) { item in
-                        switch item.kind {
-                        case .event(let e):
-                            Button { store.selection = .event(e.id) } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack { Chip(text: e.status == "active" ? "LIVE" : "T-\(e.daysUntil)d", color: Theme.purple); Text("★ \(e.name)").font(.system(size: 13, weight: .semibold)); Spacer()
-                                        if let op = e.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) }
-                                        if let c = e.coverage { Chip(text: "COVER \(c.assigned)/\(c.required)", color: c.gap > 0 ? Theme.red : Theme.green) }
-                                        if !e.threatIdsInArea.isEmpty { Text("△\(e.threatIdsInArea.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.amber) } }
-                                    Text(e.venueName).font(.system(size: 12, design: .monospaced))
-                                    Text("\(ISO.short(e.startAt)) → \(ISO.short(e.endAt)) · \(e.attendeeCount) attending · \(e.vipCount) VIP · \(e.tripsGenerated) trips").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
-                                }
-                            }.foregroundStyle(.primary)
-                        case .trip(let t):
-                            Button { store.selection = .person(t.personId) } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack { Chip(text: t.status.uppercased(), color: t.status == "active" ? Theme.blue : Theme.dim); if t.isVip { Text("★").foregroundStyle(Theme.gold) }; Text(t.personName).font(.system(size: 13, weight: .semibold))
-                                        if let op = t.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) } }
-                                    Text("\(t.originName.split(separator: " ").first.map(String.init) ?? "") → \(t.destName.split(separator: ",").first.map(String.init) ?? "") · ret \(ISO.rel(t.returnAt, now: store.now))").font(.system(size: 12, design: .monospaced))
-                                    Text(t.purpose).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                            }.foregroundStyle(.primary)
+        let days = agenda
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    Color.clear.frame(height: 0).background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .named("agenda")).minY) })
+                    PanelHead(code: "S3", title: "OPERATIONS", hint: "Agenda").padding(.horizontal, 14).padding(.top, 8)
+                    EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }).padding(.horizontal, 14)
+                    ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
+                        if idx > 0, let gap = cal.dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
+                            Text("— nothing for \(gap - 1) day\(gap - 1 == 1 ? "" : "s") —").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity).padding(.vertical, 10).id("g:\(Int(d.day.timeIntervalSince1970))")
+                        }
+                        DayHeader(day: d.day, now: store.now).padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 4).id(Self.key(d.day))
+                            .background(GeometryReader { g in Color.clear.preference(key: DayTopKey.self, value: [d.day: g.frame(in: .named("agenda")).minY]) })
+                        ForEach(d.items) { item in
+                            AgendaRow(item: item).id("r:\(Int(d.day.timeIntervalSince1970)):\(item.id)")
+                            Divider().overlay(Theme.line).padding(.leading, 14)
                         }
                     }
-                }.listRowBackground(Theme.panel)
-            }
-            if days.isEmpty { Text("Nothing planned.").font(.system(size: 12)).foregroundStyle(Theme.dim).listRowBackground(Theme.panel) }
-            Section(header: SectionLabel(text: "BATTLE LOG · hash-chained")) {
-                ForEach(store.snapshot?.log ?? []) { e in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(ISO.rel(e.at, now: store.now)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(width: 52, alignment: .leading)
-                        Text(e.type.replacingOccurrences(of: "cop.", with: "")).font(.system(size: 9, design: .monospaced)).foregroundStyle(e.actorType == "human" ? Theme.blue : Theme.amber)
-                        Text(e.summary ?? "").font(.system(size: 11)).lineLimit(1)
-                        Spacer(); Text(e.actor).font(.system(size: 10)).foregroundStyle(Theme.dim).lineLimit(1)
+                    if days.isEmpty { Text("Nothing planned.").font(.system(size: 12)).foregroundStyle(Theme.dim).padding(14) }
+                    SectionLabel(text: "BATTLE LOG · hash-chained").padding(.horizontal, 14).padding(.top, 16)
+                    ForEach(store.snapshot?.log ?? []) { e in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(ISO.rel(e.at, now: store.now)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(width: 52, alignment: .leading)
+                            Text(e.type.replacingOccurrences(of: "cop.", with: "")).font(.system(size: 9, design: .monospaced)).foregroundStyle(e.actorType == "human" ? Theme.blue : Theme.amber)
+                            Text(e.summary ?? "").font(.system(size: 11)).lineLimit(1)
+                            Spacer(); Text(e.actor).font(.system(size: 10)).foregroundStyle(Theme.dim).lineLimit(1)
+                        }.padding(.horizontal, 14).padding(.vertical, 3)
                     }
+                    Color.clear.frame(height: 90)
                 }
-            }.listRowBackground(Theme.panel)
+            }
+            .coordinateSpace(name: "agenda")
+            .onPreferenceChange(DayTopKey.self) { new in withAnimation(.easeInOut(duration: 0.25)) { tops.merge(new) { $1 } } }
+            .onPreferenceChange(ScrollTopKey.self) { y in scrollY = y; if y < -8, expanded { withAnimation(.easeInOut(duration: 0.25)) { expanded = false } } }
+            .safeAreaInset(edge: .top, spacing: 0) {
+            CalendarStrip(cursor: cursorDay, today: cal.startOfDay(for: store.now), marked: Set(days.map(\.day)), eventDays: eventDays, expanded: $expanded, month: $month) { picked in
+                // jump to the picked day, or the first day after it that has something
+                guard let target = days.first(where: { $0.day >= picked }) else { return }
+                let wasExpanded = expanded
+                withAnimation(.easeInOut(duration: 0.25)) { expanded = false }
+                Task { @MainActor in   // let the strip fold first, so the jump lands against the folded inset
+                    if wasExpanded { try? await Task.sleep(for: .milliseconds(280)) }
+                    withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(Self.key(target.day), anchor: .top) }
+                }
+            }
+            }
         }
-        .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+        .background(Theme.bg)
     }
 }
 
+struct DayTopKey: PreferenceKey { static var defaultValue: [Date: CGFloat] = [:]; static func reduce(value: inout [Date: CGFloat], nextValue: () -> [Date: CGFloat]) { value.merge(nextValue()) { $1 } } }
+struct ScrollTopKey: PreferenceKey { static var defaultValue: CGFloat = 0; static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() } }
+
+/// One agenda row: an event or a standalone trip.
+struct AgendaRow: View {
+    @Environment(COPStore.self) private var store
+    var item: OpsScreen.AgendaItem
+    var body: some View {
+        switch item.kind {
+        case .event(let e):
+            Button { store.selection = .event(e.id) } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack { Chip(text: e.status == "active" ? "LIVE" : "T-\(e.daysUntil)d", color: Theme.purple); Text("★ \(e.name)").font(.system(size: 13, weight: .semibold)).lineLimit(1); Spacer()
+                        if let op = e.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) }
+                        if let c = e.coverage { Chip(text: "COVER \(c.assigned)/\(c.required)", color: c.gap > 0 ? Theme.red : Theme.green) } }
+                    Text(e.venueName).font(.system(size: 12, design: .monospaced))
+                    Text("\(ISO.short(e.startAt)) → \(ISO.short(e.endAt)) · \(e.attendeeCount) attending · \(e.vipCount) VIP · \(e.tripsGenerated) trips").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                }.padding(.horizontal, 14).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }.foregroundStyle(.primary).buttonStyle(.plain)
+        case .trip(let t):
+            Button { store.selection = .person(t.personId) } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack { Chip(text: t.status.uppercased(), color: t.status == "active" ? Theme.blue : Theme.dim); if t.isVip { Text("★").foregroundStyle(Theme.gold) }; Text(t.personName).font(.system(size: 13, weight: .semibold))
+                        if let op = t.operation { Chip(text: "OP \(op.tasksDone)/\(op.tasksTotal)", color: Theme.purple) } }
+                    Text("\(t.originName.split(separator: " ").first.map(String.init) ?? "") → \(t.destName.split(separator: ",").first.map(String.init) ?? "") · ret \(ISO.rel(t.returnAt, now: store.now))").font(.system(size: 12, design: .monospaced))
+                    Text(t.purpose).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                }.padding(.horizontal, 14).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }.foregroundStyle(.primary).buttonStyle(.plain)
+        }
+    }
+}
+
+/// The calendar strip: one week that follows the scroll, unfolding into the month on a tap of its name.
+struct CalendarStrip: View {
+    var cursor: Date; var today: Date; var marked: Set<Date>; var eventDays: Set<Date>
+    @Binding var expanded: Bool; @Binding var month: Date?
+    var onPick: (Date) -> Void
+    let cal = Calendar(identifier: .gregorian)
+    var body: some View {
+        let shownMonth = expanded ? (month ?? cal.date(from: cal.dateComponents([.year, .month], from: cursor))!) : cal.date(from: cal.dateComponents([.year, .month], from: cursor))!
+        VStack(spacing: 4) {
+            HStack {
+                Button { withAnimation(.spring(duration: 0.3)) { expanded.toggle(); month = nil } } label: {
+                    HStack(spacing: 6) { Text(shownMonth.formatted(.dateTime.month(.wide).year()).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.8); Text(expanded ? "▴" : "▾").font(.system(size: 9)).foregroundStyle(Theme.dim) }
+                }.buttonStyle(.plain)
+                Spacer()
+                if expanded {
+                    Button("‹") { month = cal.date(byAdding: .month, value: -1, to: shownMonth) }.buttonStyle(.plain).foregroundStyle(Theme.dim)
+                    Button("›") { month = cal.date(byAdding: .month, value: 1, to: shownMonth) }.buttonStyle(.plain).foregroundStyle(Theme.dim).padding(.leading, 14)
+                } else {
+                    Text(cursor == today ? "TODAY" : "\(cal.dateComponents([.day], from: today, to: cursor).day ?? 0) DAYS OUT").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim)
+                }
+            }.padding(.horizontal, 4)
+            HStack(spacing: 0) { ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { d in Text(d).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity) } }
+            if expanded {
+                let first = shownMonth, offset = (cal.component(.weekday, from: first) + 5) % 7, count = cal.range(of: .day, in: .month, for: first)!.count
+                ForEach(0..<Int(ceil(Double(offset + count) / 7)), id: \.self) { r in
+                    HStack(spacing: 0) { ForEach(0..<7, id: \.self) { c in let i = r * 7 + c - offset
+                        if i >= 0 && i < count, let d = cal.date(byAdding: .day, value: i, to: first) { dayCell(d) } else { Color.clear.frame(maxWidth: .infinity).frame(height: 35) } } }
+                }
+            } else {
+                let weekStart = cal.date(byAdding: .day, value: -((cal.component(.weekday, from: cursor) + 5) % 7), to: cursor)!
+                HStack(spacing: 0) { ForEach(0..<7, id: \.self) { i in dayCell(cal.date(byAdding: .day, value: i, to: weekStart)!) } }
+            }
+        }
+        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 6)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Theme.panel).overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+    func dayCell(_ d: Date) -> some View {
+        let isToday = d == today, isCursor = d == cursor, hasEvent = eventDays.contains(d), hasAny = marked.contains(d)
+        return VStack(spacing: 2) {
+            Text("\(cal.component(.day, from: d))").font(.system(size: 12, weight: isToday || isCursor ? .bold : .regular, design: .monospaced))
+                .foregroundStyle(isCursor ? Color.black : d < today ? Theme.dim : .primary)
+                .frame(width: 26, height: 26).background(isCursor ? Theme.blue : .clear, in: Circle()).overlay(Circle().stroke(isToday ? Theme.red : .clear, lineWidth: 1.5))
+                .animation(.easeInOut(duration: 0.25), value: isCursor)
+            Circle().fill(hasEvent ? Theme.purple : hasAny ? Theme.blue : .clear).frame(width: 5, height: 5)
+        }.frame(maxWidth: .infinity).frame(height: 35).contentShape(Rectangle()).onTapGesture { onPick(d) }
+    }
+}
 
 /// A day header on the agenda: weekday, date, and how far away it is.
 struct DayHeader: View {
@@ -255,47 +341,5 @@ struct DayHeader: View {
         let days = Calendar(identifier: .gregorian).dateComponents([.day], from: Calendar(identifier: .gregorian).startOfDay(for: now), to: day).day ?? 0
         HStack { Text(f.string(from: day).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(days == 0 ? Theme.red : .primary)
             Text(days == 0 ? "TODAY" : days == 1 ? "TOMORROW" : days < 0 ? "STARTED" : "IN \(days) DAYS").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim) }
-    }
-}
-
-
-/// A compact month grid: this month and next, Monday first, marks on days with events (purple) or trips (blue),
-/// today ringed, the picked day filled. Tap a day to show only that day below; tap it again for everything.
-struct MonthGrid: View {
-    var marked: Set<Date>; var eventDays: Set<Date>; var now: Date; @Binding var picked: Date?
-    let cal = Calendar(identifier: .gregorian)
-    var body: some View {
-        let today = cal.startOfDay(for: now)
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(0..<2, id: \.self) { m in
-                let first = cal.date(from: cal.dateComponents([.year, .month], from: cal.date(byAdding: .month, value: m, to: today)!))!
-                let offset = (cal.component(.weekday, from: first) + 5) % 7
-                let count = cal.range(of: .day, in: .month, for: first)!.count
-                let rows = Int(ceil(Double(offset + count) / 7))
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack { Text(first.formatted(.dateTime.month(.wide).year()).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.8)
-                        Spacer(); if picked != nil { Button("ALL DAYS") { picked = nil }.font(.system(size: 9, weight: .semibold, design: .monospaced)).buttonStyle(.bordered) } }
-                    HStack(spacing: 0) { ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { d in Text(d).font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity) } }
-                    ForEach(0..<rows, id: \.self) { r in
-                        HStack(spacing: 0) {
-                            ForEach(0..<7, id: \.self) { c in
-                                let i = r * 7 + c - offset
-                                if i >= 0 && i < count, let d = cal.date(byAdding: .day, value: i, to: first) {
-                                    let isToday = d == today, isPicked = d == picked, hasEvent = eventDays.contains(d), hasAny = marked.contains(d)
-                                    VStack(spacing: 2) {
-                                        Text("\(i + 1)").font(.system(size: 12, weight: isToday || isPicked ? .bold : .regular, design: .monospaced))
-                                            .foregroundStyle(isPicked ? Color.black : d < today ? Theme.dim : .primary)
-                                            .frame(width: 26, height: 26).background(isPicked ? Theme.blue : .clear, in: Circle()).overlay(Circle().stroke(isToday ? Theme.red : .clear, lineWidth: 1.5))
-                                        Circle().fill(hasEvent ? Theme.purple : hasAny ? Theme.blue : .clear).frame(width: 5, height: 5)
-                                    }
-                                    .frame(maxWidth: .infinity).contentShape(Rectangle()).onTapGesture { picked = (picked == d) ? nil : d }
-                                } else { Color.clear.frame(maxWidth: .infinity, minHeight: 33) }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 4)
     }
 }

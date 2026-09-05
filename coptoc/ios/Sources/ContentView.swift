@@ -5,14 +5,16 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var store = store
-        TabView {
-            MapScreen().tabItem { Label("COP", systemImage: "map") }
-            PersonnelScreen().tabItem { Label("S1", systemImage: "person.3") }
-            IntelScreen().tabItem { Label("S2", systemImage: "eye") }
-            OpsScreen().tabItem { Label("S3", systemImage: "calendar") }
+        VStack(spacing: 0) {
+            PostureBar(); FlashStrip()
+            TabView {
+                MapScreen().tabItem { Label("COP", systemImage: "map") }
+                PersonnelScreen().tabItem { Label("S1", systemImage: "person.3") }
+                IntelScreen().tabItem { Label("S2", systemImage: "eye") }
+                OpsScreen().tabItem { Label("S3", systemImage: "calendar") }
+            }
+            .tint(Theme.blue)
         }
-        .tint(Theme.blue)
-        .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
         }
