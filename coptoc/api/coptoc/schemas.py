@@ -149,6 +149,28 @@ class CheckIn(BaseModel):
     note: Optional[str] = None
     at: Optional[datetime] = None
 
+class LocationCreate(BaseModel):
+    name: str
+    type: str = "office"
+    lat: float
+    lon: float
+    city: str = ""
+    country: str = ""
+    posture: str = "normal"
+    sensitivity: str = "standard"
+    is_toc: bool = False
+
+
+class LocationUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    sensitivity: Optional[str] = None
+
+
 class PostureUpdate(BaseModel):
     posture: Posture
     reason: str = ""

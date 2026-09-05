@@ -91,18 +91,22 @@ def declared_ao() -> Optional[Dict[str, Any]]:
     return {"center_lat": lat, "center_lon": lon, "radius_km": radius, "source": "ao"}
 
 
-def home_station(locations: List[LocationRow]) -> Optional[LocationRow]:
-    """The headquarters: the site of type "hq", else whatever site we have, else nothing to look at yet."""
+def command_post(locations: List[LocationRow]) -> Optional[LocationRow]:
+    """Where the board is anchored: the CP the TOC is running from if one is flagged, else home station (the site of
+    type "hq"), else whatever site we have. A deployed unit flags its new CP and the board goes with it; home station
+    stays in the list, because it has not stopped being home station."""
     open_sites = [l for l in locations if l.sensitivity != "restricted"]
-    return next((l for l in open_sites if l.type == "hq"), None) or (open_sites[0] if open_sites else None)
+    return (next((l for l in open_sites if l.is_toc), None)
+            or next((l for l in open_sites if l.type == "hq"), None)
+            or (open_sites[0] if open_sites else None))
 
 
 def default_view(locations: List[LocationRow]) -> Dict[str, Any]:
-    """Where a station with no memory of its own should look: the declared AO, else home station and the units around it."""
+    """Where a station with no memory of its own should look: the declared AO, else the CP and the units around it."""
     ao = declared_ao()
     if ao:
         return ao
-    hq = home_station(locations)
+    hq = command_post(locations)
     if hq is None:
         return {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
     nearby = [haversine_km(hq.lat, hq.lon, l.lat, l.lon) for l in locations if l.sensitivity != "restricted"]
@@ -279,7 +283,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         effective = POSTURES[max(POSTURE_RANK[l.posture], forced)]
         locations_out.append({
             "id": l.id, "name": l.name, "type": l.type, "lat": l.lat, "lon": l.lon, "city": l.city,
-            "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity,
+            "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity, "is_toc": bool(l.is_toc),
             "threat_ids_in_area": in_area, "confirmed_threat_ids": [lk.threat_id for lk in my_links],
             **counts[l.id], **site_health(l.id),
         })

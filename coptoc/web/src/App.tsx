@@ -18,7 +18,8 @@ import { TaskingBox } from './Taskings'
 import * as api from './api'
 import type { UserInfo, Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
-const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE' }
+const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE', airfield: 'AIRFIELD', cp: 'CP', fob: 'FOB', farp: 'FARP', range: 'RANGE' }
+const SITE_TYPES = ['hq', 'cp', 'fob', 'farp', 'airfield', 'range', 'office', 'datacenter', 'venue', 'residence'] as const
 const LOG_LABEL: Record<string, string> = {
   'cop.trip.created': 'TRIP', 'cop.trip.updated': 'TRIP', 'cop.trip.cancelled': 'TRIP', 'cop.event.created': 'EVENT', 'cop.event.updated': 'EVENT',
   'cop.event.attendees_added': 'EVENT', 'cop.event.attendee_removed': 'EVENT', 'cop.event.cancelled': 'EVENT', 'cop.person.checkin': 'CHECK-IN',
@@ -56,6 +57,7 @@ export default function App() {
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
   // Panels stay up until closed or displaced by another on the same rail; the choice survives a reload.
   type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
+  const [addSite, setAddSite] = useState(false)
   const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
   useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
@@ -193,12 +195,13 @@ export default function App() {
           </ul>
         </>}
         {snap && <TaskOrg teams={snap.teams} people={snap.people} onSelect={setSel} sel={sel} />}
-        <SectionLabel>LOCATIONS</SectionLabel>
+        <SectionLabel>LOCATIONS {can('S3', 'edit') && <button className="mini" title="Add a site — a CP the TOC jumped to, a new office" onClick={e => { e.stopPropagation(); setAddSite(v => !v) }}>{addSite ? '×' : '+ SITE'}</button>}</SectionLabel>
+        {addSite && <SiteForm busy={busy} act={act} onDone={() => setAddSite(false)} />}
         <ul className="list">
           {snap?.locations.map(l => (
             <li key={l.id} className={`row ${sel?.type === 'location' && sel.id === l.id ? 'active' : ''}`} onClick={() => setSel({ type: 'location', id: l.id })}>
               <span className={`dot posture-${l.effective_posture}`} />
-              <span className="name">{l.name}{l.sensitivity === 'restricted' && <span className="lock">⚿</span>}</span>
+              <span className="name">{l.is_toc && <span className="tocmark" title="the TOC is running from here">◈</span>}{l.name}{l.sensitivity === 'restricted' && <span className="lock">⚿</span>}</span>
               {l.confirmed_threat_ids.length > 0 ? <span className="tbadge confirmed" title="confirmed threat link">▲{l.confirmed_threat_ids.length}</span>
                 : l.threat_ids_in_area.length > 0 ? <span className="tbadge" title="threat in area — unconfirmed">△{l.threat_ids_in_area.length}</span> : null}
               <span className="meta">{l.present}<span className="dim">/{l.assigned}</span>{l.security_on_shift ? <span className="sec"> ·{l.security_on_shift}⛨</span> : null}</span>
@@ -345,6 +348,42 @@ function Stat({ label, v, accent, onJump }: { label: string; v?: number; accent?
 function PanelHead({ code, title, hint, inline, children, onClose }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode; onClose?: () => void }) {
   return <div className={`panel-head ${inline ? 'inline' : ''}`}>{code && <span className="code">{code}</span>}<span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>
 }
+/** §3.1 — add a site, or correct one that moved. The TOC flag has its own action: it is a different decision. */
+function SiteForm({ busy, act, onDone, site }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; onDone: () => void; site?: Location }) {
+  const [f, setF] = useState({
+    name: site?.name ?? '', type: (site?.type ?? 'cp') as string, lat: String(site?.lat ?? ''), lon: String(site?.lon ?? ''),
+    city: site?.city ?? '', country: site?.country ?? '', sensitivity: site?.sensitivity ?? 'standard',
+  })
+  const [err, setErr] = useState<string | null>(null)
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value })
+  const submit = () => {
+    const lat = Number(f.lat), lon = Number(f.lon)
+    if (!f.name.trim()) return setErr('A site needs a name.')
+    if (!Number.isFinite(lat) || Math.abs(lat) > 90 || !Number.isFinite(lon) || Math.abs(lon) > 180) return setErr('Latitude ±90, longitude ±180.')
+    setErr(null)
+    const body = { name: f.name.trim(), type: f.type as Location['type'], lat, lon, city: f.city.trim(), country: f.country.trim(), sensitivity: f.sensitivity as 'standard' | 'restricted' }
+    act(site ? 'saving the site' : 'adding the site', () => (site ? api.updateLocation(site.id, body) : api.createLocation(body)).then(onDone))
+  }
+  return (
+    <div className="siteform" onClick={e => e.stopPropagation()}>
+      <input className="in" placeholder="Name — e.g. TAA Falcon" value={f.name} onChange={set('name')} />
+      <div className="s-row">
+        <select className="in" value={f.type} onChange={set('type')}>{SITE_TYPES.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}</select>
+        <select className="in" value={f.sensitivity} onChange={set('sensitivity')}><option value="standard">standard</option><option value="restricted">restricted ⚿</option></select>
+      </div>
+      <div className="s-row">
+        <input className="in" placeholder="lat" value={f.lat} onChange={set('lat')} />
+        <input className="in" placeholder="lon" value={f.lon} onChange={set('lon')} />
+      </div>
+      <div className="s-row">
+        <input className="in" placeholder="city" value={f.city} onChange={set('city')} />
+        <input className="in" placeholder="country" value={f.country} onChange={set('country')} />
+      </div>
+      {err && <div className="dim small bad">{err}</div>}
+      <div className="s-row"><button className="chip btn on" disabled={!!busy} onClick={submit}>{site ? 'SAVE' : 'ADD SITE'}</button><button className="chip btn" disabled={!!busy} onClick={onDone}>CANCEL</button></div>
+    </div>)
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
@@ -353,6 +392,10 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
   act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  // S3 owns where the force sits; nobody signed in is the demo wall, which can do anything.
+  const mayEditSites = !snap.me || snap.me.user_id === null || snap.me.battle_captain || snap.me.perms.S3 === 'edit'
+  useEffect(() => { setEditing(false) }, [sel.type, sel.id])
   const threatRows = (ids: string[], confirmed: string[], target: { type: 'location' | 'person'; id: string }) => ids.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
     <li key={t!.id} className="tline" onClick={e => { e.stopPropagation(); onSelect({ type: 'threat', id: t!.id }) }}>
       <span className={`sev ${t!.severity}`}>{t!.severity.slice(0, 3).toUpperCase()}</span><span className="pname">{t!.title}</span>
@@ -436,7 +479,15 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
           <div className="section-label">THREATS IN AREA <span className="dim">proximity suggests · analyst confirms</span></div>
           <ul className="people">{threatRows(Array.from(new Set([...l.confirmed_threat_ids, ...l.threat_ids_in_area])), l.confirmed_threat_ids, { type: 'location', id: l.id })}</ul>
         </>}
-        <div className="d-actions">{draftBtn('location', l.id)} {rollCallBtn({ location_id: l.id })}</div>
+        <div className="d-actions">{draftBtn('location', l.id)} {rollCallBtn({ location_id: l.id })}
+          {mayEditSites && <>
+            <button className={`chip btn ${l.is_toc ? 'on' : ''}`} disabled={!!busy || l.is_toc}
+              title={l.is_toc ? 'the TOC is running from here' : 'the TOC jumped here — the wall opens on it from now on'}
+              onClick={() => act('moving the TOC', () => api.setToc(l.id))}>{l.is_toc ? '◈ TOC IS HERE' : '◈ TOC HERE'}</button>
+            <button className="chip btn" disabled={!!busy} onClick={() => setEditing(v => !v)}>{editing ? 'CANCEL' : 'EDIT SITE'}</button>
+          </>}
+        </div>
+        {editing && <SiteForm busy={busy} act={act} site={l} onDone={() => setEditing(false)} />}
         {visiting.length > 0 && <><div className="section-label">VISITING</div>
           <ul className="people">{visiting.map(p => <PersonRow key={p.id} p={p} onClick={() => onSelect({ type: 'person', id: p.id })} />)}</ul></>}
         {teams.map(t => {

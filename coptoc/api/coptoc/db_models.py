@@ -17,6 +17,10 @@ class LocationRow(Base):
     country: Mapped[str] = mapped_column(String)
     posture: Mapped[str] = mapped_column(String, default="normal")  # normal | guarded | elevated | high | critical (DEFCON 5 → 1) — set by a human
     sensitivity: Mapped[str] = mapped_column(String, default="standard")  # standard | restricted
+    # §3.1 — the CP the TOC is running from right now. A unit garrisoned at Fort Worth that deploys to Baghdad has not
+    # stopped being garrisoned at Fort Worth: home station stays the site of type "hq", and this flag moves. At most
+    # one site carries it, and the wall opens on whichever site does.
+    is_toc: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class TeamRow(Base):

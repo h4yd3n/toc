@@ -83,7 +83,12 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
             mapHolder[0] = map
             Board.load(context)
             map.cameraPosition = Board.position ?: Board.bayArea
-            map.addOnCameraIdleListener { Board.position = map.cameraPosition; Board.save(context, map.cameraPosition) }
+            // The camera is shared between tabs from the first frame, but only written to disk once the board is
+            // real — otherwise the placeholder we show while the first snapshot is in flight becomes permanent.
+            map.addOnCameraIdleListener {
+                Board.position = map.cameraPosition
+                if (Board.framed) Board.save(context, map.cameraPosition)
+            }
             map.uiSettings.isAttributionEnabled = true; map.uiSettings.isLogoEnabled = false
             map.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
                 style.addSource(GeoJsonSource("threats", FeatureCollection.fromFeatures(emptyList())))

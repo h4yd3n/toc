@@ -8,7 +8,7 @@ os.environ["TOC_OFFLINE"] = "1"; os.environ["TOC_INTSUM_CLOCK"] = "off"; os.envi
 import pytest
 from fastapi.testclient import TestClient
 from coptoc.app import app
-from coptoc.service import HQ_VIEW_RADIUS_KM, REGIONAL_KM, default_view, home_station
+from coptoc.service import HQ_VIEW_RADIUS_KM, REGIONAL_KM, command_post, default_view
 
 
 @pytest.fixture(scope="module")
@@ -19,8 +19,8 @@ def client():
 
 
 class FakeSite:
-    def __init__(self, lat, lon, type="office", sensitivity="standard"):
-        self.lat, self.lon, self.type, self.sensitivity = lat, lon, type, sensitivity
+    def __init__(self, lat, lon, type="office", sensitivity="standard", is_toc=False):
+        self.lat, self.lon, self.type, self.sensitivity, self.is_toc = lat, lon, type, sensitivity, is_toc
 
 
 def no_ao(monkeypatch):
@@ -71,8 +71,18 @@ def test_a_restricted_site_never_sets_the_board(monkeypatch):
     """Every station opens on the same board, cleared for the residence layer or not."""
     no_ao(monkeypatch)
     residence = FakeSite(0.0, 0.0, "residence", "restricted")
-    assert home_station([residence, FakeSite(36.67, -87.5, "hq")]).lat == 36.67
+    assert command_post([residence, FakeSite(36.67, -87.5, "hq")]).lat == 36.67
     assert default_view([residence])["source"] == "none"
+
+
+def test_the_board_follows_the_TOC_when_it_jumps(monkeypatch):
+    """Garrisoned at Fort Worth, deployed to Baghdad: home station stays in the list, the board goes with the TOC."""
+    no_ao(monkeypatch)
+    fort_worth = FakeSite(32.75, -97.33, "hq")
+    baghdad = FakeSite(33.31, 44.36, "cp", is_toc=True)
+    assert default_view([fort_worth])["center_lon"] == -97.33
+    assert default_view([fort_worth, baghdad])["center_lon"] == 44.36
+    assert command_post([fort_worth, baghdad]) is baghdad
 
 
 def test_declared_ao_wins_over_the_headquarters(monkeypatch):

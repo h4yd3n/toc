@@ -16,3 +16,23 @@ def async_session_factory(engine: AsyncEngine) -> async_sessionmaker:
 async def init_db(engine: AsyncEngine):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await add_missing_columns(engine)
+
+
+# create_all makes tables that are missing; it never adds a column to a table that already exists. A deployment
+# carrying live data would otherwise fail on the first SELECT after a model grew a field, so the columns added since
+# the first release are listed here and added if absent. SQLite only, which is what every deployment runs today.
+ADDED_COLUMNS = [
+    ("cop_locations", "is_toc", "BOOLEAN DEFAULT 0"),   # §3.1 the CP the TOC is running from
+]
+
+
+async def add_missing_columns(engine: AsyncEngine):
+    if engine.dialect.name != "sqlite":
+        return
+    from sqlalchemy import text
+    async with engine.begin() as conn:
+        for table, column, decl in ADDED_COLUMNS:
+            rows = (await conn.execute(text(f"PRAGMA table_info({table})"))).fetchall()
+            if rows and not any(r[1] == column for r in rows):
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {decl}"))

@@ -41,6 +41,7 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
   const framed = useRef(savedBoard() != null)   // applied once, and never over a board this browser remembers
+  const waiting = useRef(false)                // an opening frame queued against a style that has not landed yet
   const propsRef = useRef({ snapshot, layers, onSelect, selection })
   propsRef.current = { snapshot, layers, onSelect, selection }
 
@@ -51,7 +52,12 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
       container: el.current, style: STYLE, ...(savedBoard() ?? BAY_AREA),
       attributionControl: false, dragRotate: false, pitchWithRotate: false,
     })
-    m.on('moveend', () => { try { localStorage.setItem(BOARD_KEY, JSON.stringify({ center: m.getCenter().toArray(), zoom: m.getZoom() })) } catch { /* private mode */ } })
+    // Only once the board is real — the opening frame applied, or a remembered one restored. Saving before that
+    // persists the placeholder we show while the first snapshot is in flight, and the wall would open there forever.
+    m.on('moveend', () => {
+      if (!framed.current) return
+      try { localStorage.setItem(BOARD_KEY, JSON.stringify({ center: m.getCenter().toArray(), zoom: m.getZoom() })) } catch { /* private mode */ }
+    })
     m.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
     m.on('load', () => {
@@ -186,12 +192,16 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   // after which the map is the operator's to move and nothing takes it back.
   useEffect(() => {
     const m = map.current, v = snapshot?.view
-    if (!m || !v || framed.current || v.center_lat == null || v.center_lon == null) return
-    framed.current = true
+    if (!m || !v || framed.current || waiting.current || v.center_lat == null || v.center_lon == null) return
     const r = v.radius_km ?? 250
     const dLat = r / 111, dLon = r / (111 * Math.max(Math.cos((v.center_lat * Math.PI) / 180), 0.01))
-    const fit = () => m.fitBounds([[v.center_lon! - dLon, v.center_lat! - dLat], [v.center_lon! + dLon, v.center_lat! + dLat]], { padding: 48, duration: 0, maxZoom: 12 })
-    if (loaded.current) fit(); else m.once('load', fit)
+    const fit = () => {
+      framed.current = true   // only once it has actually happened: a map that loads late still gets its frame
+      m.fitBounds([[v.center_lon! - dLon, v.center_lat! - dLat], [v.center_lon! + dLon, v.center_lat! + dLat]], { padding: 48, duration: 0, maxZoom: 12 })
+    }
+    if (loaded.current) { fit(); return }
+    waiting.current = true    // the style is still coming; frame it when it lands, and don't queue this twice
+    m.once('load', () => { waiting.current = false; if (!framed.current) fit() })
   }, [snapshot?.view])
 
   // ---- fly on selection ----

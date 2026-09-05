@@ -1,4 +1,4 @@
-import type { Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { Location, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -17,6 +17,11 @@ export const fetchSnapshot = (restricted: boolean) => req<Snapshot>('GET', `/v1/
 export const confirmLink = (threatId: string, target_type: 'location' | 'person', target_id: string, note?: string) =>
   req<{ link_id: number; status: string }>('POST', `/v1/cop/threats/${threatId}/links`, { target_type, target_id, note })
 export const removeLink = (threatId: string, linkId: number) => req<unknown>('DELETE', `/v1/cop/threats/${threatId}/links/${linkId}`)
+/** §3.1 sites: add one, correct one, and move the TOC. Home station stays whatever site is typed "hq". */
+export const createLocation = (body: Partial<Location> & { name: string; lat: number; lon: number }) => req<{ id: string }>('POST', '/v1/cop/locations', body)
+export const updateLocation = (id: string, body: Partial<Location>) => req<{ id: string; changed: string[] }>('PATCH', `/v1/cop/locations/${id}`, body)
+export const setToc = (id: string) => req<unknown>('POST', `/v1/cop/locations/${id}/toc`, {})
+
 export const setPosture = (locationId: string, posture: string, reason: string) => req<unknown>('PATCH', `/v1/cop/locations/${locationId}/posture`, { posture, reason })
 export const draftAssessment = (subject_type: string, subject_id: string) => req<{ id: string; refused: boolean; confidence: string }>('POST', '/v1/cop/assessments/draft', { subject_type, subject_id })
 export const setAssessmentStatus = (id: string, status: string) => req<unknown>('PATCH', `/v1/cop/assessments/${id}`, { status })
