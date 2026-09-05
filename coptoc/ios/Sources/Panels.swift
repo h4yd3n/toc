@@ -177,6 +177,14 @@ struct AssessmentCard: View {
 
 struct OpsScreen: View {
     @Environment(COPStore.self) private var store
+    @State private var pickedDay: Date? = nil
+    /// Days that hold an event (any day inside the event's window), for the purple marks on the grid.
+    var eventDays: Set<Date> {
+        var out = Set<Date>(); let cal = Calendar(identifier: .gregorian)
+        for e in store.snapshot?.events ?? [] { guard let a = ISO.date(e.startAt), let b = ISO.date(e.endAt) else { continue }
+            var d = cal.startOfDay(for: a); while d <= b { out.insert(d); d = cal.date(byAdding: .day, value: 1, to: d)! } }
+        return out
+    }
     /// One row per day that has something, in order, with a gap line when days go by with nothing.
     struct AgendaItem: Identifiable { enum Kind { case event(CopEvent), trip(Trip) }; var id: String; var day: Date; var kind: Kind }
     var agenda: [(day: Date, items: [AgendaItem])] {
@@ -188,8 +196,9 @@ struct OpsScreen: View {
     }
     var body: some View {
         List {
-            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Agenda"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }) }.listRowBackground(Theme.panel)
-            let days = agenda
+            Section { PanelHead(code: "S3", title: "OPERATIONS", hint: "Calendar"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }) }.listRowBackground(Theme.panel)
+            Section { MonthGrid(marked: Set(agenda.map(\.day)), eventDays: eventDays, now: store.now, picked: $pickedDay) }.listRowBackground(Theme.panel)
+            let days = pickedDay.map { d in agenda.filter { $0.day == d } } ?? agenda
             ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
                 if idx > 0, let gap = Calendar(identifier: .gregorian).dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
                     Text("— nothing for \(gap - 1) day\(gap - 1 == 1 ? "" : "s") —").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity).listRowBackground(Theme.bg)
@@ -246,5 +255,47 @@ struct DayHeader: View {
         let days = Calendar(identifier: .gregorian).dateComponents([.day], from: Calendar(identifier: .gregorian).startOfDay(for: now), to: day).day ?? 0
         HStack { Text(f.string(from: day).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(days == 0 ? Theme.red : .primary)
             Text(days == 0 ? "TODAY" : days == 1 ? "TOMORROW" : days < 0 ? "STARTED" : "IN \(days) DAYS").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim) }
+    }
+}
+
+
+/// A compact month grid: this month and next, Monday first, marks on days with events (purple) or trips (blue),
+/// today ringed, the picked day filled. Tap a day to show only that day below; tap it again for everything.
+struct MonthGrid: View {
+    var marked: Set<Date>; var eventDays: Set<Date>; var now: Date; @Binding var picked: Date?
+    let cal = Calendar(identifier: .gregorian)
+    var body: some View {
+        let today = cal.startOfDay(for: now)
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(0..<2, id: \.self) { m in
+                let first = cal.date(from: cal.dateComponents([.year, .month], from: cal.date(byAdding: .month, value: m, to: today)!))!
+                let offset = (cal.component(.weekday, from: first) + 5) % 7
+                let count = cal.range(of: .day, in: .month, for: first)!.count
+                let rows = Int(ceil(Double(offset + count) / 7))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack { Text(first.formatted(.dateTime.month(.wide).year()).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.8)
+                        Spacer(); if picked != nil { Button("ALL DAYS") { picked = nil }.font(.system(size: 9, weight: .semibold, design: .monospaced)).buttonStyle(.bordered) } }
+                    HStack(spacing: 0) { ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { d in Text(d).font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity) } }
+                    ForEach(0..<rows, id: \.self) { r in
+                        HStack(spacing: 0) {
+                            ForEach(0..<7, id: \.self) { c in
+                                let i = r * 7 + c - offset
+                                if i >= 0 && i < count, let d = cal.date(byAdding: .day, value: i, to: first) {
+                                    let isToday = d == today, isPicked = d == picked, hasEvent = eventDays.contains(d), hasAny = marked.contains(d)
+                                    VStack(spacing: 2) {
+                                        Text("\(i + 1)").font(.system(size: 12, weight: isToday || isPicked ? .bold : .regular, design: .monospaced))
+                                            .foregroundStyle(isPicked ? Color.black : d < today ? Theme.dim : .primary)
+                                            .frame(width: 26, height: 26).background(isPicked ? Theme.blue : .clear, in: Circle()).overlay(Circle().stroke(isToday ? Theme.red : .clear, lineWidth: 1.5))
+                                        Circle().fill(hasEvent ? Theme.purple : hasAny ? Theme.blue : .clear).frame(width: 5, height: 5)
+                                    }
+                                    .frame(maxWidth: .infinity).contentShape(Rectangle()).onTapGesture { picked = (picked == d) ? nil : d }
+                                } else { Color.clear.frame(maxWidth: .infinity, minHeight: 33) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
