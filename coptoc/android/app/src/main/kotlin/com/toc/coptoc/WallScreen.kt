@@ -26,7 +26,7 @@ val ROLES = listOf("battle_captain", "ep", "security", "analyst", "ea")
 fun WallScreen(store: Store) {
     val st by store.state.collectAsStateWithLifecycle()
     val snap = st.snap
-    Column(Modifier.fillMaxSize().background(Palette.bg)) {
+    Column(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding()) {  // stay clear of the cutout and the system bars on a real phone
         Header(st, store)
         FlashStrip(st, store)
         Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -81,7 +81,7 @@ fun Header(st: WallState, store: Store) {
                 it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}" + (if (l.sites > 0) "  (${l.sites})" else ""), color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) }
                 DropdownMenuItem({ Text("The wall reads the worst site. Set a site's level from its card.", color = Palette.dim, fontSize = 10.sp) }, { defconMenu = false }) } } }
         Spacer(Modifier.width(8.dp))
-        w?.let { Chip("${it.name.uppercase()} WATCH ${it.battleCaptain ?: "UNASSIGNED"} · ${"%.0f".format(it.remainingH)}h left", if (it.overdue) Palette.red else if (it.inOverlap) Palette.amber else Palette.blue2, filled = true,
+        w?.let { Chip("${it.name.uppercase()} WATCH ${it.battleCaptain ?: "UNASSIGNED"} · " + (if (it.overdue) "OVERDUE ${"%.0f".format(-it.remainingH)}h" else "${"%.0f".format(it.remainingH)}h left"), if (it.overdue) Palette.red else if (it.inOverlap) Palette.amber else Palette.blue2, filled = true,
             onClick = if (it.battleCaptain == null && st.role == "battle_captain") ({ store.act("taking the watch") { takeWatch("Battle Captain (Android)") } }) else null) }
         Spacer(Modifier.weight(1f))
         val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 1100

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the wall's API runs on the developer's Mac over plain HTTP at whatever LAN address the build was
+     given (-PtocApi). Release keeps the main config, which permits cleartext only for the emulator host. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
