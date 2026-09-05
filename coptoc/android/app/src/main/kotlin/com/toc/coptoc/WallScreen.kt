@@ -370,7 +370,7 @@ fun PhoneScreen(st: WallState, store: Store) {
             }
         }
         Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerPx = it.height }) {  // the header, floating over the picture
-            PhoneHeader(st, store, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
+            PhoneHeader(st, store, tab = tab, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
             FlashStrip(st, store)
         }
         Box(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {  // (kept: the sheets and toasts below sit in this scope)
@@ -403,7 +403,7 @@ fun PhoneScreen(st: WallState, store: Store) {
 
 /** The iOS posture bar, on Android: TOC · DEFCON · clock; the watch line; the counters. Drawn under the status bar. */
 @Composable
-fun PhoneHeader(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
+fun PhoneHeader(st: WallState, store: Store, tab: Tab = Tab.COP, onJump: (Tab) -> Unit = {}) {
     @Composable fun J(n: String, label: String, color: Color = Palette.text) = Stat(n, label, color, onClick = STAT_TAB[label]?.let { t -> { onJump(t) } })
     val s = st.snap?.summary; val w = st.snap?.watch
     var roleMenu by remember { mutableStateOf(false) }
@@ -449,6 +449,9 @@ fun PhoneHeader(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
                     DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) }) } }
         }
         }
+        // §3 — the watch and the counters belong to the COP, where the picture has room for them. A section's sheet
+        // needs the height more than it needs a summary it is one tap away from.
+        if (tab == Tab.COP)
         Column(Modifier.padding(horizontal = 10.dp).padding(top = 8.dp, bottom = 6.dp).fillMaxWidth().background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {  // the watch and the counters: a lighter card floating over the picture
         w?.let { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${it.name.uppercase()} WATCH", color = Palette.blue2, fontSize = 10.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)

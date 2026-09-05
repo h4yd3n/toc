@@ -91,6 +91,9 @@ struct PostureBar: View {
             .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
             .background(Theme.panel.opacity(0.88))   // the header: darker, less translucent
             .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
+            // §3 — the watch and the counters belong to the COP, where the picture has room for them. A section's
+            // sheet needs the height more than it needs a summary it is one tap away from.
+            if store.tab == "COP" {
             VStack(spacing: 6) {
             if let w = store.snapshot?.watch {
                 HStack(spacing: 8) {
@@ -119,6 +122,7 @@ struct PostureBar: View {
             .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
             .padding(.horizontal, 10).padding(.top, 8)
+            }
         }
         .padding(.bottom, 6)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
