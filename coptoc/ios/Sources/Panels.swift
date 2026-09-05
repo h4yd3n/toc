@@ -300,9 +300,7 @@ struct CalendarStrip: View {
         let shownMonth = expanded ? (month ?? cal.date(from: cal.dateComponents([.year, .month], from: cursor))!) : cal.date(from: cal.dateComponents([.year, .month], from: cursor))!
         VStack(spacing: 4) {
             HStack {
-                Button { withAnimation(.spring(duration: 0.3)) { expanded.toggle(); month = nil } } label: {
-                    HStack(spacing: 6) { Text(shownMonth.formatted(.dateTime.month(.wide).year()).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.8); Text(expanded ? "▴" : "▾").font(.system(size: 9)).foregroundStyle(Theme.dim) }
-                }.buttonStyle(.plain)
+                HStack(spacing: 6) { Text(shownMonth.formatted(.dateTime.month(.wide).year()).uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(1.8); Text(expanded ? "▴" : "▾").font(.system(size: 9)).foregroundStyle(Theme.dim) }
                 Spacer()
                 if expanded {
                     Button("‹") { month = cal.date(byAdding: .month, value: -1, to: shownMonth) }.buttonStyle(.plain).foregroundStyle(Theme.dim)
@@ -310,7 +308,7 @@ struct CalendarStrip: View {
                 } else {
                     Text(cursor == today ? "TODAY" : "\(cal.dateComponents([.day], from: today, to: cursor).day ?? 0) DAYS OUT").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim)
                 }
-            }.padding(.horizontal, 4)
+            }.padding(.horizontal, 4).contentShape(Rectangle()).onTapGesture { setExpanded(!expanded) }
             if expanded {
                 HStack(spacing: 0) { ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { d in Text(d).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity) } }
                 let first = shownMonth, offset = (cal.component(.weekday, from: first) + 5) % 7, count = cal.range(of: .day, in: .month, for: first)!.count
@@ -330,11 +328,17 @@ struct CalendarStrip: View {
                     .onChange(of: cursor) { _, c in withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(c, anchor: .center) } }
                 }.frame(height: 48)
             }
+            Capsule().fill(Theme.dim.opacity(0.5)).frame(width: 36, height: 4).padding(.top, 2)  // the grabber: drag down for the month, up for the ribbon
         }
-        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 6)
+        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 5)
         .fixedSize(horizontal: false, vertical: true)
         .background(Theme.panel).overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .simultaneousGesture(DragGesture(minimumDistance: 14).onEnded { v in
+            guard abs(v.translation.height) > abs(v.translation.width) else { return }
+            if v.translation.height > 20 { setExpanded(true) } else if v.translation.height < -20 { setExpanded(false) }
+        })
     }
+    func setExpanded(_ on: Bool) { withAnimation(.spring(duration: 0.35)) { expanded = on; month = nil } }
     func dayCell(_ d: Date, weekday: Bool) -> some View {
         let isToday = d == today, isCursor = d == cursor, hasEvent = eventDays.contains(d), hasAny = marked.contains(d)
         return VStack(spacing: 2) {

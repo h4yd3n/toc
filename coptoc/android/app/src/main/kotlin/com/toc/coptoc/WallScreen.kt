@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import kotlinx.coroutines.launch
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.clip
@@ -403,7 +405,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val eventDays = remember(snap) { snap.events.flatMap { e -> val a = runCatching { java.time.Instant.parse(e.startAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull(); val b = runCatching { java.time.Instant.parse(e.endAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull()
         if (a == null || b == null) emptyList() else generateSequence(a) { it.plusDays(1) }.takeWhile { !it.isAfter(b) }.toList() }.toSet() }
     CalendarStrip(cursor = cursor, today = today, marked = markedDays, eventDays = eventDays, expanded = expanded, month = month,
-        onToggle = { expanded = !expanded; month = null }, onMonth = { m -> month = m },
+        onExpand = { on -> expanded = on; month = null }, onMonth = { m -> month = m },
         onPick = { d -> val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
     LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
         item { Label("S3 · OPERATIONS", "Agenda"); EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
@@ -435,16 +437,19 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
 /** The calendar strip: a continuous ribbon of days that keeps the agenda's day in the middle; tap the month name and it unfolds into the month. */
 @Composable
 fun CalendarStrip(cursor: java.time.LocalDate, today: java.time.LocalDate, marked: Set<java.time.LocalDate>, eventDays: Set<java.time.LocalDate>, expanded: Boolean, month: java.time.LocalDate?,
-                  onToggle: () -> Unit, onMonth: (java.time.LocalDate) -> Unit, onPick: (java.time.LocalDate) -> Unit) {
+                  onExpand: (Boolean) -> Unit, onMonth: (java.time.LocalDate) -> Unit, onPick: (java.time.LocalDate) -> Unit) {
     val shown = (if (expanded) month else null) ?: cursor.withDayOfMonth(1)
     // two months back to four past the last marked day — enough tape in both directions
     val ribbon = remember(today, marked) { val last = maxOf(marked.maxOrNull() ?: today, today); val start = today.minusDays(60); val n = java.time.temporal.ChronoUnit.DAYS.between(start, last.plusDays(120)).toInt(); List(n) { start.plusDays(it.toLong()) } }
     val cursorIdx = ribbon.indexOf(cursor).coerceAtLeast(0)
     val rowState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (cursorIdx - 3).coerceAtLeast(0))
     androidx.compose.runtime.LaunchedEffect(cursor, expanded) { if (!expanded) rowState.animateScrollToItem((cursorIdx - 3).coerceAtLeast(0)) }
-    Column(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 10.dp, vertical = 6.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(shown.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US)).uppercase() + (if (expanded) "  ▴" else "  ▾"), Modifier.clickable { onToggle() }, color = Palette.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.8.sp)
+    var drag by remember { mutableStateOf(0f) }
+    Column(Modifier.fillMaxWidth().background(Palette.panel)
+        .pointerInput(expanded) { detectVerticalDragGestures(onDragStart = { drag = 0f }, onDragEnd = { if (drag > 60f) onExpand(true) else if (drag < -60f) onExpand(false) }) { _, dy -> drag += dy } }  // drag down for the month, up for the ribbon
+        .padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 4.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth().clickable { onExpand(!expanded) }.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(shown.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US)).uppercase() + (if (expanded) "  ▴" else "  ▾"), color = Palette.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.8.sp)
             Spacer(Modifier.weight(1f))
             if (expanded) { Text("‹", Modifier.clickable { onMonth(shown.minusMonths(1)) }.padding(horizontal = 8.dp), color = Palette.dim, fontSize = 16.sp); Text("›", Modifier.clickable { onMonth(shown.plusMonths(1)) }.padding(horizontal = 8.dp), color = Palette.dim, fontSize = 16.sp) }
             else Text(if (cursor == today) "TODAY" else "${java.time.temporal.ChronoUnit.DAYS.between(today, cursor)} DAYS OUT", color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
@@ -470,6 +475,7 @@ fun CalendarStrip(cursor: java.time.LocalDate, today: java.time.LocalDate, marke
                 }
             }
         }
+        Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 2.dp).size(36.dp, 4.dp).background(Palette.dim.copy(alpha = .5f), RoundedCornerShape(50)))  // the grabber
     }
     HorizontalDivider(thickness = 0.5.dp, color = Palette.line)
 }
