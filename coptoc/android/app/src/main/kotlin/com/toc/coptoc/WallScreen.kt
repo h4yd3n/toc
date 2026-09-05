@@ -374,8 +374,8 @@ fun PhoneHeader(st: WallState, store: Store) {
 sealed class AgendaRow { data class Day(val day: java.time.LocalDate, val daysAway: Long) : AgendaRow(); data class Gap(val days: Long) : AgendaRow(); data class Ev(val e: CopEvent) : AgendaRow(); data class Tr(val t: Trip) : AgendaRow() }
 
 fun agendaRows(snap: Snapshot): List<AgendaRow> {
-    val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
-    fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrDefault(today)
+    val today = java.time.LocalDate.now()
+    fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrDefault(today)
     val byDay = sortedMapOf<java.time.LocalDate, MutableList<AgendaRow>>()
     snap.events.forEach { e -> byDay.getOrPut(dayOf(e.startAt)) { mutableListOf() }.add(AgendaRow.Ev(e)) }
     snap.trips.filter { it.eventId == null }.forEach { t -> byDay.getOrPut(maxOf(dayOf(t.departAt), today)) { mutableListOf() }.add(AgendaRow.Tr(t)) }
@@ -390,7 +390,7 @@ fun agendaRows(snap: Snapshot): List<AgendaRow> {
 @Composable
 fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+    val today = java.time.LocalDate.now()
     val rows = remember(snap) { agendaRows(snap) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -400,7 +400,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val cursor by remember { androidx.compose.runtime.derivedStateOf { val i = listState.firstVisibleItemIndex - 1; rows.take(maxOf(i + 1, 0)).asReversed().firstNotNullOfOrNull { r -> (r as? AgendaRow.Day)?.day ?: dayOfRow(r) } ?: today } }
     androidx.compose.runtime.LaunchedEffect(listState.firstVisibleItemIndex) { if (listState.firstVisibleItemIndex > 1) expanded = false }
     val markedDays = remember(rows) { rows.filterIsInstance<AgendaRow.Day>().map { it.day }.toSet() }
-    val eventDays = remember(snap) { snap.events.flatMap { e -> val a = runCatching { java.time.Instant.parse(e.startAt).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrNull(); val b = runCatching { java.time.Instant.parse(e.endAt).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrNull()
+    val eventDays = remember(snap) { snap.events.flatMap { e -> val a = runCatching { java.time.Instant.parse(e.startAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull(); val b = runCatching { java.time.Instant.parse(e.endAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrNull()
         if (a == null || b == null) emptyList() else generateSequence(a) { it.plusDays(1) }.takeWhile { !it.isAfter(b) }.toList() }.toSet() }
     CalendarStrip(cursor = cursor, today = today, marked = markedDays, eventDays = eventDays, expanded = expanded, month = month,
         onToggle = { expanded = !expanded; month = null }, onMonth = { m -> month = m },
@@ -432,11 +432,16 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
     }
 }
 
-/** The calendar strip: one week that follows the scroll; tap the month name and it unfolds into the month. */
+/** The calendar strip: a continuous ribbon of days that keeps the agenda's day in the middle; tap the month name and it unfolds into the month. */
 @Composable
 fun CalendarStrip(cursor: java.time.LocalDate, today: java.time.LocalDate, marked: Set<java.time.LocalDate>, eventDays: Set<java.time.LocalDate>, expanded: Boolean, month: java.time.LocalDate?,
                   onToggle: () -> Unit, onMonth: (java.time.LocalDate) -> Unit, onPick: (java.time.LocalDate) -> Unit) {
     val shown = (if (expanded) month else null) ?: cursor.withDayOfMonth(1)
+    // two months back to four past the last marked day — enough tape in both directions
+    val ribbon = remember(today, marked) { val last = maxOf(marked.maxOrNull() ?: today, today); val start = today.minusDays(60); val n = java.time.temporal.ChronoUnit.DAYS.between(start, last.plusDays(120)).toInt(); List(n) { start.plusDays(it.toLong()) } }
+    val cursorIdx = ribbon.indexOf(cursor).coerceAtLeast(0)
+    val rowState = androidx.compose.foundation.lazy.rememberLazyListState(initialFirstVisibleItemIndex = (cursorIdx - 3).coerceAtLeast(0))
+    androidx.compose.runtime.LaunchedEffect(cursor, expanded) { if (!expanded) rowState.animateScrollToItem((cursorIdx - 3).coerceAtLeast(0)) }
     Column(Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 10.dp, vertical = 6.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(shown.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale.US)).uppercase() + (if (expanded) "  ▴" else "  ▾"), Modifier.clickable { onToggle() }, color = Palette.text, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.8.sp)
@@ -444,28 +449,33 @@ fun CalendarStrip(cursor: java.time.LocalDate, today: java.time.LocalDate, marke
             if (expanded) { Text("‹", Modifier.clickable { onMonth(shown.minusMonths(1)) }.padding(horizontal = 8.dp), color = Palette.dim, fontSize = 16.sp); Text("›", Modifier.clickable { onMonth(shown.plusMonths(1)) }.padding(horizontal = 8.dp), color = Palette.dim, fontSize = 16.sp) }
             else Text(if (cursor == today) "TODAY" else "${java.time.temporal.ChronoUnit.DAYS.between(today, cursor)} DAYS OUT", color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
         }
-        Row { listOf("M", "T", "W", "T", "F", "S", "S").forEach { d -> Text(d, Modifier.weight(1f), color = Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
-        @Composable fun cell(d: java.time.LocalDate) {
+        @Composable fun cell(d: java.time.LocalDate, weekday: Boolean) {
             val isToday = d == today; val isCursor = d == cursor
             val bg by androidx.compose.animation.animateColorAsState(if (isCursor) Palette.blue else Color.Transparent, label = "cursor")
             Column(Modifier.clickable { onPick(d) }.padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (weekday) Text(d.dayOfWeek.getDisplayName(java.time.format.TextStyle.NARROW, java.util.Locale.US), color = if (isCursor) Palette.blue else Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                 Box(Modifier.size(26.dp).background(bg, RoundedCornerShape(50)).border(if (isToday) 1.5.dp else 0.dp, if (isToday) Palette.red else Color.Transparent, RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
                     Text("${d.dayOfMonth}", color = if (isCursor) Color.Black else if (d.isBefore(today)) Palette.dim else Palette.text, fontSize = 12.sp, fontWeight = if (isToday || isCursor) FontWeight.Bold else FontWeight.Normal, fontFamily = FontFamily.Monospace) }
                 Box(Modifier.size(5.dp).background(if (d in eventDays) Palette.purple else if (d in marked) Palette.blue2 else Color.Transparent, RoundedCornerShape(50))) }
         }
         if (expanded) {
+            Row { listOf("M", "T", "W", "T", "F", "S", "S").forEach { d -> Text(d, Modifier.weight(1f), color = Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center) } }
             val offset = (shown.dayOfWeek.value + 6) % 7; val count = shown.lengthOfMonth(); val rowsN = (offset + count + 6) / 7
-            for (r in 0 until rowsN) Row { for (c in 0 until 7) { val i = r * 7 + c - offset; Box(Modifier.weight(1f)) { if (i in 0 until count) cell(shown.plusDays(i.toLong())) } } }
+            for (r in 0 until rowsN) Row { for (c in 0 until 7) { val i = r * 7 + c - offset; Box(Modifier.weight(1f)) { if (i in 0 until count) cell(shown.plusDays(i.toLong()), weekday = false) } } }
         } else {
-            val weekStart = cursor.minusDays(((cursor.dayOfWeek.value + 6) % 7).toLong())
-            Row { for (i in 0 until 7) Box(Modifier.weight(1f)) { cell(weekStart.plusDays(i.toLong())) } }
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val cw = maxWidth / 7
+                androidx.compose.foundation.lazy.LazyRow(state = rowState, flingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(rowState)) {
+                    items(ribbon.size, key = { ribbon[it].toEpochDay() }) { i -> Box(Modifier.width(cw)) { cell(ribbon[i], weekday = true) } }
+                }
+            }
         }
     }
     HorizontalDivider(thickness = 0.5.dp, color = Palette.line)
 }
 
 fun dayOfRow(r: AgendaRow): java.time.LocalDate? {
-    val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
-    fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneOffset.UTC).toLocalDate() }.getOrDefault(today)
+    val today = java.time.LocalDate.now()
+    fun dayOf(iso: String) = runCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }.getOrDefault(today)
     return when (r) { is AgendaRow.Ev -> dayOf(r.e.startAt); is AgendaRow.Tr -> maxOf(dayOf(r.t.departAt), today); else -> null }
 }

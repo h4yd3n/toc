@@ -284,12 +284,18 @@ struct AgendaRow: View {
     }
 }
 
-/// The calendar strip: one week that follows the scroll, unfolding into the month on a tap of its name.
+/// The calendar strip: a continuous ribbon of days that keeps the agenda's day in the middle, unfolding into the month on a tap of its name.
 struct CalendarStrip: View {
     var cursor: Date; var today: Date; var marked: Set<Date>; var eventDays: Set<Date>
     @Binding var expanded: Bool; @Binding var month: Date?
     var onPick: (Date) -> Void
     let cal = Calendar(identifier: .gregorian)
+    var ribbon: [Date] {  // two months back to four past the last marked day — enough tape in both directions
+        let last = max(marked.max() ?? today, today)
+        let start = cal.date(byAdding: .day, value: -60, to: today)!, end = cal.date(byAdding: .day, value: 120, to: last)!
+        var out: [Date] = []; var d = start; while d <= end { out.append(d); d = cal.date(byAdding: .day, value: 1, to: d)! }
+        return out
+    }
     var body: some View {
         let shownMonth = expanded ? (month ?? cal.date(from: cal.dateComponents([.year, .month], from: cursor))!) : cal.date(from: cal.dateComponents([.year, .month], from: cursor))!
         VStack(spacing: 4) {
@@ -305,31 +311,40 @@ struct CalendarStrip: View {
                     Text(cursor == today ? "TODAY" : "\(cal.dateComponents([.day], from: today, to: cursor).day ?? 0) DAYS OUT").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim)
                 }
             }.padding(.horizontal, 4)
-            HStack(spacing: 0) { ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { d in Text(d).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity) } }
             if expanded {
+                HStack(spacing: 0) { ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { d in Text(d).font(.system(size: 8, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity) } }
                 let first = shownMonth, offset = (cal.component(.weekday, from: first) + 5) % 7, count = cal.range(of: .day, in: .month, for: first)!.count
                 ForEach(0..<Int(ceil(Double(offset + count) / 7)), id: \.self) { r in
                     HStack(spacing: 0) { ForEach(0..<7, id: \.self) { c in let i = r * 7 + c - offset
-                        if i >= 0 && i < count, let d = cal.date(byAdding: .day, value: i, to: first) { dayCell(d) } else { Color.clear.frame(maxWidth: .infinity).frame(height: 35) } } }
+                        if i >= 0 && i < count, let d = cal.date(byAdding: .day, value: i, to: first) { dayCell(d, weekday: false) } else { Color.clear.frame(maxWidth: .infinity).frame(height: 35) } } }
                 }
             } else {
-                let weekStart = cal.date(byAdding: .day, value: -((cal.component(.weekday, from: cursor) + 5) % 7), to: cursor)!
-                HStack(spacing: 0) { ForEach(0..<7, id: \.self) { i in dayCell(cal.date(byAdding: .day, value: i, to: weekStart)!) } }
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 0) {
+                            ForEach(ribbon, id: \.self) { d in dayCell(d, weekday: true).containerRelativeFrame(.horizontal, count: 7, spacing: 0).id(d) }
+                        }.scrollTargetLayout()
+                    }
+                    .scrollTargetBehavior(.viewAligned)
+                    .onAppear { proxy.scrollTo(cursor, anchor: .center) }
+                    .onChange(of: cursor) { _, c in withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(c, anchor: .center) } }
+                }.frame(height: 48)
             }
         }
         .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 6)
         .fixedSize(horizontal: false, vertical: true)
         .background(Theme.panel).overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
-    func dayCell(_ d: Date) -> some View {
+    func dayCell(_ d: Date, weekday: Bool) -> some View {
         let isToday = d == today, isCursor = d == cursor, hasEvent = eventDays.contains(d), hasAny = marked.contains(d)
         return VStack(spacing: 2) {
+            if weekday { Text(d.formatted(.dateTime.weekday(.narrow))).font(.system(size: 8, design: .monospaced)).foregroundStyle(isCursor ? Theme.blue : Theme.dim) }
             Text("\(cal.component(.day, from: d))").font(.system(size: 12, weight: isToday || isCursor ? .bold : .regular, design: .monospaced))
                 .foregroundStyle(isCursor ? Color.black : d < today ? Theme.dim : .primary)
                 .frame(width: 26, height: 26).background(isCursor ? Theme.blue : .clear, in: Circle()).overlay(Circle().stroke(isToday ? Theme.red : .clear, lineWidth: 1.5))
                 .animation(.easeInOut(duration: 0.25), value: isCursor)
             Circle().fill(hasEvent ? Theme.purple : hasAny ? Theme.blue : .clear).frame(width: 5, height: 5)
-        }.frame(maxWidth: .infinity).frame(height: 35).contentShape(Rectangle()).onTapGesture { onPick(d) }
+        }.frame(maxWidth: .infinity).frame(height: weekday ? 48 : 35).contentShape(Rectangle()).onTapGesture { onPick(d) }
     }
 }
 
