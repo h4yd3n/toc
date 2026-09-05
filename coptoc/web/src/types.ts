@@ -96,7 +96,7 @@ export interface Brief {
   outgoing_notes: string | null; nstr: boolean; acknowledgement: { required_item_ids: string[]; by: string | null; at: string | null }; generated_at: string
 }
 export type Health = 'green' | 'amber' | 'red'
-export interface SectionCfg { code: 'S1' | 'S2' | 'S3' | 'S4' | 'S6'; title: string; hint: string; enabled: boolean }
+export interface SectionCfg { code: 'S1' | 'S2' | 'S3' | 'S4' | 'S6'; title: string; hint: string; enabled: boolean; label: string; show_code: boolean }
 export interface SupplyLine { id: string; location_id: string | null; location_name: string; category: string; item: string; on_hand: number; required: number; unit: string; pct: number; status: Health; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface Shipment { id: string; description: string; category: string; quantity: string; from_name: string; to_location_id: string | null; to_name: string; eta: string; hours_to_eta: number
   status: 'planned' | 'in_transit' | 'delayed' | 'arrived' | 'cancelled'; priority: 'routine' | 'priority' | 'urgent'; carrier: string; ref: string | null; health: Health; note: string; updated_by: string; updated_at: string | null }
@@ -104,7 +104,7 @@ export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Sh
 export interface SystemLine { id: string; name: string; category: string; location_id: string | null; location_name: string; pace: 'primary' | 'alternate' | 'contingency' | 'emergency' | null
   status: 'up' | 'degraded' | 'down'; health: Health; since: string | null; hours: number; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
-export interface Snapshot { warnings: Warning[]; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
+export interface Snapshot { warnings: Warning[]; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }

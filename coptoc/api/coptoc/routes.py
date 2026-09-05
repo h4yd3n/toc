@@ -208,6 +208,24 @@ class SettingValue(BaseModel):
     value: str = Field(min_length=1, max_length=4000)
 
 
+class ProfileChoice(BaseModel):
+    profile: Literal["military", "corporate"]
+
+
+@router.put("/profile")
+async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """§11.2: switch the deployment's shape and load the matching sample data. Military: S1–S6 and the brigade.
+    Corporate: S1–S3 as Personnel / Intelligence / Operations and the executive-protection sample. Battle Captain only; wipes the working data."""
+    require_role(x_toc_role, SETTINGS_OWNERS, "Changing the profile")
+    from .sections import dataset_for
+    await toc_settings.store(session, "TOC_PROFILE", body.profile, actor_from(x_toc_actor))
+    await reseed(session, dataset_for(body.profile))
+    await sync_standing_requirements(session)
+    await get_ledger().append_event(content_id="setting:TOC_PROFILE", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state=body.profile, reason=f"Profile set to {body.profile}; sample data reloaded", metadata={"name": "TOC_PROFILE"})
+    return {"profile": body.profile, "dataset": dataset_for(body.profile)}
+
+
 @router.get("/settings")
 async def list_settings(x_toc_role: Optional[str] = Header(None)):
     """What is set and where (env or stored), never a secret's value."""

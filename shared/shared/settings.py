@@ -32,6 +32,7 @@ KNOWN: List[Dict[str, Any]] = [
     {"name": "TWILIO_FROM",        "label": "Twilio From number",   "group": "comms",   "secret": False, "needed_by": ["sms"],    "help": "E.164, e.g. +14155550100."},
     {"name": "SLACK_WEBHOOK_URL",  "label": "Slack incoming webhook", "group": "comms", "secret": True,  "needed_by": ["chat"],   "help": "Roll-call broadcasts to a channel."},
     {"name": "TOC_PUBLIC_URL",     "label": "Public URL",           "group": "comms",   "secret": False, "needed_by": ["sms", "chat"], "help": "Where check-in links point. Must be reachable from a phone."},
+    {"name": "TOC_PROFILE",        "label": "Profile",              "group": "sections", "secret": False, "needed_by": [],       "help": "military (S1–S6, the brigade) or corporate (S1–S3, the executive-protection sample). The wall's menu sets this and reloads the sample data."},
     {"name": "TOC_SECTIONS",       "label": "Staff sections",       "group": "sections", "secret": False, "needed_by": [],       "help": "Comma list. S1,S2,S3 always on; add S4,S6 for an operations center."},
     {"name": "TOC_SECTION_TITLES", "label": "Section titles",       "group": "sections", "secret": False, "needed_by": [],       "help": "Renames, e.g. S4=SUPPLY,S6=COMMS."},
 ]

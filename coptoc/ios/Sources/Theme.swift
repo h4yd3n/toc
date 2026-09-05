@@ -40,8 +40,10 @@ struct PanelHead: View {
     var code: String; var title: String; var hint: String? = nil
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(code).font(.system(size: 13, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.blue)
-                .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+            if !code.isEmpty {
+                Text(code).font(.system(size: 13, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.blue)
+                    .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+            }
             Text(title).font(.system(size: 12, weight: .bold, design: .monospaced)).tracking(2)
             Spacer()
             if let hint, !store.leanLabels { Text(hint).font(.system(size: 10)).foregroundStyle(Theme.dim) }

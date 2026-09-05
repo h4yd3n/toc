@@ -19,6 +19,17 @@ from sqlalchemy.orm import Mapped, mapped_column
 from shared.database import Base
 
 SECTION_TITLES = {"S1": "PERSONNEL", "S2": "INTELLIGENCE", "S3": "OPERATIONS", "S4": "LOGISTICS", "S6": "SIGNAL"}
+PROFILES = ("military", "corporate")
+
+
+def profile() -> str:
+    """`military`: S1–S6 and the brigade. `corporate`: S1–S3 and the executive-protection sample — the product as it was before S4/S6."""
+    v = (settings.get("TOC_PROFILE") or "military").lower()
+    return v if v in PROFILES else "military"
+
+
+def dataset_for(prof: str) -> str:
+    return "corporate" if prof == "corporate" else "cab"
 SECTION_HINTS = {"S1": "Blue force", "S2": "Sigtoc", "S3": "Travel & events", "S4": "Supply & equipment", "S6": "Comms & systems"}
 STATUS_RANK = {"green": 0, "amber": 1, "red": 2}
 SUPPLY_CATEGORIES = ("fuel", "water", "rations", "medical", "ammunition", "parts", "equipment", "other")
@@ -29,12 +40,17 @@ PACE = ("primary", "alternate", "contingency", "emergency")
 def sections_config() -> List[Dict[str, Any]]:
     """Which staff sections this deployment runs, in wall order. `TOC_SECTIONS=S1,S2,S3` for a commercial desk;
     `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` to rename. S1–S3 are always present: the COP is built on them."""
-    enabled = [s.strip().upper() for s in (settings.get("TOC_SECTIONS") or "S1,S2,S3,S4,S6").split(",") if s.strip()]
+    prof = profile()
+    default = "S1,S2,S3,S4,S6" if prof == "military" else "S1,S2,S3"
+    enabled = [s.strip().upper() for s in (settings.get("TOC_SECTIONS") or default).split(",") if s.strip()]
+    if prof == "corporate":
+        enabled = [c for c in enabled if c in ("S1", "S2", "S3")]  # a corporate desk has no S4 or S6, whatever the list says
     titles = dict(SECTION_TITLES)
     for pair in (settings.get("TOC_SECTION_TITLES") or "").split(","):
         if "=" in pair:
             k, v = pair.split("=", 1); titles[k.strip().upper()] = v.strip().upper()
-    return [{"code": c, "title": titles[c], "hint": SECTION_HINTS[c], "enabled": c in enabled or c in ("S1", "S2", "S3")} for c in ("S1", "S2", "S3", "S4", "S6")]
+    return [{"code": c, "title": titles[c], "hint": SECTION_HINTS[c], "enabled": c in enabled or c in ("S1", "S2", "S3"),
+             "label": c, "show_code": True} for c in ("S1", "S2", "S3", "S4", "S6")]  # both profiles speak in staff codes — the author's call: same product, S4/S6 hidden
 
 
 class SupplyRow(Base):

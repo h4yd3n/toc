@@ -168,7 +168,7 @@ struct TabBar: View {
                                 else { Circle().fill(c).frame(width: 8, height: 8).offset(x: 6, y: -3) }
                             }
                         }
-                        Text(t).font(.system(size: 10, weight: on ? .semibold : .regular))
+                        Text(t == "COP" ? "COP" : store.sectionLabel(t)).font(.system(size: 10, weight: on ? .semibold : .regular))
                     }
                     .foregroundStyle(on ? Theme.blue : Theme.dim).frame(maxWidth: .infinity).padding(.vertical, 8)
                     .background(on ? Theme.line.opacity(0.9) : .clear, in: Capsule())

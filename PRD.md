@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.22
+**Version:** 3.23
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -473,9 +473,11 @@ The native apps are native for a reason: the map has to be fluid and the animati
 2. **Sigtoc** — S2 exists to feed the wall; more collectors and a real drafter path come after the wall is solid.
 3. **Modtoc** — last. ROOST (osprey: rules engine used by Discord/Bluesky/Matrix; coop: review console used by Notion) covers most of this ground. Modtoc stays as-is; evaluate adopting ROOST before investing further.
 
-## 11.2 The section set is configuration
+## 11.2 The profile and the section set are configuration
 
-`TOC_SECTIONS=S1,S2,S3,S4,S6` (default) lists the staff sections a deployment runs; `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` renames. S1–S3 cannot be switched off — the COP is built on them. The snapshot carries `sections`; the wall shows a rail button per enabled section, and the phones a tab: six for an operations center, four for a commercial desk that only tracks executives.
+**The profile (2026-09-05).** A menu beside the role menu on the wall — Battle Captain only — switches the deployment's shape and reloads the sample data. *Military*: S1–S6 by their staff codes, and the Combat Aviation Brigade (§4). *Corporate*: the product as it was before S4 and S6 — S1–S3 by the same names, the flat team list, and the executive-protection sample. The choice is the `TOC_PROFILE` setting (§11.3); the phones read it from the snapshot and show four tabs or six. Same model, same code, two shapes — the author's decision after first trying one dataset for both.
+
+`TOC_SECTIONS` narrows the list further and `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` renames; S1–S3 cannot be switched off, and a corporate profile never shows S4 or S6 whatever the list says.
 
 ## 11.3 Settings — keys and options entered from the wall **[BUILT]**
 
@@ -598,6 +600,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.23** — the profile: a Military / Corporate menu beside the wordmark that reshapes the sections and reloads the matching sample data; corporate is the product as it was before S4 and S6.
 - **v3.22** — the sample force is a Combat Aviation Brigade: task organization on S1 (brigade → battalions → companies) on all three clients; S4 and S6 seeded the way a brigade keeps them (classes of supply, aircraft readiness, PACE per command post). No corporate/military fork.
 - **v3.21** — §11.3 settings: keys and options entered from the wall, write-only, encrypted at rest, environment wins; the sources drawer moved under SETTINGS.
 - **v3.20** — S4 Logistics and S6 Signal reinstated as background sections for a generic operations center: supply lines, shipments, systems with PACE, roll-ups by exception, panels on the wall and tabs on the phones; the section set as configuration. iOS tab bar drawn by the app.

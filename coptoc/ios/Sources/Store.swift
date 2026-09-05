@@ -54,6 +54,10 @@ final class COPStore {
     func person(_ id: String?) -> Person? { snapshot?.people.first { $0.id == id } }
     func threat(_ id: String?) -> Threat? { snapshot?.threats.first { $0.id == id } }
     func trip(_ id: String?) -> Trip? { snapshot?.trips.first { $0.id == id } }
+    // §11.2 what a section is called here: "S1" on a military desk, nothing (just the title) on a corporate one
+    func sectionCode(_ code: String) -> String { (snapshot?.sections?.first { $0.code == code }?.showCode ?? true) ? code : "" }
+    func sectionTitle(_ code: String, _ fallback: String) -> String { snapshot?.sections?.first { $0.code == code }?.title ?? fallback }
+    func sectionLabel(_ code: String) -> String { snapshot?.sections?.first { $0.code == code }?.label ?? code }
     func event(_ id: String?) -> CopEvent? { snapshot?.events.first { $0.id == id } }
     func incident(_ id: String?) -> Incident? { snapshot?.incidents.first { $0.id == id } }
     var openIncidents: [Incident] { snapshot?.incidents.filter { $0.status == "open" } ?? [] }

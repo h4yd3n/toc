@@ -60,6 +60,12 @@ export default function App() {
   const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
   const sectionOn = (code: string) => snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
+  const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code   // what the rail says: "S1" or "PEOPLE"
+  const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''  // a corporate desk drops the staff codes
+  const switchProfile = (profile: 'military' | 'corporate') => {
+    if (!window.confirm(`Switch to the ${profile.toUpperCase()} profile? This reloads the sample data — ${profile === 'military' ? 'the Combat Aviation Brigade with S4 and S6' : 'the executive-protection sample, S1–S3 only'}.`)) return
+    act(`switching to the ${profile} profile`, async () => { await api.setProfile(profile); window.location.reload() })
+  }
   const [showSettings, setShowSettings] = useState(false)
   const [showDefcon, setShowDefcon] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
@@ -94,9 +100,12 @@ export default function App() {
   const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
 
   return (
-    <div className={`wall posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
+        {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
+          <option value="military">Military</option><option value="corporate">Corporate</option>
+        </select>}
         <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">DEFCON {s?.defcon ?? '—'}</button>
         {showDefcon && s && <div className="defcon" onClick={e => e.stopPropagation()}>
           <div className="dform-head">DEFCON <span className="dim">the wall reads the worst site · set a site's level from its card</span></div>
@@ -129,16 +138,16 @@ export default function App() {
       <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
       <nav className="rail rail-left">
-        <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title="S1 Personnel">S1</button>
+        <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}</button>
         {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title="S2 Intelligence">S2{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
+        <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
         {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
         {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
       </nav>
       <aside className={`left ${leftOpen ? 'open' : ''}`}>
-        <PanelHead code="S1" title="PERSONNEL" hint="Blue Force" onClose={() => setLeftOpen(false)}>{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
+        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
         {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         <div className="layer-toggles">
@@ -214,7 +223,7 @@ export default function App() {
         </>}
       </aside>
       <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`}>
-        <PanelHead code="S2" title="INTELLIGENCE" hint="Sigtoc" onClose={() => setRightPanel(null)}>
+        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
@@ -257,7 +266,7 @@ export default function App() {
 
       <footer className="bottom">
         <div className="s3">
-          <PanelHead code="S3" title="OPERATIONS" hint="Events · Travel" inline><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
+          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
           <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
         </div>
@@ -297,7 +306,7 @@ function Stat({ label, v, accent }: { label: string; v?: number; accent?: string
   return <div className={`stat ${accent ?? ''}`} data-k={label}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
 }
 function PanelHead({ code, title, hint, inline, children, onClose }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode; onClose?: () => void }) {
-  return <div className={`panel-head ${inline ? 'inline' : ''}`}><span className="code">{code}</span><span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>
+  return <div className={`panel-head ${inline ? 'inline' : ''}`}>{code && <span className="code">{code}</span>}<span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>
 }
 function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 

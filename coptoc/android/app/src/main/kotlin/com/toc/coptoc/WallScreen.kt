@@ -126,7 +126,7 @@ fun Header(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S1Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    Label("S1 · PERSONNEL", "Blue Force")
+    Label(sectionHead(snap, "S1", "PERSONNEL"), "Blue Force")
     EstimateLine(snap.estimates.firstOrNull { it.section == "S1" })
     var openUnits by remember { mutableStateOf(setOf<String>()) }
     val roots = snap.teams.filter { t -> t.parentId == null && snap.teams.any { it.parentId == t.id } }
@@ -174,7 +174,7 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    Label("S2 · INTELLIGENCE", "Sigtoc", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
+    Label(sectionHead(st.snap, "S2", "INTELLIGENCE"), "Sigtoc", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
     LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {
         val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
@@ -234,7 +234,7 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S3Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
-    Label("S3 · OPERATIONS", "Events · Travel")
+    Label(sectionHead(st.snap, "S3", "OPERATIONS"), "Events · Travel")
     androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(snap.events, key = { it.id }) { e -> Card(Palette.purple, selected = (st.selection as? Selection.EventSel)?.id == e.id, onClick = { store.select(Selection.EventSel(e.id)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -310,6 +310,9 @@ fun OperationSheet(op: Operation, st: WallState, store: Store, onClose: () -> Un
 
 enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) { COP("COP", Icons.Filled.Place), S1("S1", Icons.Filled.Person), S2("S2", Icons.Filled.Search), S3("S3", Icons.Filled.DateRange), S4("S4", Icons.Filled.Build), S6("S6", Icons.Filled.Call) }
 fun qty(d: Double): String = if (d == Math.floor(d) && Math.abs(d) < 1e12) "%,d".format(d.toLong()) else "%.1f".format(d)
+/** §11.2 what a section is called here: "S1 · PERSONNEL" on a military desk, "PERSONNEL" on a corporate one. */
+fun sectionHead(snap: Snapshot?, code: String, fallback: String): String { val c = snap?.sections?.firstOrNull { it.code == code }; val title = c?.title ?: fallback; return if (c?.showCode != false) "$code · $title" else title }
+fun sectionLabel(snap: Snapshot?, code: String): String = snap?.sections?.firstOrNull { it.code == code }?.label ?: code
 fun healthColor(h: String) = when (h) { "red" -> Palette.red; "amber" -> Palette.amber; else -> Palette.green }
 /** The enabled sections, in wall order: six tabs for an operations center, four for a commercial desk (`TOC_SECTIONS`). */
 fun enabledTabs(snap: Snapshot?): List<Tab> = Tab.values().filter { t -> t == Tab.COP || (snap?.sections?.firstOrNull { it.code == t.label }?.enabled ?: (t != Tab.S4 && t != Tab.S6)) }
@@ -351,7 +354,7 @@ fun PhoneScreen(st: WallState, store: Store) {
                     Box { Icon(t.icon, contentDescription = t.label, tint = if (on) Palette.blue2 else Palette.dim, modifier = Modifier.size(22.dp))
                         if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp)
                         dot?.let { Box(Modifier.offset(x = 16.dp, y = (-3).dp).size(8.dp).background(healthColor(it), RoundedCornerShape(50))) } }
-                    Text(t.label, color = if (on) Palette.blue2 else Palette.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                    Text(if (t == Tab.COP) "COP" else sectionLabel(snap, t.label), color = if (on) Palette.blue2 else Palette.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                 }
             }
         }
@@ -437,7 +440,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
         onExpand = { on -> expanded = on; month = null }, onMonth = { m -> month = m },
         onPick = { d -> val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
     LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
-        item { Label("S3 · OPERATIONS", "Agenda"); EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
+        item { Label(sectionHead(snap, "S3", "OPERATIONS"), "Agenda"); EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
         items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
             when (val r = rows[i]) {
                 is AgendaRow.Day -> Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

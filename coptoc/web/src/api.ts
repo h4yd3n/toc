@@ -92,3 +92,4 @@ export const updateSystem = (id: string, body: { status?: string; pace?: string;
 export const listSettings = () => req<{ settings: SettingInfo[]; note: string }>('GET', '/v1/cop/settings')
 export const putSetting = (name: string, value: string) => req<SettingInfo>('PUT', `/v1/cop/settings/${name}`, { value })
 export const clearSetting = (name: string) => req<SettingInfo>('DELETE', `/v1/cop/settings/${name}`)
+export const setProfile = (profile: 'military' | 'corporate') => req<{ profile: string; dataset: string }>('PUT', '/v1/cop/profile', { profile })

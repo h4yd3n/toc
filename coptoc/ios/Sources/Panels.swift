@@ -4,7 +4,7 @@ struct PersonnelScreen: View {
     @Environment(COPStore.self) private var store
     var body: some View {
         List {
-            Section { PanelHead(code: "S1", title: "PERSONNEL", hint: "Blue Force"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
+            Section { PanelHead(code: store.sectionCode("S1"), title: store.sectionTitle("S1", "PERSONNEL"), hint: "Blue Force"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
             if !store.openIncidents.isEmpty {
                 Section(header: SectionLabel(text: "S6 · ROLL CALLS")) {
                     ForEach(store.openIncidents) { inc in
@@ -66,7 +66,7 @@ struct IntelScreen: View {
     var body: some View {
         List {
             Section {
-                HStack { PanelHead(code: "S2", title: "INTELLIGENCE", hint: "Sigtoc")
+                HStack { PanelHead(code: store.sectionCode("S2"), title: store.sectionTitle("S2", "INTELLIGENCE"), hint: "Sigtoc")
                     Button("⟳ COLLECT") { store.act("collecting") { try await store.client.refreshIntel() } }
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S2" })
@@ -207,7 +207,7 @@ struct OpsScreen: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     Color.clear.frame(height: 0).background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .named("agenda")).minY) })
-                    PanelHead(code: "S3", title: "OPERATIONS", hint: "Agenda").padding(.horizontal, 14).padding(.top, 8)
+                    PanelHead(code: store.sectionCode("S3"), title: store.sectionTitle("S3", "OPERATIONS"), hint: "Agenda").padding(.horizontal, 14).padding(.top, 8)
                     EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }).padding(.horizontal, 14)
                     ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
                         if idx > 0, let gap = cal.dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {

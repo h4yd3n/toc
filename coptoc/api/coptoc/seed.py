@@ -347,7 +347,10 @@ DATASETS = ("cab", "corporate")
 async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     """`cab` (default): the Combat Aviation Brigade — the force this TOC is organized around (§4, §7, §8).
     `corporate`: the original executive-protection sample, kept for the test suite and as a second shape of the same model."""
-    dataset = (dataset or os.environ.get("TOC_SEED", "cab")).lower()
+    if not dataset:
+        from .sections import dataset_for, profile
+        dataset = os.environ.get("TOC_SEED") or dataset_for(profile())
+    dataset = dataset.lower()
     if dataset not in DATASETS:
         raise ValueError(f"dataset must be one of {DATASETS}")
     if dataset == "corporate":
@@ -363,6 +366,15 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         from . import seed_cab
         await seed_cab.populate(session, now)
         return
+    # the corporate desk follows the sun (§3.1); undo a brigade's day/night watch if that is what was loaded before
+    import json as _json
+    from .watch import FOLLOW_THE_SUN, WatchRow, get_config
+    cfg = await get_config(session)
+    if cfg.pattern != "follow_the_sun":
+        cfg.pattern, cfg.watches_json = "follow_the_sun", _json.dumps(FOLLOW_THE_SUN)
+        for w in (await session.execute(select(WatchRow))).scalars():
+            await session.delete(w)
+        await session.flush()
     session.add_all([LocationRow(id=i, name=n, type=t, lat=la, lon=lo, city=c, country=co, posture=p, sensitivity=s)
                      for i, n, t, la, lo, c, co, p, s in LOCATIONS])
     session.add_all([TeamRow(id=i, name=n, location_id=l, function=f, is_security=s) for i, n, l, f, s, _ in TEAMS])
