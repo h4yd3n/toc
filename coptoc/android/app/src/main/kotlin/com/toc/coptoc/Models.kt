@@ -14,7 +14,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Site(val id: String, val name: String, val type: String = "", val lat: Double, val lon: Double, val city: String = "", val country: String = "", val posture: String = "normal",
                               val effectivePosture: String = "normal", val sensitivity: String = "standard", val assigned: Int = 0, val present: Int = 0, val securityOnShift: Int = 0, val vipsPresent: Int = 0,
                               val threatIdsInArea: List<String> = emptyList(), val confirmedThreatIds: List<String> = emptyList())
-@Serializable data class Person(val id: String, val name: String, val role: String = "", val teamName: String = "", val homeLocationId: String = "", val locationId: String? = null, val isVip: Boolean = false,
+@Serializable data class Person(val teamId: String = "", val id: String, val name: String, val role: String = "", val teamName: String = "", val homeLocationId: String = "", val locationId: String? = null, val isVip: Boolean = false,
                                 val onShift: Boolean = false, val status: String = "at_post", val lat: Double = 0.0, val lon: Double = 0.0, val tripId: String? = null, val positionSource: String = "derived",
                                 val checkinAgeH: Double? = null, val checkinStale: Boolean = false, val lastCheckinNote: String? = null, val threatIdsInArea: List<String> = emptyList(),
                                 val phone: String? = null, val email: String? = null, val incidentStatus: String? = null, val availability: String = "available")
@@ -53,7 +53,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class PaceSite(val locationName: String = "", val nets: Map<String, String> = emptyMap(), val inUse: String? = null)
 @Serializable data class S6Counts(val down: Int = 0, val degraded: Int = 0, val total: Int = 0)
 @Serializable data class S6Board(val status: String = "green", val systems: List<SystemLine> = emptyList(), val pace: Map<String, PaceSite> = emptyMap(), val exceptions: List<String> = emptyList(), val counts: S6Counts = S6Counts())
-@Serializable data class Snapshot(val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
+@Serializable data class Team(val id: String, val name: String = "", val locationId: String = "", val function: String = "", val isSecurity: Boolean = false, val parentId: String? = null, val echelon: String = "company", val short: String? = null, val equipment: String? = null)
+@Serializable data class Snapshot(val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList())

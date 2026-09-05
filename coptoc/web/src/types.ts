@@ -10,7 +10,7 @@ export interface Location {
   assigned: number; present: number; security_on_shift: number; vips_present: number
   threat_ids_in_area: string[]; confirmed_threat_ids: string[]
 }
-export interface Team { id: string; name: string; location_id: string; function: string; is_security: boolean }
+export interface Team { id: string; name: string; location_id: string; function: string; is_security: boolean; parent_id: string | null; echelon: 'brigade' | 'battalion' | 'company' | 'team'; short: string | null; equipment: string | null }
 export interface Person { availability: 'on_shift' | 'off_duty' | 'available' | 'unreachable';
   id: string; name: string; role: string; team_id: string; team_name: string
   home_location_id: string; location_id: string | null; is_vip: boolean

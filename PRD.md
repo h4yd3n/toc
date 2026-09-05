@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.21
+**Version:** 3.22
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -163,6 +163,12 @@ change brief is the Battle Captain's product across all sections, once per watch
 is drawn from the same picture the INTSUM summarizes.
 
 ## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
+
+**[BUILT] — the task organization (2026-09-04).** A team can have a parent, an echelon (brigade / battalion / company), a short designation ("B/1", "3 AHB"), and an equipment line ("AH-64E ×8"). The S1 panel and the S1 tab lead with the task organization: brigade → battalions → companies, each with present/assigned, how many are away, and a red count for anyone unreachable or under a confirmed threat. Battalions fold and unfold; a company selects its site on the map. A flat set of teams (no parents) shows no tree and the team lists stand as before.
+
+**The sample force is a Combat Aviation Brigade.** The author's decision (2026-09-04): one dataset, organized the way a heavy CAB is, not a corporate/military fork — a commercial deployment hides the sections it does not run (§11.2). HHC and five battalions, each with a headquarters company and four line companies: two attack reconnaissance battalions (AH-64E), an assault helicopter battalion (UH-60M), a general support aviation battalion (CH-47F heavy lift, command aviation, air ambulance), and an aviation support battalion (distribution, aviation intermediate maintenance, network support, ground maintenance). Roughly 2,400 people; the ASB together with every battalion's D company (aviation unit maintenance) is well over half of them — the author's experience of where a CAB's headcount sits. Headcounts and tail counts are approximate to a generic table of organization, not any real unit's; every name is invented. Home station is Campbell Army Airfield; the deployed sites are an exercise area (FOB Warrior, FARP Eagle, a range complex). Site types gained `airfield`, `cp`, `fob`, `farp`, `range`. The original executive-protection sample is kept as `dataset=corporate` for the test suite and as a second shape of the same model.
+
+**[LATER]** unit positions from GPS telemetry (JBC-P / vehicle trackers) so companies move on the map the way travelers do; equipment readiness by bumper number.
 
 **Locations.** HQ, offices, data centers, executive residences, event venues. Each has a position, a type, a posture (five levels, read as DEFCON 5 → 1; see §3), and a sensitivity tier. Residences are restricted-tier: they exist because the security team needs them, and they are never shown to a general audience.
 
@@ -491,7 +497,7 @@ Connecting a data source or a channel is a key, and keys used to live only in th
 | Entity | Key fields |
 | :--- | :--- |
 | `Location` | `id`, `name`, `type` (hq / office / datacenter / residence / venue), `lat`, `lon`, `city`, `country`, `posture` (normal / guarded / elevated / high / critical), `sensitivity` |
-| `Team` | `id`, `name`, `location_id`, `function`, `is_security` |
+| `Team` | `id`, `name`, `location_id`, `function`, `is_security`, `parent_id`, `echelon` (brigade / battalion / company / team), `short`, `equipment` |
 | `Person` | `id`, `name`, `role`, `team_id`, `is_vip`, `on_shift`, `shift_role` |
 
 **S4 / S6:**
@@ -592,6 +598,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.22** — the sample force is a Combat Aviation Brigade: task organization on S1 (brigade → battalions → companies) on all three clients; S4 and S6 seeded the way a brigade keeps them (classes of supply, aircraft readiness, PACE per command post). No corporate/military fork.
 - **v3.21** — §11.3 settings: keys and options entered from the wall, write-only, encrypted at rest, environment wins; the sources drawer moved under SETTINGS.
 - **v3.20** — S4 Logistics and S6 Signal reinstated as background sections for a generic operations center: supply lines, shipments, systems with PACE, roll-ups by exception, panels on the wall and tabs on the phones; the section set as configuration. iOS tab bar drawn by the app.
 - **v3.19** — S3 itineraries: optional legs (flight / ground / lodging) on every business trip; the traveler's position follows the current leg; CSV and pasted-confirmation imports; the phone calendar as a continuous day ribbon that unfolds into the month.

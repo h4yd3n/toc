@@ -1392,7 +1392,11 @@ async def import_badge_events(body: BadgeBatch, session: AsyncSession = Depends(
 
 
 @router.post("/seed")
-async def seed(session: AsyncSession = Depends(get_session)):
-    """Dev only: wipe and reload synthetic data."""
-    await reseed(session)
-    return {"status": "reseeded"}
+async def seed(dataset: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    """Dev only: wipe and reload synthetic data. `dataset=cab` (default, the Combat Aviation Brigade) or `corporate`."""
+    try:
+        await reseed(session, dataset)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await sync_standing_requirements(session)
+    return {"status": "reseeded", "dataset": (dataset or os.environ.get("TOC_SEED", "cab")).lower()}

@@ -71,7 +71,7 @@ struct MapScreen: View {
 
 struct SiteMarker: View {
     var site: Site
-    var glyph: String { ["hq": "◆", "office": "■", "datacenter": "▣", "residence": "⌂", "venue": "★"][site.type] ?? "■" }
+    var glyph: String { ["hq": "◆", "office": "■", "datacenter": "▣", "residence": "⌂", "airfield": "✈", "cp": "▲", "fob": "⬢", "farp": "⛽", "range": "◎", "venue": "★"][site.type] ?? "■" }
     var body: some View {
         let color = site.effectivePosture == "normal" ? Theme.blue : Theme.posture(site.effectivePosture)
         ZStack(alignment: .topTrailing) {

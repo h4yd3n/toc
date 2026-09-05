@@ -10,6 +10,7 @@ import { FlashStrip, WarningsSection } from './Warnings'
 import { ImportDrawer, PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
 import { S4Panel, S6Panel } from './Sections'
+import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
@@ -156,6 +157,7 @@ export default function App() {
               </li>))}
           </ul>
         </>}
+        {snap && <TaskOrg teams={snap.teams} people={snap.people} onSelect={setSel} sel={sel} />}
         <SectionLabel>LOCATIONS</SectionLabel>
         <ul className="list">
           {snap?.locations.map(l => (

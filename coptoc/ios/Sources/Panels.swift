@@ -17,6 +17,7 @@ struct PersonnelScreen: View {
                     }
                 }.listRowBackground(Theme.red.opacity(0.08))
             }
+            TaskOrgSection()
             Section(header: SectionLabel(text: "LOCATIONS")) {
                 ForEach(store.snapshot?.locations ?? []) { l in
                     Button { store.selection = .site(l.id) } label: {
@@ -499,5 +500,44 @@ struct SignalScreen: View {
             Color.clear.frame(height: 70).listRowBackground(Theme.bg)
         }
         .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg)
+    }
+}
+
+
+// MARK: - §4 the task organization on the phone: brigade → battalions → companies
+
+struct TaskOrgSection: View {
+    @Environment(COPStore.self) private var store
+    @State private var open: Set<String> = []
+    var body: some View {
+        let teams = store.snapshot?.teams ?? []
+        let roots = teams.filter { t in t.parentId == nil && teams.contains { c in c.parentId == t.id } }
+        if !roots.isEmpty {
+            Section(header: SectionLabel(text: "TASK ORGANIZATION · present/assigned · ↗ away")) {
+                ForEach(roots) { r in rows(r, depth: 0, teams: teams) }
+            }.listRowBackground(Theme.bg)
+        }
+    }
+    func members(_ id: String, _ teams: [Team]) -> [Person] {
+        let people = store.snapshot?.people ?? []
+        return people.filter { $0.teamId == id } + teams.filter { $0.parentId == id }.flatMap { members($0.id, teams) }
+    }
+    @ViewBuilder func rows(_ t: Team, depth: Int, teams: [Team]) -> some View {
+        let kids = teams.filter { $0.parentId == t.id }
+        let m = members(t.id, teams); let away = m.filter { $0.status == "traveling" }.count; let bad = m.filter { $0.availability == "unreachable" || !$0.confirmedThreatIds.isEmpty }.count
+        let isOpen = open.contains(t.id) || depth == 0
+        Button {
+            if kids.isEmpty { store.selection = .site(t.locationId) } else if open.contains(t.id) { open.remove(t.id) } else { open.insert(t.id) }
+        } label: {
+            HStack(spacing: 6) {
+                Text(kids.isEmpty ? " " : (isOpen ? "▾" : "▸")).font(.system(size: 10)).foregroundStyle(Theme.dim).frame(width: 10)
+                Text(t.short ?? t.name).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(depth == 0 ? Theme.blue : .primary).frame(minWidth: 44, alignment: .leading)
+                Text(depth == 0 ? t.name : (t.equipment ?? t.function)).font(.system(size: 11)).foregroundStyle(Theme.dim).lineLimit(1)
+                Spacer()
+                if bad > 0 { Text("▲\(bad)").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Theme.red) }
+                (Text("\(m.count - away)").font(.system(size: 12, weight: .semibold, design: .monospaced)) + Text("/\(m.count)").font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim) + Text(away > 0 ? " ·\(away)↗" : "").font(.system(size: 11, design: .monospaced)).foregroundColor(Theme.blue))
+            }.padding(.leading, CGFloat(depth) * 14)
+        }.foregroundStyle(.primary).buttonStyle(.plain)
+        if isOpen { ForEach(kids) { k in AnyView(rows(k, depth: depth + 1, teams: teams)) } }
     }
 }

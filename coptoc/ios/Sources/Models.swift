@@ -62,7 +62,7 @@ struct Site: Decodable, Identifiable, Hashable {
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
 }
 
-struct Team: Decodable, Identifiable { var id: String, name: String, locationId: String, function: String, isSecurity: Bool }
+struct Team: Decodable, Identifiable, Hashable { var id: String, name: String, locationId: String, function: String, isSecurity: Bool; var parentId: String?, echelon: String?, short: String?, equipment: String? }
 
 struct Person: Decodable, Identifiable, Hashable {
     var id: String, name: String, role: String, teamId: String, teamName: String

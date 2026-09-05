@@ -26,6 +26,11 @@ class TeamRow(Base):
     location_id: Mapped[str] = mapped_column(ForeignKey("cop_locations.id"), index=True)
     function: Mapped[str] = mapped_column(String)
     is_security: Mapped[bool] = mapped_column(Boolean, default=False)
+    # §4 task organization: a team is a company by default; battalions and the brigade are teams too, with children
+    parent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    echelon: Mapped[str] = mapped_column(String, default="company")  # brigade | battalion | company | team
+    short: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "B/1", "3 AHB"
+    equipment: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "AH-64E ×8"
 
 
 class PersonRow(Base):

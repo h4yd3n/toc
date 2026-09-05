@@ -7,6 +7,8 @@ import tempfile
 
 import pytest
 
+os.environ.setdefault("TOC_SEED", "corporate")  # the suite was written against the corporate sample; the CAB has its own tests
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _fresh_database():

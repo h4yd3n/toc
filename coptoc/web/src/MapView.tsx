@@ -8,7 +8,7 @@ import { arc, circle } from './geo'
 const STYLE = 'https://tiles.openfreemap.org/styles/dark'
 
 const SEV_COLOR: Record<string, string> = { low: '#f59e0b', moderate: '#f97316', elevated: '#ef4444', critical: '#dc2626' }
-const TYPE_GLYPH: Record<string, string> = { hq: '◆', office: '■', datacenter: '▣', residence: '⌂', venue: '★' }
+const TYPE_GLYPH: Record<string, string> = { hq: '◆', office: '■', datacenter: '▣', residence: '⌂', venue: '★', airfield: '✈', cp: '▲', fob: '⬢', farp: '⛽', range: '◎' }
 
 interface Point { kind: 'location' | 'person' | 'event'; id: string; lat: number; lon: number; loc?: Location; person?: Person; event?: CopEvent }
 interface Cluster { x: number; y: number; lat: number; lon: number; members: Point[] }

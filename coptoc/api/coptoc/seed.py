@@ -1,6 +1,8 @@
 """Synthetic seed data. Every person, address, trip, event, and synthetic threat here is fictional."""
 import json
+import os
 import random
+from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -339,15 +341,28 @@ async def _seed_operation(session: AsyncSession, now: datetime) -> None:
     await session.flush()
 
 
-async def reseed(session: AsyncSession) -> None:
-    await _seed_case(session, now_utc())
-    await _seed_directed(session, now_utc())
-    await _seed_operation(session, now_utc())
+DATASETS = ("cab", "corporate")
+
+
+async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
+    """`cab` (default): the Combat Aviation Brigade — the force this TOC is organized around (§4, §7, §8).
+    `corporate`: the original executive-protection sample, kept for the test suite and as a second shape of the same model."""
+    dataset = (dataset or os.environ.get("TOC_SEED", "cab")).lower()
+    if dataset not in DATASETS:
+        raise ValueError(f"dataset must be one of {DATASETS}")
+    if dataset == "corporate":
+        await _seed_case(session, now_utc())
+        await _seed_directed(session, now_utc())
+        await _seed_operation(session, now_utc())
     for model in (SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
     now = now_utc()
+    if dataset == "cab":
+        from . import seed_cab
+        await seed_cab.populate(session, now)
+        return
     session.add_all([LocationRow(id=i, name=n, type=t, lat=la, lon=lo, city=c, country=co, posture=p, sensitivity=s)
                      for i, n, t, la, lo, c, co, p, s in LOCATIONS])
     session.add_all([TeamRow(id=i, name=n, location_id=l, function=f, is_security=s) for i, n, l, f, s, _ in TEAMS])

@@ -206,8 +206,8 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     for po in people_out:
         po["threat_ids_in_area"] = [t.id for t in threats if haversine_km(po["lat"], po["lon"], t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM]
 
-    teams_out = [{"id": t.id, "name": t.name, "location_id": t.location_id, "function": t.function,
-                  "is_security": t.is_security} for t in teams if t.location_id in loc_by_id]
+    teams_out = [{"id": t.id, "name": t.name, "location_id": t.location_id, "function": t.function, "is_security": t.is_security,
+                  "parent_id": t.parent_id, "echelon": t.echelon or "company", "short": t.short, "equipment": t.equipment} for t in teams if t.location_id in loc_by_id]
 
     person_by_id = {p["id"]: p for p in people_out}
     trips_out = []

@@ -128,7 +128,26 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     Label("S1 · PERSONNEL", "Blue Force")
     EstimateLine(snap.estimates.firstOrNull { it.section == "S1" })
+    var openUnits by remember { mutableStateOf(setOf<String>()) }
+    val roots = snap.teams.filter { t -> t.parentId == null && snap.teams.any { it.parentId == t.id } }
+    fun members(id: String): List<Person> = snap.people.filter { it.teamId == id } + snap.teams.filter { it.parentId == id }.flatMap { members(it.id) }
     LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 96.dp)) {  // room for the floating tab bar
+        if (roots.isNotEmpty()) {  // §4 the task organization: brigade → battalions → companies
+            item { Label("TASK ORGANIZATION", "present/assigned · ↗ away") }
+            fun unit(t: Team, depth: Int) {
+                val kids = snap.teams.filter { it.parentId == t.id }; val m = members(t.id); val away = m.count { it.status == "traveling" }; val bad = m.count { it.availability == "unreachable" }
+                val isOpen = depth == 0 || t.id in openUnits
+                item(key = "org_" + t.id) { Row(Modifier.fillMaxWidth().clickable { if (kids.isEmpty()) store.select(Selection.SiteSel(t.locationId)) else openUnits = if (t.id in openUnits) openUnits - t.id else openUnits + t.id }
+                        .padding(start = (14 + depth * 14).dp, end = 14.dp, top = 5.dp, bottom = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (kids.isEmpty()) " " else if (isOpen) "▾" else "▸", color = Palette.dim, fontSize = 10.sp, modifier = Modifier.width(10.dp))
+                    Text(t.short ?: t.name, color = if (depth == 0) Palette.blue2 else Palette.text, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.widthIn(min = 44.dp))
+                    Text(if (depth == 0) t.name else (t.equipment ?: t.function), color = Palette.dim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (bad > 0) Text("▲$bad", color = Palette.red, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    Text("${m.size - away}/${m.size}" + (if (away > 0) " ·$away↗" else ""), color = Palette.text, fontSize = 11.sp, fontFamily = FontFamily.Monospace) } }
+                if (isOpen) kids.forEach { unit(it, depth + 1) }
+            }
+            roots.forEach { unit(it, 0) }
+        }
         item { Label("LOCATIONS") }
         items(snap.locations, key = { it.id }) { l ->
             RowItem(selected = (st.selection as? Selection.SiteSel)?.id == l.id, onClick = { store.select(Selection.SiteSel(l.id)) }) {
