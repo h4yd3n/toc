@@ -8,7 +8,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,6 +26,8 @@ import androidx.compose.ui.unit.sp
 fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit) {
     val snap = st.snap ?: return
     val isBC = st.role == "battle_captain"; val busy = st.busy != null
+    var editingSite by remember { mutableStateOf<Site?>(null) }
+    editingSite?.let { s -> SiteFormDialog(store, s) { editingSite = null } }
     Column(Modifier.padding(10.dp).widthIn(max = 420.dp).fillMaxWidth().fillMaxHeight().background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.line, RoundedCornerShape(6.dp)).padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) { Spacer(Modifier.weight(1f)); Text("×", Modifier.clickable { onClose() }, color = Palette.dim, fontSize = 18.sp) }
         when (sel) {
@@ -37,6 +41,11 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                 if (isBC) { Section("SET POSTURE", "Battle Captain"); Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("normal", "guarded", "elevated", "high", "critical").forEach { p -> Mini(p.uppercase(), Palette.posture(p), !busy && p != l.posture) { store.act("setting posture") { setPosture(l.id, p) } } } } }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Mini("DRAFT S2 ASSESSMENT", Palette.amber, !busy) { store.act("drafting") { draftAssessment("location", l.id) } }
                     if (isBC) Mini("☎ OPEN ROLL CALL", Palette.red, !busy) { store.act("opening roll call") { openRollCall(l.id, null) } } }
+                // §3.1 — the TOC jumped. The wall opens here from now on; home station is untouched.
+                if (isBC) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Mini(if (l.isToc) "◈ TOC IS HERE" else "◈ TOC HERE", Palette.blue2, !busy && !l.isToc) { store.act("moving the TOC") { setToc(l.id) } }
+                    Mini("EDIT SITE", Palette.dim, !busy) { editingSite = l }
+                }
                 val here = snap.people.filter { it.locationId == l.id }
                 Section("PEOPLE HERE", "${here.size}"); here.take(40).forEach { p -> PersonLine(p) { store.select(Selection.PersonSel(p.id)) } }
             }
@@ -105,3 +114,63 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
 @Composable fun Stats(vararg s: String) = Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { s.forEach { Text(it, color = Palette.text, fontSize = 11.sp) } }
 @Composable fun PersonLine(p: Person, onClick: () -> Unit) = Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
     Dot(if (p.isVip) Palette.amber else if (p.onShift) Palette.green else Palette.blue2); Text((if (p.isVip) "★ " else "") + p.name, color = Palette.text, fontSize = 11.sp, modifier = Modifier.weight(1f)); Text(p.role, color = Palette.dim, fontSize = 9.5.sp, maxLines = 1) }
+
+/** §3.1 — add a site, or correct one that moved. Moving the TOC is its own action: a different decision. */
+@Composable
+fun SiteFormDialog(store: Store, site: Site?, onDone: () -> Unit) {
+    val types = listOf("hq", "cp", "fob", "farp", "airfield", "range", "office", "datacenter", "venue", "residence")
+    var name by remember { mutableStateOf(site?.name ?: "") }
+    var type by remember { mutableStateOf(site?.type?.ifEmpty { "cp" } ?: "cp") }
+    var lat by remember { mutableStateOf(site?.lat?.toString() ?: "") }
+    var lon by remember { mutableStateOf(site?.lon?.toString() ?: "") }
+    var city by remember { mutableStateOf(site?.city ?: "") }
+    var country by remember { mutableStateOf(site?.country ?: "") }
+    var restricted by remember { mutableStateOf(site?.sensitivity == "restricted") }
+    var problem by remember { mutableStateOf<String?>(null) }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDone) {
+        Column(Modifier.widthIn(max = 420.dp).fillMaxWidth().background(Palette.panel, RoundedCornerShape(6.dp)).border(1.dp, Palette.line, RoundedCornerShape(6.dp)).padding(14.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Title(if (site == null) "Add site" else "Edit site")
+            Field("Name — e.g. TAA Falcon", name) { name = it }
+            Section("TYPE")
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                types.forEach { t -> Mini(t.uppercase(), if (t == type) Palette.blue2 else Palette.dim, true) { type = t } }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.weight(1f)) { Field("Latitude", lat) { lat = it } }
+                Box(Modifier.weight(1f)) { Field("Longitude", lon) { lon = it } }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.weight(1f)) { Field("City", city) { city = it } }
+                Box(Modifier.weight(1f)) { Field("Country", country) { country = it } }
+            }
+            Mini(if (restricted) "⚿ RESTRICTED" else "STANDARD", if (restricted) Palette.amber else Palette.dim, true) { restricted = !restricted }
+            problem?.let { Text(it, color = Palette.red, fontSize = 11.sp) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Mini(if (site == null) "ADD SITE" else "SAVE", Palette.green, true) {
+                    val la = lat.trim().toDoubleOrNull(); val lo = lon.trim().toDoubleOrNull()
+                    when {
+                        name.isBlank() -> problem = "A site needs a name."
+                        la == null || lo == null || kotlin.math.abs(la) > 90 || kotlin.math.abs(lo) > 180 -> problem = "Latitude ±90, longitude ±180."
+                        else -> {
+                            val body = buildJsonObject {
+                                put("name", name.trim()); put("type", type); put("lat", la); put("lon", lo)
+                                put("city", city.trim()); put("country", country.trim()); put("sensitivity", if (restricted) "restricted" else "standard")
+                            }
+                            if (site == null) store.act("adding the site") { createLocation(body) } else store.act("saving the site") { updateLocation(site.id, body) }
+                            onDone()
+                        }
+                    }
+                }
+                Mini("CANCEL", Palette.dim, true) { onDone() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Field(label: String, value: String, onChange: (String) -> Unit) =
+    androidx.compose.material3.OutlinedTextField(value = value, onValueChange = onChange, singleLine = true,
+        label = { Text(label, fontSize = 10.sp, color = Palette.dim) },
+        textStyle = androidx.compose.ui.text.TextStyle(color = Palette.text, fontSize = 12.sp),
+        modifier = Modifier.fillMaxWidth())

@@ -3,6 +3,7 @@ import SwiftUI
 struct DetailView: View {
     @Environment(COPStore.self) private var store
     var selection: Selection
+    @State private var editingSite: Site? = nil
 
     var body: some View {
         ScrollView {
@@ -18,6 +19,7 @@ struct DetailView: View {
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.panel)
+        .sheet(item: $editingSite) { s in SiteForm(site: s) { editingSite = nil } }
     }
 
     func kicker(_ s: String) -> some View { Text(s).font(.system(size: 10, design: .monospaced)).tracking(1.4).foregroundStyle(Theme.dim) }
@@ -120,6 +122,18 @@ struct DetailView: View {
         }
         threatRows(ids: s.threatIdsInArea, confirmed: s.confirmedThreatIds, targetType: "location", targetId: s.id)
         HStack { draftButton("location", s.id); rollCallButton(locationId: s.id) }
+        if store.can("S3", "edit") {
+            HStack(spacing: 8) {
+                // §3.1 — the TOC jumped. The wall opens here from now on; home station is untouched.
+                Button(s.isToc == true ? "◈ TOC IS HERE" : "◈ TOC HERE") {
+                    store.act("moving the TOC") { try await store.client.setToc(siteId: s.id) }
+                }
+                .font(.system(size: 10, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue)
+                .disabled(store.busy != nil || s.isToc == true)
+                Button("EDIT SITE") { editingSite = s }
+                    .font(.system(size: 10, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+            }
+        }
         let teams = store.snapshot?.teams.filter { $0.locationId == s.id } ?? []
         let visiting = store.snapshot?.people.filter { $0.locationId == s.id && $0.homeLocationId != s.id } ?? []
         if !visiting.isEmpty { SectionLabel(text: "VISITING"); ForEach(visiting) { personRow($0) } }
@@ -230,5 +244,63 @@ struct DetailView: View {
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }.font(.system(size: 12))
             }
         }
+    }
+}
+
+
+/// §3.1 — add a site, or correct one that moved. Moving the TOC is its own action: a different decision.
+struct SiteForm: View {
+    @Environment(COPStore.self) private var store
+    var site: Site? = nil
+    var onDone: () -> Void
+    @State private var name = ""; @State private var type = "cp"; @State private var lat = ""; @State private var lon = ""
+    @State private var city = ""; @State private var country = ""; @State private var restricted = false
+    @State private var problem: String? = nil
+
+    static let types = ["hq", "cp", "fob", "farp", "airfield", "range", "office", "datacenter", "venue", "residence"]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Name — e.g. TAA Falcon", text: $name)
+                    Picker("Type", selection: $type) { ForEach(Self.types, id: \.self) { Text($0.uppercased()).tag($0) } }
+                    Toggle("Restricted ⚿", isOn: $restricted)
+                }
+                Section("Position") {
+                    TextField("Latitude", text: $lat).keyboardType(.numbersAndPunctuation)
+                    TextField("Longitude", text: $lon).keyboardType(.numbersAndPunctuation)
+                    TextField("City", text: $city); TextField("Country", text: $country)
+                }
+                if let problem { Text(problem).font(.system(size: 12)).foregroundStyle(Theme.red) }
+            }
+            .navigationTitle(site == nil ? "Add site" : "Edit site")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: onDone) }
+                ToolbarItem(placement: .confirmationAction) { Button(site == nil ? "Add" : "Save", action: submit).disabled(store.busy != nil) }
+            }
+            .onAppear {
+                guard let s = site else { return }
+                name = s.name; type = s.type; lat = String(s.lat); lon = String(s.lon)
+                city = s.city; country = s.country; restricted = s.sensitivity == "restricted"
+            }
+        }
+    }
+
+    func submit() {
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { problem = "A site needs a name."; return }
+        guard let la = Double(lat), let lo = Double(lon), abs(la) <= 90, abs(lo) <= 180 else {
+            problem = "Latitude ±90, longitude ±180."; return
+        }
+        problem = nil
+        let body: [String: Any] = ["name": name.trimmingCharacters(in: .whitespaces), "type": type, "lat": la, "lon": lo,
+                                   "city": city.trimmingCharacters(in: .whitespaces), "country": country.trimmingCharacters(in: .whitespaces),
+                                   "sensitivity": restricted ? "restricted" : "standard"]
+        let id = site?.id
+        store.act(id == nil ? "adding the site" : "saving the site") {
+            if let id { try await store.client.updateLocation(id: id, body) } else { try await store.client.createLocation(body) }
+        }
+        onDone()
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PersonnelScreen: View {
     @Environment(COPStore.self) private var store
+    @State private var addingSite = false
     var body: some View {
         List {
             Section { PanelHead(code: store.sectionCode("S1"), title: store.sectionTitle("S1", "PERSONNEL"), hint: "Blue Force"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
@@ -19,11 +20,18 @@ struct PersonnelScreen: View {
                 }.listRowBackground(Theme.red.opacity(0.08))
             }
             TaskOrgSection()
-            Section(header: SectionLabel(text: "LOCATIONS")) {
+            Section(header: HStack {
+                SectionLabel(text: "LOCATIONS")
+                if store.can("S3", "edit") {
+                    Spacer()
+                    Button("+ SITE") { addingSite = true }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered)
+                }
+            }) {
                 ForEach(store.snapshot?.locations ?? []) { l in
                     Button { store.selection = .site(l.id) } label: {
                         HStack(spacing: 8) {
                             Circle().fill(Theme.posture(l.effectivePosture)).frame(width: 7, height: 7).shadow(color: Theme.posture(l.effectivePosture), radius: 4)
+                            if l.isToc == true { Text("◈").foregroundStyle(Theme.blue) }
                             Text(l.name).lineLimit(1)
                             if l.sensitivity == "restricted" { Text("⚿").foregroundStyle(Theme.amber) }
                             Spacer()
@@ -51,6 +59,7 @@ struct PersonnelScreen: View {
             }.listRowBackground(Theme.panel)
         }
         .listStyle(.plain).scrollContentBackground(.hidden).background(Theme.bg).drivesDock(store)
+        .sheet(isPresented: $addingSite) { SiteForm { addingSite = false } }
     }
 }
 

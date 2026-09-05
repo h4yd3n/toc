@@ -137,6 +137,8 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
     TaskingDialogs(st, store, "S1", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
+    var addingSite by remember { mutableStateOf(false) }
+    if (addingSite) SiteFormDialog(store, null) { addingSite = false }
     Label(sectionHead(snap, "S1", "PERSONNEL"), "Blue Force")
     EstimateLine(snap.estimates.firstOrNull { it.section == "S1" })
     var openUnits by remember { mutableStateOf(setOf<String>()) }
@@ -161,10 +163,12 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
             }
             roots.forEach { unit(it, 0) }
         }
-        item { Label("LOCATIONS") }
+        item { Label("LOCATIONS", action = if (st.role == "battle_captain") ({ Mini("+ SITE", Palette.blue2, true) { addingSite = true } }) else null) }
         items(snap.locations, key = { it.id }) { l ->
             RowItem(selected = (st.selection as? Selection.SiteSel)?.id == l.id, onClick = { store.select(Selection.SiteSel(l.id)) }) {
-                Dot(Palette.posture(l.effectivePosture)); Text(l.name, color = Palette.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Dot(Palette.posture(l.effectivePosture))
+                if (l.isToc) Text("◈", color = Palette.blue2, fontSize = 10.sp)
+                Text(l.name, color = Palette.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (l.threatIdsInArea.isNotEmpty()) Text("△${l.threatIdsInArea.size} ", color = Palette.amber, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
                 Text("${l.present}/${l.assigned}", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             }
