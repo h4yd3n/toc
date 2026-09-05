@@ -119,7 +119,10 @@ private struct SectionSheet<Content: View>: View {
                 // One gesture, not a drag and a tap competing: arbitration between them cost a beat at the start of
                 // every drag. High priority, because the map underneath runs UIKit pan recognisers that were winning
                 // a touch that started on the handle.
-                .highPriorityGesture(DragGesture(minimumDistance: 0)
+                // Global coordinates, not the sheet's own: the handle moves as the sheet moves, so a drag measured in
+                // local space is measured against an origin the drag itself is shifting. That feedback is what made
+                // the header shake — push up, the sheet rises, the origin rises with it, the next sample reads short.
+                .highPriorityGesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { v in if abs(v.translation.height) > 2 { drag = v.translation.height } }
                     .onEnded { v in
                         let moved = v.translation.height

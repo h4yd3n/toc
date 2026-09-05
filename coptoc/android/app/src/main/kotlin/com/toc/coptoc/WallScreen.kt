@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -735,20 +737,26 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
         .offset { androidx.compose.ui.unit.IntOffset(0, (stops[2] - visible).toInt()) }
         .background(Palette.bg.copy(alpha = .96f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
         .border(0.5.dp, Palette.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
+        // Where the handle currently sits in the window. The gesture is measured against this rather than against the
+        // handle's own coordinates, because the handle moves as the sheet moves: a drag measured locally is measured
+        // against an origin the drag itself is shifting, and that feedback shows up as the header shaking.
+        var handleTop by remember { mutableStateOf(0f) }
         Column(Modifier.fillMaxWidth()
+            .onGloballyPositioned { handleTop = it.positionInWindow().y }
             .pointerInput(Unit) {  // own the pointer from the first touch: the map underneath would otherwise take it
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false); down.consume()
-                    var acc = 0f; var moved = false
+                    val startY = handleTop + down.position.y      // the finger, in window space
+                    var delta = 0f; var moved = false
                     while (true) {
                         val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                         if (!ch.pressed) { ch.consume(); break }
-                        acc += ch.position.y - ch.previousPosition.y
-                        if (kotlin.math.abs(acc) > 8f) moved = true
-                        if (moved) drag = acc      // follow the finger; without this it stood still and then jumped
+                        delta = (handleTop + ch.position.y) - startY
+                        if (kotlin.math.abs(delta) > 8f) moved = true
+                        if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
                         ch.consume()
                     }
-                    rest = if (moved) stops.minByOrNull { kotlin.math.abs(it - (rest - acc)) }!!
+                    rest = if (moved) stops.minByOrNull { kotlin.math.abs(it - (rest - delta)) }!!
                            else stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1) % stops.size]
                     drag = 0f
                 }
