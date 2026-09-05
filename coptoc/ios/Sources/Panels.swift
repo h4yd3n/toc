@@ -182,6 +182,7 @@ struct OpsScreen: View {
     @Environment(COPStore.self) private var store
     @State private var tops: [Date: CGFloat] = [:] // last known top of each day header in the agenda's space — the strip follows the one that just passed the top
     @State private var scrollY: CGFloat = 0        // top of the content; below zero once the agenda has scrolled
+    @State private var scrubbed: Date? = nil       // the ribbon is driving; a finger on the agenda hands the cursor back
     @State private var expanded = false            // the strip unfolded into the month
     @State private var month: Date? = nil          // the month shown when unfolded (defaults to the cursor's)
     let cal = Calendar(identifier: .gregorian)
@@ -200,8 +201,13 @@ struct OpsScreen: View {
         return out
     }
     static func key(_ d: Date) -> String { "d:\(Int(d.timeIntervalSince1970))" }
-    var cursorDay: Date {  // the day whose header is at or above the top of the agenda; today before anything has scrolled
-        tops.filter { $0.value <= 24 }.max { $0.value < $1.value }?.key ?? agenda.first?.day ?? cal.startOfDay(for: store.now)
+    /// The day the panel is on: the one the finger is holding on the ribbon, else the day whose header is at or
+    /// above the top of the agenda, else today.
+    var cursorDay: Date {
+        if let scrubbed { return scrubbed }
+        if let passed = tops.filter({ $0.value <= 24 }).max(by: { $0.value < $1.value })?.key { return passed }
+        if let coming = tops.min(by: { $0.value < $1.value })?.key { return coming }   // nothing has passed the top yet
+        return agenda.first?.day ?? cal.startOfDay(for: store.now)
     }
     var body: some View {
         let days = agenda
@@ -237,12 +243,26 @@ struct OpsScreen: View {
                 }
             }
             .drivesDock(store)
+            .onScrollPhaseChange { _, phase in if phase == .interacting { scrubbed = nil } }  // a hand on the agenda takes the cursor back
             .coordinateSpace(name: "agenda")
-            .onPreferenceChange(DayTopKey.self) { new in withAnimation(.easeInOut(duration: 0.25)) { tops.merge(new) { $1 } } }
+            // Only the day headers still on screen: merging kept days that had scrolled away at their last known
+            // position, and a stale one would win the "closest to the top" test over the day actually up there.
+            .onPreferenceChange(DayTopKey.self) { new in
+                guard !new.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.25)) { tops = new }
+            }
             .onPreferenceChange(ScrollTopKey.self) { y in scrollY = y; if y < -8, expanded { withAnimation(.easeInOut(duration: 0.25)) { expanded = false } } }
             .safeAreaInset(edge: .top, spacing: 0) {
-            CalendarStrip(cursor: cursorDay, today: cal.startOfDay(for: store.now), marked: Set(days.map(\.day)), eventDays: eventDays, expanded: $expanded, month: $month) { picked in
+            CalendarStrip(cursor: cursorDay, today: cal.startOfDay(for: store.now), marked: Set(days.map(\.day)), eventDays: eventDays, expanded: $expanded, month: $month,
+                          onScrub: { day in
+                // Scrolling the ribbon scrolls the agenda with it — no tap needed. The agenda only holds days that
+                // have something, so an empty day carries you to the next one that does.
+                scrubbed = day
+                guard let target = days.first(where: { $0.day >= day }) ?? days.last else { return }
+                proxy.scrollTo(Self.key(target.day), anchor: .top)
+            }) { picked in
                 // jump to the picked day, or the first day after it that has something
+                scrubbed = picked
                 guard let target = days.first(where: { $0.day >= picked }) else { return }
                 let wasExpanded = expanded
                 withAnimation(.easeInOut(duration: 0.25)) { expanded = false }
@@ -294,7 +314,10 @@ struct AgendaRow: View {
 struct CalendarStrip: View {
     var cursor: Date; var today: Date; var marked: Set<Date>; var eventDays: Set<Date>
     @Binding var expanded: Bool; @Binding var month: Date?
+    var onScrub: (Date) -> Void   // the ribbon dragged under the finger: the agenda follows it, day by day
     var onPick: (Date) -> Void
+    @State private var stripDay: Date?
+    @State private var scrubbing = false   // true while the finger owns the ribbon, so the agenda cannot pull it back
     let cal = Calendar(identifier: .gregorian)
     var ribbon: [Date] {  // two months back to four past the last marked day — enough tape in both directions
         let last = max(marked.max() ?? today, today)
@@ -323,16 +346,21 @@ struct CalendarStrip: View {
                         if i >= 0 && i < count, let d = cal.date(byAdding: .day, value: i, to: first) { dayCell(d, weekday: false) } else { Color.clear.frame(maxWidth: .infinity).frame(height: 35) } } }
                 }
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 0) {
-                            ForEach(ribbon, id: \.self) { d in dayCell(d, weekday: true).containerRelativeFrame(.horizontal, count: 7, spacing: 0).id(d) }
-                        }.scrollTargetLayout()
-                    }
-                    .scrollTargetBehavior(.viewAligned)
-                    .onAppear { proxy.scrollTo(cursor, anchor: .center) }
-                    .onChange(of: cursor) { _, c in withAnimation(.easeInOut(duration: 0.35)) { proxy.scrollTo(c, anchor: .center) } }
-                }.frame(height: 48)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(ribbon, id: \.self) { d in dayCell(d, weekday: true).containerRelativeFrame(.horizontal, count: 7, spacing: 0).id(d) }
+                    }.scrollTargetLayout()
+                }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollPosition(id: $stripDay, anchor: .center)
+                .onScrollPhaseChange { _, phase in scrubbing = phase != .idle }
+                .onChange(of: stripDay) { _, d in if scrubbing, let d { onScrub(d) } }   // the agenda follows the ribbon
+                .onChange(of: cursor) { _, c in                                          // and the ribbon follows the agenda
+                    guard !scrubbing, stripDay != c else { return }
+                    withAnimation(.easeInOut(duration: 0.35)) { stripDay = c }
+                }
+                .onAppear { stripDay = cursor }
+                .frame(height: 48)
             }
             Capsule().fill(Theme.dim.opacity(0.5)).frame(width: 36, height: 4).padding(.top, 2)  // the grabber: drag down for the month, up for the ribbon
         }
