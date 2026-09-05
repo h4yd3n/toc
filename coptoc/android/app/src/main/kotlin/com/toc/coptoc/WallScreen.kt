@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import kotlinx.coroutines.launch
 import androidx.compose.animation.animateContentSize
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.Icons
 import androidx.compose.runtime.*
@@ -81,7 +83,7 @@ fun TabletWall(st: WallState, store: Store) {
 @Composable fun Mini(text: String, color: Color = Palette.blue2, enabled: Boolean = true, onClick: () -> Unit) = Text(text, Modifier.clickable(enabled = enabled) { onClick() }
     .background(color.copy(alpha = if (enabled) .16f else .06f), RoundedCornerShape(6.dp)).padding(horizontal = 9.dp, vertical = 5.dp),
     color = if (enabled) color else color.copy(alpha = .4f), fontSize = 9.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, letterSpacing = 0.8.sp, maxLines = 1, softWrap = false)
-@Composable fun Stat(n: String, label: String, color: Color = Palette.text) = Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+@Composable fun Stat(n: String, label: String, color: Color = Palette.text, onClick: (() -> Unit)? = null) = Column(Modifier.let { m -> if (onClick != null) m.clickable { onClick() } else m }, horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(2.dp)) {
     Text(n, color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace); Text(label, color = Palette.dim, fontSize = 8.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.2.sp)
 }
 
@@ -317,17 +319,25 @@ fun sectionHead(snap: Snapshot?, code: String, fallback: String): String { val c
 fun sectionLabel(snap: Snapshot?, code: String): String = snap?.sections?.firstOrNull { it.code == code }?.label ?: code
 fun healthColor(h: String) = when (h) { "red" -> Palette.red; "amber" -> Palette.amber; else -> Palette.green }
 /** The enabled sections, in wall order: six tabs for an operations center, four for a commercial desk (`TOC_SECTIONS`). */
-fun enabledTabs(snap: Snapshot?): List<Tab> = Tab.values().filter { t -> t == Tab.COP || (snap?.sections?.firstOrNull { it.code == t.label }?.enabled ?: (t != Tab.S4 && t != Tab.S6)) }
+/** Which tab a header counter belongs to: tap it and that tab opens. */
+val STAT_TAB = mapOf("PERSONNEL" to Tab.S1, "PRESENT" to Tab.S1, "CHECKED IN" to Tab.S1, "SEC ON SHIFT" to Tab.S1, "UNACCOUNTED" to Tab.S1, "UNREACHABLE" to Tab.S1,
+    "TRAVELING" to Tab.S3, "VIP OUT" to Tab.S3, "EVENTS" to Tab.S3, "THREATS" to Tab.S2, "CONFIRMED" to Tab.S2, "FLASH" to Tab.S2, "OPEN PIRs" to Tab.S2)
+fun can(snap: Snapshot?, section: String, level: String = "view"): Boolean {  // the server's answer for view; edit needs the grid, the floor, or nobody signed in
+    val me = snap?.me ?: return true
+    if (me.userId == null || me.battleCaptain) return true
+    return if (level == "view") section in me.sectionsVisible else me.perms[section] == "edit"
+}
+fun enabledTabs(snap: Snapshot?): List<Tab> = Tab.values().filter { t -> t == Tab.COP || ((snap?.sections?.firstOrNull { it.code == t.label }?.enabled ?: (t != Tab.S4 && t != Tab.S6)) && can(snap, t.label)) }
 
 @Composable
 fun PhoneScreen(st: WallState, store: Store) {
     var tab by remember { mutableStateOf(Tab.COP) }
     val snap = st.snap
+    var headerPx by remember { mutableStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
     Box(Modifier.fillMaxSize().background(Palette.bg)) {
         Column(Modifier.fillMaxSize()) {
-            PhoneHeader(st, store)
-            FlashStrip(st, store)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(top = if (tab == Tab.COP) 0.dp else with(density) { headerPx.toDp() })) {  // the map runs under the header; lists start below it
                 when (tab) {
                     Tab.COP -> {
                         WallMap(snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize())
@@ -340,6 +350,13 @@ fun PhoneScreen(st: WallState, store: Store) {
                     Tab.S6 -> Column(Modifier.fillMaxSize()) { S6Phone(st, store) }
                 }
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+            }
+        }
+        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerPx = it.height }) {  // the header, floating over the picture
+            PhoneHeader(st, store, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
+            FlashStrip(st, store)
+        }
+        Box(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {  // (kept: the sheets and toasts below sit in this scope)
                 st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
                 st.busy?.let { Text(it.uppercase() + "…", Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp).background(Palette.panel, RoundedCornerShape(6.dp)).padding(8.dp), color = Palette.blue2, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp) }
                 st.error?.let { Text(it, Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp).padding(horizontal = 12.dp).background(Palette.red.copy(alpha = .9f), RoundedCornerShape(6.dp)).padding(8.dp).clickable { store.dismissError() }, color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace, maxLines = 2) }
@@ -369,7 +386,8 @@ fun PhoneScreen(st: WallState, store: Store) {
 
 /** The iOS posture bar, on Android: TOC · DEFCON · clock; the watch line; the counters. Drawn under the status bar. */
 @Composable
-fun PhoneHeader(st: WallState, store: Store) {
+fun PhoneHeader(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
+    @Composable fun J(n: String, label: String, color: Color = Palette.text) = Stat(n, label, color, onClick = STAT_TAB[label]?.let { t -> { onJump(t) } })
     val s = st.snap?.summary; val w = st.snap?.watch
     var roleMenu by remember { mutableStateOf(false) }
     var defconMenu by remember { mutableStateOf(false) }
@@ -378,13 +396,16 @@ fun PhoneHeader(st: WallState, store: Store) {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
     val clock = java.text.SimpleDateFormat("HH:mm:ss'Z'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(now))
-    Column(Modifier.fillMaxWidth().background(Palette.panel).statusBarsPadding().padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("TOC", color = Palette.text, fontSize = 18.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, letterSpacing = 3.sp)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        Box(Modifier.fillMaxWidth().background(Palette.panel.copy(alpha = .88f)).statusBarsPadding().padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)) {  // the header: darker, less translucent
+        Box(Modifier.align(Alignment.Center)) {
             s?.let { Box {
                 if (Ui.posture) Text("DEFCON ${it.defcon}", Modifier.clickable { defconMenu = true }.border(2.dp, Palette.posture(it.posture), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = Palette.posture(it.posture), fontSize = 14.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, letterSpacing = 2.5.sp)
                 else Chip("DEFCON ${it.defcon}", Palette.posture(it.posture), onClick = { defconMenu = true })
                 DropdownMenu(defconMenu, { defconMenu = false }) { it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}", color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) } } } }
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(clock, color = Palette.dim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
             Spacer(Modifier.weight(1f))
             var pendingProfile by remember { mutableStateOf<String?>(null) }
             pendingProfile?.let { prof -> AlertDialog(onDismissRequest = { pendingProfile = null }, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
@@ -392,9 +413,12 @@ fun PhoneHeader(st: WallState, store: Store) {
                 text = { Text(if (prof == "military") "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." else "S1–S3 and the executive-protection sample. This reloads the sample data.", fontSize = 12.sp) },
                 confirmButton = { TextButton({ store.act("switching to $prof") { setProfile(prof) }; pendingProfile = null }) { Text("SWITCH", color = Palette.blue2) } },
                 dismissButton = { TextButton({ pendingProfile = null }) { Text("CANCEL", color = Palette.dim) } }) }
-            Box { Text("⚙ SETTINGS ▾", Modifier.clickable { dispMenu = true }.border(1.dp, Palette.line, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 4.dp), color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+            Box { Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Palette.dim, modifier = Modifier.size(22.dp).clickable { dispMenu = true })
                 DropdownMenu(dispMenu, { dispMenu = false }) {
-                    if (st.role == "battle_captain") {
+                    androidx.compose.runtime.LaunchedEffect(dispMenu) { if (dispMenu && st.users.isEmpty()) store.loadUsers() }
+                    st.users.forEach { u -> DropdownMenuItem({ Text((if (st.userId == u.id) "✓ " else "   ") + u.name + (u.title?.let { " · $it" } ?: ""), fontSize = 12.sp) }, { store.signIn(u.id, ctx); dispMenu = false }) }
+                    HorizontalDivider()
+                    if (st.snap?.me?.admin ?: (st.role == "battle_captain")) {
                         listOf("military" to "Military · S1–S6, the brigade", "corporate" to "Corporate · S1–S3").forEach { (k, label) ->
                             DropdownMenuItem({ Text((if ((st.snap?.profile ?: "military") == k) "✓ " else "   ") + label, fontSize = 12.sp) }, { dispMenu = false; if ((st.snap?.profile ?: "military") != k) pendingProfile = k }) }
                         HorizontalDivider()
@@ -402,9 +426,10 @@ fun PhoneHeader(st: WallState, store: Store) {
                     DropdownMenuItem({ Text((if (Ui.lean) "✓ " else "   ") + "Lean labels", fontSize = 12.sp) }, { Ui.lean = !Ui.lean; Ui.save(ctx) })
                     DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) })
                     HorizontalDivider()
-                    ROLES.forEach { r -> DropdownMenuItem({ Text((if (st.role == r) "✓ " else "   ") + "role: " + r.replace('_', ' '), fontSize = 12.sp) }, { store.setRole(r); dispMenu = false }) } } }
-            Text(clock, color = Palette.dim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                    if (st.userId.isEmpty()) ROLES.forEach { r -> DropdownMenuItem({ Text((if (st.role == r) "✓ " else "   ") + "role: " + r.replace('_', ' '), fontSize = 12.sp) }, { store.setRole(r); dispMenu = false }) } } }
         }
+        }
+        Column(Modifier.padding(horizontal = 10.dp).padding(top = 8.dp, bottom = 6.dp).fillMaxWidth().background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {  // the watch and the counters: a lighter card floating over the picture
         w?.let { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${it.name.uppercase()} WATCH", color = Palette.blue2, fontSize = 10.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
             Text(it.battleCaptain?.let { bc -> "BC $bc" } ?: "UNASSIGNED", color = Palette.text, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
@@ -412,12 +437,12 @@ fun PhoneHeader(st: WallState, store: Store) {
             Text(if (it.status == "pending_ack") "HANDOVER PENDING" else if (it.overdue) "OVERDUE" else "→ ${it.nextWatch.split(" ").first()} in ${"%.0f".format(it.remainingH)}h", color = if (it.status == "pending_ack" || it.overdue) Palette.red else if (it.inOverlap) Palette.amber else Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             if (it.battleCaptain == null && st.role == "battle_captain") Mini("TAKE", enabled = st.busy == null) { store.act("taking the watch") { takeWatch("Battle Captain (Android)") } } } }
         s?.let { Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Stat("${it.totalPeople}", "PERSONNEL"); Stat("${it.traveling}", "TRAVELING", Palette.blue2); Stat("${it.vipsTraveling}", "VIP OUT", Palette.amber)
-            Stat("${it.realThreats}", "THREATS", Palette.red); Stat("${it.confirmedLinks}", "CONFIRMED", Palette.red)
-            if (it.flash > 0) Stat("${it.flash}", "FLASH", Palette.red); if (it.unaccounted > 0) Stat("${it.unaccounted}", "UNACCOUNTED", Palette.red)
-            if (!Ui.posture) { Stat("${it.present}", "PRESENT"); Stat("${it.checkedInFresh}", "CHECKED IN", Palette.green); Stat("${it.securityOnShift}", "SEC ON SHIFT", Palette.green); Stat("${it.openPirs}", "OPEN PIRS", Palette.amber); Stat("${it.upcomingEvents}", "EVENTS") } } }
+            J("${it.totalPeople}", "PERSONNEL"); J("${it.traveling}", "TRAVELING", Palette.blue2); J("${it.vipsTraveling}", "VIP OUT", Palette.amber)
+            J("${it.realThreats}", "THREATS", Palette.red); J("${it.confirmedLinks}", "CONFIRMED", Palette.red)
+            if (it.flash > 0) J("${it.flash}", "FLASH", Palette.red); if (it.unaccounted > 0) J("${it.unaccounted}", "UNACCOUNTED", Palette.red)
+            if (!Ui.posture) { J("${it.present}", "PRESENT"); J("${it.checkedInFresh}", "CHECKED IN", Palette.green); J("${it.securityOnShift}", "SEC ON SHIFT", Palette.green); J("${it.openPirs}", "OPEN PIRS", Palette.amber); J("${it.upcomingEvents}", "EVENTS") } } }
+        }
     }
-    HorizontalDivider(thickness = 0.5.dp, color = Palette.line)
 }
 
 /** S3 on the phone: an agenda by day — events and standalone trips under their date, a gap line when days go by

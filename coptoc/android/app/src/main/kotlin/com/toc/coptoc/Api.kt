@@ -15,7 +15,7 @@ class ApiError(val status: Int, message: String) : Exception(message)
 
 /** The COP backend client — same contract as the web app and the iOS app. Role and actor travel as headers. */
 @OptIn(ExperimentalSerializationApi::class)
-class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "battle_captain", var actor: String = "Battle Captain (Android)") {
+class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "battle_captain", var actor: String = "Battle Captain (Android)", var userId: String = "") {
     private val json = Json { ignoreUnknownKeys = true; namingStrategy = JsonNamingStrategy.SnakeCase; explicitNulls = false; coerceInputValues = true; isLenient = true }
 
     suspend fun snapshot(restricted: Boolean): Snapshot = json.decodeFromString(get("/v1/cop/snapshot?restricted=$restricted"))
@@ -42,6 +42,7 @@ class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "b
     suspend fun updateRoster(incidentId: String, personId: String, status: String) = send("PATCH", "/v1/cop/incidents/$incidentId/roster/$personId", buildJsonObject { put("status", status); put("method", "call") })
     suspend fun requestCheckins(incidentId: String) = send("POST", "/v1/cop/incidents/$incidentId/request-checkins", buildJsonObject { })
     suspend fun closeIncident(id: String) = send("PATCH", "/v1/cop/incidents/$id/close", buildJsonObject { })
+    suspend fun users(): List<UserInfo> = json.decodeFromString<UsersOut>(get("/v1/cop/users")).users
     // §11.2 the profile: military or corporate; reloads the sample data
     suspend fun setProfile(profile: String) = send("PUT", "/v1/cop/profile", buildJsonObject { put("profile", profile) })
     // §7 / §8 — the background boards
@@ -65,7 +66,7 @@ class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "b
         read(c)
     }
 
-    private fun HttpURLConnection.headers() { setRequestProperty("X-TOC-Role", role); setRequestProperty("X-TOC-Actor", actor); setRequestProperty("Accept", "application/json") }
+    private fun HttpURLConnection.headers() { setRequestProperty("X-TOC-Role", role); setRequestProperty("X-TOC-Actor", actor); if (userId.isNotEmpty()) setRequestProperty("X-TOC-User", userId); setRequestProperty("Accept", "application/json") }
 
     private fun read(c: HttpURLConnection): String {
         val code = c.responseCode

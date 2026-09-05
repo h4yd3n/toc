@@ -61,6 +61,11 @@ def trip_status(t: TripRow, now: datetime) -> str:
         return "active"
     return "planned"
 
+def _me() -> Dict[str, Any]:
+    from .users import current_actor
+    return current_actor.get().as_dict()
+
+
 def leg_status(lg: TripLegRow, now: datetime) -> str:
     if lg.end_at <= now:
         return "done"
@@ -375,7 +380,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     return {
-        "profile": toc_profile(), "sections": sections_config(), "s4": s4, "s6": s6,
+        "profile": toc_profile(), "sections": sections_config(), "s4": s4, "s6": s6, "me": _me(),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,

@@ -2,15 +2,13 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(COPStore.self) private var store
-    @State private var tab = "COP"
 
     var body: some View {
         @Bindable var store = store
-        VStack(spacing: 0) {
-            PostureBar(); FlashStrip()
+        ZStack(alignment: .bottom) {
             ZStack(alignment: .bottom) {
                 Group {
-                    switch tab {
+                    switch store.tab {
                     case "COP": MapScreen()
                     case "S1": PersonnelScreen()
                     case "S2": IntelScreen()
@@ -19,7 +17,8 @@ struct ContentView: View {
                     default: SignalScreen()
                     }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                TabBar(tab: $tab)
+                .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }  // the map runs under the header; lists start below it
+                TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
             }
         }
         .sheet(item: $store.selection) { sel in
@@ -49,26 +48,32 @@ struct PostureBar: View {
     @ViewBuilder var bar: some View {
         let s = store.snapshot?.summary
         let posture = s?.posture ?? "normal"
-        VStack(spacing: 6) {
-            HStack(spacing: 10) {
-                Text("TOC").font(.system(size: 18, weight: .heavy, design: .monospaced)).tracking(3)
-                Menu {
-                    ForEach((s?.defconLevels ?? []).sorted { $0.defcon > $1.defcon }) { l in
-                        Button { } label: { Label("DEFCON \(l.defcon) · \(l.posture.uppercased())" + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
-                    }
-                    Divider()
-                    Text("The wall reads the worst site. Set a site's level from its card.")
-                } label: {
-                    if store.postureHeader {
-                        Text("DEFCON \(s?.defcon.map(String.init) ?? "—")").font(.system(size: 14, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
-                            .padding(.horizontal, 12).padding(.vertical, 6).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.posture(posture), lineWidth: 2))
-                    } else {
-                        Chip(text: "DEFCON \(s?.defcon.map(String.init) ?? "—")", color: Theme.posture(posture))
-                    }
+        VStack(spacing: 0) {
+            ZStack {
+            Menu {
+                ForEach((s?.defconLevels ?? []).sorted { $0.defcon > $1.defcon }) { l in
+                    Button { } label: { Label("DEFCON \(l.defcon) · \(l.posture.uppercased())" + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
                 }
+                Divider()
+                Text("The wall reads the worst site. Set a site's level from its card.")
+            } label: {
+                if store.postureHeader {
+                    Text("DEFCON \(s?.defcon.map(String.init) ?? "—")").font(.system(size: 14, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
+                        .padding(.horizontal, 12).padding(.vertical, 6).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.posture(posture), lineWidth: 2))
+                } else {
+                    Chip(text: "DEFCON \(s?.defcon.map(String.init) ?? "—")", color: Theme.posture(posture))
+                }
+            }
+            HStack(spacing: 10) {
+                Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
                 Spacer()
                 Menu {
-                    if store.client.role == "battle_captain" {
+                    Section("Signed in as") {
+                        ForEach(store.users) { u in
+                            Button { store.signIn(u.id) } label: { Label("\(u.name)\(u.title.map { " · \($0)" } ?? "")", systemImage: store.client.userId == u.id ? "checkmark" : (u.battleCaptain ? "star" : "person")) }
+                        }
+                    }
+                    if store.me?.admin ?? (store.client.role == "battle_captain") {
                         // Buttons, not a Picker: a Picker's binding can fire without a tap; these fire only when chosen, and then ask.
                         let current = store.snapshot?.profile ?? "military"
                         Section("Profile") {
@@ -76,16 +81,22 @@ struct PostureBar: View {
                             Button { if current != "corporate" { pendingProfile = "corporate" } } label: { Label("Corporate · S1–S3", systemImage: current == "corporate" ? "checkmark" : "") }
                         }
                     }
-                    Picker("Role", selection: Binding(get: { store.client.role }, set: { store.client.role = $0; Task { await store.load() } })) {
-                        ForEach(["battle_captain", "ep", "security", "analyst", "ea", "logistics", "signal"], id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) }
+                    if store.client.userId.isEmpty {
+                        Picker("Role", selection: Binding(get: { store.client.role }, set: { store.client.role = $0; Task { await store.load() } })) {
+                            ForEach(["battle_captain", "ep", "security", "analyst", "ea", "logistics", "signal"], id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) }
+                        }
                     }
                     Section("Display") {
                         Toggle("Lean labels", isOn: Binding(get: { store.leanLabels }, set: { store.leanLabels = $0 }))
                         Toggle("Posture header", isOn: Binding(get: { store.postureHeader }, set: { store.postureHeader = $0 }))
                     }
-                } label: { Text("⚙ SETTINGS ▾").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim).padding(.horizontal, 6).padding(.vertical, 4).overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.line, lineWidth: 1)) }
-                Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
+                } label: { Image(systemName: "gearshape.fill").font(.system(size: 17)).foregroundStyle(Theme.dim).padding(6) }
             }
+            }
+            .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
+            .background(Theme.panel.opacity(0.88))   // the header: darker, less translucent
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
+            VStack(spacing: 6) {
             if let w = store.snapshot?.watch {
                 HStack(spacing: 8) {
                     Text("\(w.name.uppercased()) WATCH").font(.system(size: 10, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.blue)
@@ -108,9 +119,13 @@ struct PostureBar: View {
                     }
                 }
             }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
+            .padding(.horizontal, 10).padding(.top, 8)
         }
-        .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 8)
-        .background(Theme.panel)
+        .padding(.bottom, 6)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
     func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
@@ -141,6 +156,8 @@ struct FlashStrip: View {
 }
 
 struct Stat: View {
+    @Environment(COPStore.self) private var store
+    static let section: [String: String] = ["PERSONNEL": "S1", "PRESENT": "S1", "CHECKED IN": "S1", "SEC ON SHIFT": "S1", "UNACCOUNTED": "S1", "UNREACHABLE": "S1", "TRAVELING": "S3", "VIP OUT": "S3", "EVENTS": "S3", "THREATS": "S2", "CONFIRMED": "S2", "FLASH": "S2", "OPEN PIRs": "S2"]
     var label: String; var value: Int?; var color: Color
     init(_ label: String, _ value: Int?, _ color: Color = .white) { self.label = label; self.value = value; self.color = color }
     var body: some View {
@@ -148,6 +165,7 @@ struct Stat: View {
             Text(value.map(String.init) ?? "—").font(.system(size: 18, weight: .bold, design: .monospaced)).foregroundStyle(color)
             Text(label).font(.system(size: 8, design: .monospaced)).tracking(1.2).foregroundStyle(Theme.dim)
         }
+        .contentShape(Rectangle()).onTapGesture { if let sec = Self.section[label] { withAnimation { store.tab = sec; store.expandBar() } } }  // a counter opens its section
     }
 }
 
@@ -161,7 +179,7 @@ struct TabBar: View {
     var tabs: [String] {
         let cfg = store.snapshot?.sections ?? []
         let on = { (c: String) in cfg.first { $0.code == c }?.enabled ?? (c != "S4" && c != "S6") }
-        return ["COP", "S1", "S2", "S3", "S4", "S6"].filter { $0 == "COP" || on($0) }
+        return ["COP", "S1", "S2", "S3", "S4", "S6"].filter { $0 == "COP" || (on($0) && store.can($0)) }
     }
     func badge(_ t: String) -> (Int, Color)? {
         let s = store.snapshot?.summary

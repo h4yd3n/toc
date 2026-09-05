@@ -503,3 +503,18 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .rail-btn { width: auto; min-width: 32px; padding: 0 5px; }
 .role.profile { margin-left: 10px; margin-right: auto; }
 .gear { white-space: nowrap; }
+
+/* §9 the permission grid */
+.users-grid { display: grid; grid-template-columns: 1fr repeat(7, 28px) 60px; gap: 2px 4px; padding: 6px 14px; align-items: center; font-size: 11px; }
+.users-grid .uh { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--dim); padding-bottom: 4px; }
+.users-grid .uh.c { text-align: center; }
+.users-grid .urow { display: contents; }
+.users-grid .urow.off .uname { opacity: .45; text-decoration: line-through; }
+.users-grid .uname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 3px 0; }
+.perm { width: 26px; height: 22px; border-radius: 4px; border: 1px solid var(--line-2); background: transparent; color: var(--dim); font-family: var(--mono); font-size: 10px; font-weight: 800; cursor: pointer; }
+.perm.view { color: var(--blue-2); border-color: rgba(96,165,250,.5); } .perm.edit { color: #fff; background: var(--blue); border-color: var(--blue); }
+.perm.flag.on { color: var(--gold); border-color: rgba(250,204,21,.6); }
+.uacts { display: flex; gap: 3px; } .uacts .mini { margin-left: 0; padding: 2px 5px; }
+.stat.jump { cursor: pointer; } .stat.jump:hover .l { color: var(--blue-2); }
+@keyframes s3flash { 0% { box-shadow: inset 0 0 0 2px var(--blue-2); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
+.wall.s3-flash .bottom { animation: s3flash 1.2s ease-out; }

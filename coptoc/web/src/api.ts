@@ -1,14 +1,14 @@
-import type { SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
-export const session = { role: 'battle_captain' as Role, actor: '' }
+export const session = { role: 'battle_captain' as Role, actor: '', userId: (() => { try { return localStorage.getItem('toc.user') || '' } catch { return '' } })() }
 const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant', logistics: 'S4 Logistics', signal: 'S6 Signal' }
 const actor = () => `${ROLE_LABEL[session.role]} (web)`
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json', 'X-TOC-Actor': actor(), 'X-TOC-Role': session.role }, body: body ? JSON.stringify(body) : undefined })
+  const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json', 'X-TOC-Actor': actor(), 'X-TOC-Role': session.role, ...(session.userId ? { 'X-TOC-User': session.userId } : {}) }, body: body ? JSON.stringify(body) : undefined })
   if (!r.ok) throw new Error(`${method} ${path} → ${r.status} ${(await r.text()).slice(0, 200)}`)
   return r.json()
 }
@@ -93,3 +93,11 @@ export const listSettings = () => req<{ settings: SettingInfo[]; note: string }>
 export const putSetting = (name: string, value: string) => req<SettingInfo>('PUT', `/v1/cop/settings/${name}`, { value })
 export const clearSetting = (name: string) => req<SettingInfo>('DELETE', `/v1/cop/settings/${name}`)
 export const setProfile = (profile: 'military' | 'corporate') => req<{ profile: string; dataset: string }>('PUT', '/v1/cop/profile', { profile })
+
+// §9 users and permissions
+export const me = () => req<Me>('GET', '/v1/cop/me')
+export const listUsers = () => req<{ users: UserInfo[]; presets: Record<string, { label: string; perms: Record<string, string>; battle_captain: boolean }>; sections: string[] }>('GET', '/v1/cop/users')
+export const createUser = (body: Partial<UserInfo>) => req<UserInfo>('POST', '/v1/cop/users', body)
+export const updateUser = (id: string, body: Partial<UserInfo> & { perms?: Record<string, string | null> }) => req<UserInfo>('PATCH', `/v1/cop/users/${id}`, body)
+export const deleteUser = (id: string) => req<{ id: string }>('DELETE', `/v1/cop/users/${id}`)
+export const signIn = (userId: string) => { session.userId = userId; try { localStorage.setItem('toc.user', userId) } catch { /* private mode */ } }

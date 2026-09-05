@@ -20,7 +20,25 @@ struct PaceSite: Decodable, Hashable { var locationName: String, nets: [String: 
 struct S6Counts: Decodable, Hashable { var down: Int, degraded: Int, total: Int }
 struct S6Board: Decodable, Hashable { var status: String, systems: [SystemLine], pace: [String: PaceSite], exceptions: [String], counts: S6Counts }
 
+struct Me: Decodable, Hashable {
+    var userId: String?
+    var name: String
+    var role: String
+    var perms: [String: String]
+    var battleCaptain: Bool
+    var admin: Bool
+    var sectionsVisible: [String]
+}
+struct UserInfo: Decodable, Identifiable, Hashable {
+    var id: String
+    var name: String
+    var title: String?
+    var preset: String
+    var battleCaptain: Bool
+}
+
 struct Snapshot: Decodable {
+    var me: Me?
     var profile: String?, sections: [SectionCfg]?, s4: S4Board?, s6: S6Board?
     var generatedAt: String
     var restrictedIncluded: Bool

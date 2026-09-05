@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.23
+**Version:** 3.24
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -424,6 +424,10 @@ after-action report.
 
 ## 9. Who Uses It
 
+**[BUILT] — users and permissions (2026-09-05).** One app; what you see and what you can change follows your permissions. A user has, per staff section, *edit*, *view*, or nothing, plus two flags: *battle captain* (the floor: watch, roll calls, FLASH release, DEFCON, operations) and *admin* (the directory). Presets name the common shapes — a supply sergeant is S4 edit with S1 and S3 view — and the grid is the truth. Tabs and rails you cannot view do not appear; panels you can view but not edit show no controls; the API enforces it, not just the UI. Sign-in for the prototype is picking a user from a list, no password (the author's call): the client sends `X-TOC-User`, and the server derives the role and the actor the rest of the API already checks, so the ledger names the person. Requests without a user keep working on the role header alone. The admin's grid lives under SETTINGS on the wall; the phones sign in from their SETTINGS menu. The sample directories: for the brigade, a Battle Captain, a knowledge manager (admin), the brigade S1/S3/S4, a battalion S2, a supply sergeant, a signal NCO; for the corporate desk, the equivalents. **[LATER]** a real login in front of it (README, "Before you deploy").
+
+**Header counters open their section.** On the wall and the phones, PERSONNEL and the S1 counters open S1, THREATS / CONFIRMED / FLASH open S2, TRAVELING / VIP OUT / EVENTS go to S3.
+
 | User | What they do on the wall |
 | :--- | :--- |
 | **Battle Captain** | Reads the whole wall. Owns the shift. Escalates. |
@@ -600,6 +604,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.24** — §9 users and permissions: per-section view/edit, Battle Captain and admin flags, sign-in as a user, the admin's grid; header counters open their section; the phone header floats over the picture (clock left, DEFCON centered, gear right; the watch and counters as a card); the phone dock folds on scroll.
 - **v3.23** — the profile: a Military / Corporate menu beside the wordmark that reshapes the sections and reloads the matching sample data; corporate is the product as it was before S4 and S6.
 - **v3.22** — the sample force is a Combat Aviation Brigade: task organization on S1 (brigade → battalions → companies) on all three clients; S4 and S6 seeded the way a brigade keeps them (classes of supply, aircraft readiness, PACE per command post). No corporate/military fork.
 - **v3.21** — §11.3 settings: keys and options entered from the wall, write-only, encrypted at rest, environment wins; the sources drawer moved under SETTINGS.

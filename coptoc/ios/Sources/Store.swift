@@ -22,6 +22,16 @@ final class COPStore {
     var postureHeader: Bool = UserDefaults.standard.object(forKey: "toc.postureHeader") as? Bool ?? true { didSet { UserDefaults.standard.set(postureHeader, forKey: "toc.postureHeader") } }
 
     var client = COPClient()
+    var users: [UserInfo] = []
+    var tab = "COP"  // the phone's tab; a header counter can jump it
+    func signIn(_ id: String) { client.userId = id; UserDefaults.standard.set(id, forKey: "toc.user"); Task { await load() } }
+    func loadUsers() async { users = (try? await client.users()) ?? [] }
+    var me: Me? { snapshot?.me }
+    func can(_ section: String, _ level: String = "view") -> Bool {  // the server's answer for view; edit needs the grid, the floor, or nobody signed in
+        guard let me else { return true }
+        if me.userId == nil || me.battleCaptain { return true }
+        return level == "view" ? me.sectionsVisible.contains(section) : me.perms[section] == "edit"
+    }
     // The collapsing dock (ported from SoriStory's NavBarChrome): scrolling down folds the tab bar — labels go,
     // icons shrink, the capsule narrows; any upward scroll or a tab tap springs it back. Never folds near the top.
     var barCollapsed = false
@@ -43,6 +53,7 @@ final class COPStore {
     }
 
     func load() async {
+        if users.isEmpty { await loadUsers() }
         do {
             snapshot = try await client.snapshot(restricted: showRestricted); error = nil
             async let r = client.requirements(); async let i = client.intsums(); async let w = client.warnings(); async let c = client.cases()

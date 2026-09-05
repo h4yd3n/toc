@@ -10,18 +10,21 @@ import kotlinx.coroutines.launch
 
 data class WallState(
     val snap: Snapshot? = null, val requirements: List<Requirement> = emptyList(), val intsums: List<IntsumHead> = emptyList(), val cases: List<CaseHead> = emptyList(), val operation: Operation? = null,
+    val users: List<UserInfo> = emptyList(), val userId: String = Ui.userId,
     val role: String = "battle_captain", val restricted: Boolean = true, val busy: String? = null, val error: String? = null,
     val selection: Selection? = null, val lastRefresh: Long = 0L,
 )
 
 /** The wall's state on the phone: one snapshot, refreshed every 15 s and after every write. */
 class Store : ViewModel() {
-    val api = CopClient()
+    val api = CopClient(userId = Ui.userId)
     private val _state = MutableStateFlow(WallState())
     val state: StateFlow<WallState> = _state
 
     init { viewModelScope.launch { while (true) { refresh(); delay(15_000) } } }
 
+    fun signIn(id: String, ctx: android.content.Context? = null) { api.userId = id; Ui.userId = id; ctx?.let { Ui.save(it) }; _state.update { it.copy(userId = id) }; viewModelScope.launch { refresh() } }
+    suspend fun loadUsers() { runCatching { api.users() }.onSuccess { u -> _state.update { it.copy(users = u) } } }
     fun setRole(role: String) { api.role = role; _state.update { it.copy(role = role, restricted = role == "battle_captain" || role == "ep") }; viewModelScope.launch { refresh() } }
     fun select(sel: Selection?) = _state.update { it.copy(selection = sel) }
     fun openOperation(id: String?) { if (id == null) _state.update { it.copy(operation = null) } else viewModelScope.launch { runCatching { api.operation(id) }.onSuccess { op -> _state.update { it.copy(operation = op) } }.onFailure { e -> _state.update { it.copy(error = "operation: ${e.message}") } } } }

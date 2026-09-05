@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .sections import ShipmentRow, SupplyRow, SystemRow
+from . import users as toc_users
+from .users import UserRow
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
@@ -362,6 +364,13 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
             await session.delete(row)
     await session.flush()
     now = now_utc()
+    # §9 the directory follows the dataset
+    for u in (await session.execute(select(UserRow))).scalars():
+        await session.delete(u)
+    await session.flush()
+    toc_users._cache.clear()
+    for spec in toc_users.seed_users(dataset):
+        await toc_users.upsert(session, spec, "seed")
     if dataset == "cab":
         from . import seed_cab
         await seed_cab.populate(session, now)

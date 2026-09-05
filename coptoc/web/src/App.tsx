@@ -12,8 +12,9 @@ import { Timeline } from './Timeline'
 import { S4Panel, S6Panel } from './Sections'
 import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
+import { UsersPanel } from './Users'
 import * as api from './api'
-import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
+import type { UserInfo, Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE' }
 const LOG_LABEL: Record<string, string> = {
@@ -58,7 +59,13 @@ export default function App() {
   useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
   const toggleRight = (p: Exclude<RightPanel, null>) => setRightPanel(rightPanel === p ? null : p)
   const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
-  const sectionOn = (code: string) => snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')
+  const [s3Flash, setS3Flash] = useState(false)
+  const jump = (section: 'S1' | 'S2' | 'S3') => {  // a header counter opens its section
+    if (section === 'S1') setLeftOpen(true)
+    else if (section === 'S2') setRightPanel('right')
+    else { setS3Flash(true); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
+  }
+  const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code   // what the rail says: "S1" or "PEOPLE"
   const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''  // a corporate desk drops the staff codes
@@ -72,6 +79,10 @@ export default function App() {
   const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false })
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
+  const [users, setUsers] = useState<UserInfo[]>([])
+  const [userId, setUserId] = useState<string>(api.session.userId)
+  const me = snap?.me
+  const can = (section: string, level: 'view' | 'edit' = 'view') => !me || me.user_id === null || me.battle_captain ? true : level === 'view' ? me.sections_visible.includes(section) : me.perms[section as 'S1'] === 'edit'
   const [showBrief, setShowBrief] = useState(false)
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
@@ -82,6 +93,8 @@ export default function App() {
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
+  useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}) }, [briefReload])
+  useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
 
@@ -100,7 +113,7 @@ export default function App() {
   const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
 
   return (
-    <div className={`wall profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
@@ -115,19 +128,22 @@ export default function App() {
         </div>}
         <WatchChip w={snap?.watch} onOpen={() => setShowBrief(v => !v)} />
         <div className="stats">
-          <Stat label="PERSONNEL" v={s?.total_people} /><Stat label="PRESENT" v={s?.present} />
-          <Stat label="TRAVELING" v={s?.traveling} accent="blue" /><Stat label="VIP OUT" v={s?.vips_traveling} accent="gold" />
-          <Stat label="CHECKED IN" v={s?.checked_in_fresh} accent="green" /><Stat label="SEC ON SHIFT" v={s?.security_on_shift} accent="green" />
-          <Stat label="THREATS" v={s?.active_threats} accent="red" /><Stat label="CONFIRMED" v={s?.confirmed_links} accent="red" />
-          {(s?.unaccounted ?? 0) > 0 && <Stat label="UNACCOUNTED" v={s?.unaccounted} accent="red" />}
-          {(s?.flash ?? 0) > 0 && <Stat label="FLASH" v={s?.flash} accent="red" />}
-          {(s?.unreachable ?? 0) > 0 && <Stat label="UNREACHABLE" v={s?.unreachable} accent="red" />}
-          <Stat label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat label="EVENTS" v={s?.upcoming_events} />
+          <Stat onJump={jump} label="PERSONNEL" v={s?.total_people} /><Stat onJump={jump} label="PRESENT" v={s?.present} />
+          <Stat onJump={jump} label="TRAVELING" v={s?.traveling} accent="blue" /><Stat onJump={jump} label="VIP OUT" v={s?.vips_traveling} accent="gold" />
+          <Stat onJump={jump} label="CHECKED IN" v={s?.checked_in_fresh} accent="green" /><Stat onJump={jump} label="SEC ON SHIFT" v={s?.security_on_shift} accent="green" />
+          <Stat onJump={jump} label="THREATS" v={s?.active_threats} accent="red" /><Stat onJump={jump} label="CONFIRMED" v={s?.confirmed_links} accent="red" />
+          {(s?.unaccounted ?? 0) > 0 && <Stat onJump={jump} label="UNACCOUNTED" v={s?.unaccounted} accent="red" />}
+          {(s?.flash ?? 0) > 0 && <Stat onJump={jump} label="FLASH" v={s?.flash} accent="red" />}
+          {(s?.unreachable ?? 0) > 0 && <Stat onJump={jump} label="UNREACHABLE" v={s?.unreachable} accent="red" />}
+          <Stat onJump={jump} label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat onJump={jump} label="EVENTS" v={s?.upcoming_events} />
         </div>
-        <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
-          <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
+        <select className="role" value={userId} onChange={e => { api.signIn(e.target.value); setUserId(e.target.value); load() }} title="Sign in as — a prototype: pick a user, no password (§9)">
+          <option value="">— sign in as —</option>{users.map(u => <option key={u.id} value={u.id}>{u.name}{u.title ? ` · ${u.title}` : ''}</option>)}
         </select>
-        {role === 'battle_captain' && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
+        {!userId && <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo role — until someone signs in">
+          <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
+        </select>}
+        {(me ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -138,11 +154,11 @@ export default function App() {
       <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
 
       <nav className="rail rail-left">
-        <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}</button>
+        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}</button>}
         {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>
+        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>}
         {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
         {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
       </nav>
@@ -205,6 +221,7 @@ export default function App() {
 
       <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`}>
         <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
+        {(me?.admin ?? true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
       <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`}>
@@ -301,9 +318,12 @@ function AssessmentActions({ a, busy, act }: { a: Assessment; busy: string | nul
       {a.confidence === 'insufficient' && <span className="dim">cannot be approved</span>}
     </div>)
 }
-function Stat({ label, v, accent }: { label: string; v?: number; accent?: string }) {
+// which section a counter belongs to: click it and that section opens
+const STAT_SECTION: Record<string, 'S1' | 'S2' | 'S3'> = { PERSONNEL: 'S1', PRESENT: 'S1', 'CHECKED IN': 'S1', 'SEC ON SHIFT': 'S1', UNACCOUNTED: 'S1', UNREACHABLE: 'S1', TRAVELING: 'S3', 'VIP OUT': 'S3', EVENTS: 'S3', THREATS: 'S2', CONFIRMED: 'S2', FLASH: 'S2', 'OPEN PIRs': 'S2' }
+function Stat({ label, v, accent, onJump }: { label: string; v?: number; accent?: string; onJump?: (section: 'S1' | 'S2' | 'S3') => void }) {
   // data-k lets the header toggle keep five counters without changing the markup order
-  return <div className={`stat ${accent ?? ''}`} data-k={label}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
+  const sec = STAT_SECTION[label]
+  return <div className={`stat ${accent ?? ''} ${sec ? 'jump' : ''}`} data-k={label} title={sec ? `open ${sec}` : undefined} onClick={() => sec && onJump?.(sec)}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
 }
 function PanelHead({ code, title, hint, inline, children, onClose }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode; onClose?: () => void }) {
   return <div className={`panel-head ${inline ? 'inline' : ''}`}>{code && <span className="code">{code}</span>}<span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>

@@ -38,8 +38,10 @@ async def lifespan(_app: FastAPI):
     await cop_startup()
     from shared import settings as _settings
     from .routes import _sessions as _S
+    from . import users as _users
     async with _S() as s:
         await _settings.load(s)
+        await _users.load(s)
     clocks = []
     if os.environ.get("TOC_INTSUM_CLOCK", "on") != "off":
         clocks.append(asyncio.create_task(_intsum_clock()))
@@ -67,6 +69,8 @@ class MethodOverride:
 
 
 app.add_middleware(MethodOverride)
+from .users import Identity  # noqa: E402
+app.add_middleware(Identity)  # X-TOC-User → role + actor; outermost so every route sees the resolved identity
 app.include_router(cop_router)
 app.include_router(s2_router)  # Sigtoc embedded (Decision 3a); also runs standalone via sigtoc.api:app
 

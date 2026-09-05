@@ -104,7 +104,7 @@ export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Sh
 export interface SystemLine { id: string; name: string; category: string; location_id: string | null; location_name: string; pace: 'primary' | 'alternate' | 'contingency' | 'emergency' | null
   status: 'up' | 'degraded' | 'down'; health: Health; since: string | null; hours: number; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
-export interface Snapshot { warnings: Warning[]; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
+export interface Snapshot { warnings: Warning[]; me: Me; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }
@@ -178,3 +178,7 @@ export interface ImportResult { kind: string; source: string; created?: number; 
 
 export interface SettingInfo { name: string; label: string; group: 'sources' | 'drafter' | 'comms' | 'sections'; secret: boolean; needed_by: string[]; help: string
   set_in: 'env' | 'stored' | null; value: string | null; hint: string | null; set_by?: string; set_at?: string | null; error?: string }
+
+export type PermLevel = 'view' | 'edit'
+export interface Me { user_id: string | null; name: string; role: string; perms: Partial<Record<'S1' | 'S2' | 'S3' | 'S4' | 'S6', PermLevel>>; battle_captain: boolean; admin: boolean; sections_visible: string[] }
+export interface UserInfo { id: string; name: string; title: string; team_id?: string | null; preset: string; perms?: Record<string, string>; battle_captain: boolean; admin?: boolean; active?: boolean; created_by?: string }

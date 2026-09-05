@@ -9,6 +9,7 @@ struct COPClient {
         ?? "http://localhost:8000")!
     var actor = "Battle Captain (iOS)"
     var role = "battle_captain"  // Decision C: only battle_captain / ep may see the restricted layer
+    var userId: String = UserDefaults.standard.string(forKey: "toc.user") ?? ""  // §9: signed in as; the server derives role and actor from it
 
     private var decoder: JSONDecoder { let d = JSONDecoder(); d.keyDecodingStrategy = .convertFromSnakeCase; return d }
 
@@ -16,7 +17,7 @@ struct COPClient {
         var c = URLComponents(url: baseURL.appending(path: "/v1/cop/snapshot"), resolvingAgainstBaseURL: false)!
         c.queryItems = [URLQueryItem(name: "restricted", value: restricted ? "true" : "false")]
         var req = URLRequest(url: c.url!)
-        req.setValue(role, forHTTPHeaderField: "X-TOC-Role")
+        req.setValue(role, forHTTPHeaderField: "X-TOC-Role"); if !userId.isEmpty { req.setValue(userId, forHTTPHeaderField: "X-TOC-User") }
         let (data, resp) = try await URLSession.shared.data(for: req)
         try check(resp, data)
         return try decoder.decode(Snapshot.self, from: data)
@@ -49,6 +50,8 @@ struct COPClient {
         if let note { body["note"] = note }
         try await send("PATCH", "/v1/cop/incidents/\(incidentId)/roster/\(personId)", body)
     }
+    struct UsersOut: Decodable { var users: [UserInfo] }
+    func users() async throws -> [UserInfo] { let d: UsersOut = try await fetch("/v1/cop/users"); return d.users }
     // §11.2 the profile: military or corporate; reloads the sample data
     func setProfile(_ profile: String) async throws { try await send("PUT", "/v1/cop/profile", ["profile": profile]) }
     // §7 / §8 — the background boards
@@ -75,7 +78,7 @@ struct COPClient {
     private func fetch<T: Decodable>(_ path: String) async throws -> T {
         var req = URLRequest(url: baseURL.appending(path: path.split(separator: "?").first.map(String.init) ?? path))
         if let q = path.split(separator: "?").dropFirst().first { var c = URLComponents(url: req.url!, resolvingAgainstBaseURL: false)!; c.query = String(q); req.url = c.url }
-        req.setValue(role, forHTTPHeaderField: "X-TOC-Role"); req.setValue(actor, forHTTPHeaderField: "X-TOC-Actor")
+        req.setValue(role, forHTTPHeaderField: "X-TOC-Role"); req.setValue(actor, forHTTPHeaderField: "X-TOC-Actor"); if !userId.isEmpty { req.setValue(userId, forHTTPHeaderField: "X-TOC-User") }
         let (data, resp) = try await URLSession.shared.data(for: req)
         try check(resp, data)
         return try decoder.decode(T.self, from: data)
@@ -87,6 +90,7 @@ struct COPClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(actor, forHTTPHeaderField: "X-TOC-Actor")
         req.setValue(role, forHTTPHeaderField: "X-TOC-Role")
+        if !userId.isEmpty { req.setValue(userId, forHTTPHeaderField: "X-TOC-User") }
         if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
         let (data, resp) = try await URLSession.shared.data(for: req)
         try check(resp, data)

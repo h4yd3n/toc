@@ -7,11 +7,12 @@ import androidx.compose.runtime.setValue
 
 /** DISPLAY toggles, the same two as the wall: lean labels and the posture header. Both default on; persisted per device. */
 object Ui {
+    var userId: String = ""
     var lean by mutableStateOf(true)
     var posture by mutableStateOf(true)
     private const val FILE = "toc.ui"
-    fun load(ctx: Context) { val p = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE); lean = p.getBoolean("lean", true); posture = p.getBoolean("posture", true) }
-    fun save(ctx: Context) { ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("lean", lean).putBoolean("posture", posture).apply() }
+    fun load(ctx: Context) { val p = ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE); lean = p.getBoolean("lean", true); posture = p.getBoolean("posture", true); userId = p.getString("user", "") ?: "" }
+    fun save(ctx: Context) { ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean("lean", lean).putBoolean("posture", posture).putString("user", userId).apply() }
 }
 
 

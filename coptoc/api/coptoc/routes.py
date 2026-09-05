@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shared.ledger import AsyncDatabaseEventLedger
 from shared import settings as toc_settings
+from . import users as toc_users
+from .users import UserRow  # noqa: F401 — registered on Base before create_all
 from shared.settings import SettingRow  # noqa: F401 — registered on Base before create_all
 from shared.database import async_session_factory, create_engine, init_db
 from . import db_models  # noqa: F401 — registers tables on Base.metadata
@@ -74,7 +76,11 @@ def actor_from(x_toc_actor: Optional[str]) -> str:
 ROLL_CALL_OPENERS = {"battle_captain"}  # Decision 3
 
 
-def require_role(role: Optional[str], allowed: set, what: str) -> None:
+def require_role(role: Optional[str], allowed: set, what: str, section: Optional[str] = None) -> None:
+    """The role gate. A signed-in user's per-section `edit` right also passes for that section (§9)."""
+    actor = toc_users.current_actor.get()
+    if section and actor.user and actor.can(section, "edit"):
+        return
     if (role or "").lower() not in allowed:
         raise HTTPException(403, f"{what} requires role {' or '.join(sorted(allowed))}; you are {role or 'unspecified'}")
 
@@ -226,6 +232,81 @@ async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_s
     return {"profile": body.profile, "dataset": dataset_for(body.profile)}
 
 
+# ---------------------------------------------------------------- §9 users and permissions
+
+class UserBody(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    title: Optional[str] = None
+    team_id: Optional[str] = None
+    preset: Optional[str] = None
+    perms: Optional[Dict[str, Optional[str]]] = None
+    battle_captain: Optional[bool] = None
+    admin: Optional[bool] = None
+    active: Optional[bool] = None
+
+
+@router.get("/me")
+async def me():
+    """Who the API thinks you are — from X-TOC-User when signed in, else from the role header."""
+    return toc_users.current_actor.get().as_dict()
+
+
+@router.get("/users")
+async def list_users():
+    """The sign-in list. Everyone may read names and titles; the permission grid is the admin's."""
+    a = toc_users.current_actor.get()
+    full = a.is_admin or not a.user  # a bare role header (the wall before anyone signs in, tests) sees the grid too
+    return {"users": [u if full else {k: u[k] for k in ("id", "name", "title", "preset", "battle_captain")} for u in toc_users.directory()],
+            "presets": {k: {"label": v["label"], "perms": v["perms"], "battle_captain": v["bc"]} for k, v in toc_users.PRESETS.items()}, "sections": list(toc_users.SECTIONS)}
+
+
+def _require_admin(x_toc_role: Optional[str], what: str) -> None:
+    a = toc_users.current_actor.get()
+    if a.user and not a.is_admin:
+        raise HTTPException(403, f"{what} requires admin")
+    if not a.user:
+        require_role(x_toc_role, {"battle_captain"}, what)
+
+
+@router.post("/users", status_code=201)
+async def create_user(body: UserBody, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    _require_admin(x_toc_role, "Adding a user")
+    if not body.name:
+        raise HTTPException(422, "name required")
+    try:
+        u = await toc_users.upsert(session, body.model_dump(exclude_unset=True), actor_from(x_toc_actor))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=f"user:{u['id']}", event_type="cop.user.updated", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="created",
+                                    reason=f"{u['name']} added ({u['preset']})", metadata={"perms": u["perms"], "admin": u["admin"], "battle_captain": u["battle_captain"]})
+    return u
+
+
+@router.patch("/users/{user_id}")
+async def update_user(user_id: str, body: UserBody, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    _require_admin(x_toc_role, "Changing a user")
+    try:
+        u = await toc_users.upsert(session, body.model_dump(exclude_unset=True), actor_from(x_toc_actor), user_id=user_id)
+    except KeyError:
+        raise HTTPException(404, "user not found")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=f"user:{u['id']}", event_type="cop.user.updated", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="updated",
+                                    reason=f"{u['name']}: " + ", ".join(f"{k} {v}" for k, v in sorted(u["perms"].items())) + (" · BC" if u["battle_captain"] else "") + (" · admin" if u["admin"] else ""),
+                                    metadata={"perms": u["perms"], "admin": u["admin"], "battle_captain": u["battle_captain"]})
+    return u
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    _require_admin(x_toc_role, "Removing a user")
+    if not await toc_users.remove(session, user_id):
+        raise HTTPException(404, "user not found")
+    await get_ledger().append_event(content_id=f"user:{user_id}", event_type="cop.user.updated", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="removed", reason=f"{user_id} removed")
+    return {"id": user_id, "status": "removed"}
+
+
 @router.get("/settings")
 async def list_settings(x_toc_role: Optional[str] = Header(None)):
     """What is set and where (env or stored), never a secret's value."""
@@ -263,7 +344,7 @@ S6_OWNERS = {"battle_captain", "signal"}
 
 @router.post("/supply", status_code=201)
 async def create_supply(body: SupplyCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S4_OWNERS, "Adding a supply line")
+    require_role(x_toc_role, S4_OWNERS, "Adding a supply line", section="S4")
     if body.location_id:
         await one_or_404(session, LocationRow, body.location_id, "location")
     row = SupplyRow(id=f"sup_{uuid.uuid4().hex[:8]}", location_id=body.location_id, category=body.category, item=body.item, on_hand=body.on_hand, required=body.required,
@@ -276,7 +357,7 @@ async def create_supply(body: SupplyCreate, session: AsyncSession = Depends(get_
 
 @router.patch("/supply/{supply_id}")
 async def update_supply(supply_id: str, body: SupplyUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S4_OWNERS, "Updating a supply line")
+    require_role(x_toc_role, S4_OWNERS, "Updating a supply line", section="S4")
     row = await one_or_404(session, SupplyRow, supply_id, "supply line")
     old = f"{row.on_hand:g}/{row.required:g}"
     for k, v in body.model_dump(exclude_unset=True).items():
@@ -290,7 +371,7 @@ async def update_supply(supply_id: str, body: SupplyUpdate, session: AsyncSessio
 
 @router.delete("/supply/{supply_id}")
 async def delete_supply(supply_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S4_OWNERS, "Removing a supply line")
+    require_role(x_toc_role, S4_OWNERS, "Removing a supply line", section="S4")
     row = await one_or_404(session, SupplyRow, supply_id, "supply line")
     await session.delete(row); await session.commit()
     await get_ledger().append_event(content_id=supply_id, event_type="cop.s4.supply", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="removed", reason=f"{row.item} removed from the board")
@@ -299,7 +380,7 @@ async def delete_supply(supply_id: str, session: AsyncSession = Depends(get_sess
 
 @router.post("/shipments", status_code=201)
 async def create_shipment(body: ShipmentCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S4_OWNERS, "Adding a shipment")
+    require_role(x_toc_role, S4_OWNERS, "Adding a shipment", section="S4")
     to = await one_or_404(session, LocationRow, body.to_location_id, "destination") if body.to_location_id else None
     row = ShipmentRow(id=f"shp_{uuid.uuid4().hex[:8]}", description=body.description, category=body.category, quantity=body.quantity, from_name=body.from_name,
                       to_location_id=body.to_location_id, to_name=body.to_name or (to.name if to else ""), eta=naive(body.eta), status=body.status, priority=body.priority,
@@ -312,7 +393,7 @@ async def create_shipment(body: ShipmentCreate, session: AsyncSession = Depends(
 
 @router.patch("/shipments/{shipment_id}")
 async def update_shipment(shipment_id: str, body: ShipmentUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S4_OWNERS, "Updating a shipment")
+    require_role(x_toc_role, S4_OWNERS, "Updating a shipment", section="S4")
     row = await one_or_404(session, ShipmentRow, shipment_id, "shipment")
     old = row.status
     for k, v in body.model_dump(exclude_unset=True).items():
@@ -326,7 +407,7 @@ async def update_shipment(shipment_id: str, body: ShipmentUpdate, session: Async
 
 @router.post("/systems", status_code=201)
 async def create_system(body: SystemCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S6_OWNERS, "Adding a system")
+    require_role(x_toc_role, S6_OWNERS, "Adding a system", section="S6")
     if body.location_id:
         await one_or_404(session, LocationRow, body.location_id, "location")
     row = SystemRow(id=f"sys_{uuid.uuid4().hex[:8]}", name=body.name, category=body.category, location_id=body.location_id, pace=body.pace, status=body.status,
@@ -339,7 +420,7 @@ async def create_system(body: SystemCreate, session: AsyncSession = Depends(get_
 
 @router.patch("/systems/{system_id}")
 async def update_system(system_id: str, body: SystemUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S6_OWNERS, "Updating a system")
+    require_role(x_toc_role, S6_OWNERS, "Updating a system", section="S6")
     row = await one_or_404(session, SystemRow, system_id, "system")
     old = row.status
     for k, v in body.model_dump(exclude_unset=True).items():
@@ -355,7 +436,7 @@ async def update_system(system_id: str, body: SystemUpdate, session: AsyncSessio
 
 @router.delete("/systems/{system_id}")
 async def delete_system(system_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, S6_OWNERS, "Removing a system")
+    require_role(x_toc_role, S6_OWNERS, "Removing a system", section="S6")
     row = await one_or_404(session, SystemRow, system_id, "system")
     await session.delete(row); await session.commit()
     await get_ledger().append_event(content_id=system_id, event_type="cop.s6.system", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="removed", reason=f"{row.name} removed from the board")
@@ -1028,7 +1109,7 @@ async def set_estimate(section: str, body: EstimateUpdate, session: AsyncSession
     section = section.upper()
     if section not in SECTIONS:
         raise HTTPException(404, "section must be one of S1, S2, S3, S6")
-    require_role(x_toc_role, ESTIMATE_OWNERS[section], f"Updating the {section} estimate")
+    require_role(x_toc_role, ESTIMATE_OWNERS[section], f"Updating the {section} estimate", section=section)
     actor = actor_from(x_toc_actor)
     row = await session.get(SectionEstimateRow, section)
     if not row:
@@ -1367,7 +1448,7 @@ async def assign_coverage(event_id: str, body: CoverageAssign, session: AsyncSes
 
 @router.delete("/events/{event_id}/coverage/{person_id}")
 async def remove_coverage(event_id: str, person_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
-    require_role(x_toc_role, COVERAGE_ASSIGNERS, "Removing coverage")
+    require_role(x_toc_role, COVERAGE_ASSIGNERS, "Removing coverage", section="S3")
     row = (await session.execute(select(EventCoverageRow).where(EventCoverageRow.event_id == event_id, EventCoverageRow.person_id == person_id))).scalar_one_or_none()
     if not row: raise HTTPException(404, "not assigned")
     await session.delete(row); await session.commit()
@@ -1385,7 +1466,7 @@ async def import_data(kind: Literal["people", "shifts", "trips", "ics", "legs", 
     """Paste or post an export: people (HRIS CSV), shifts (scheduling CSV), trips (travel-system CSV), ics (calendar),
     legs (itinerary CSV from the travel system), itinerary (a pasted confirmation, one leg per line).
     Rows carry their provenance; what cannot be placed is reported, never guessed."""
-    require_role(x_toc_role, IMPORTERS, "Importing")
+    require_role(x_toc_role, IMPORTERS, "Importing", section="S1")
     from . import imports as I
     actor = actor_from(x_toc_actor)
     if kind == "people": result = await I.import_people(session, body.text, body.source or "hris:csv")
