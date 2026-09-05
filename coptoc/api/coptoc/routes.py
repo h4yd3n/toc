@@ -26,9 +26,11 @@ from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 —
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
 from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
 from . import areas as toc_areas
+from . import graphics as toc_graphics
+from .graphics import GraphicRow
 from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
+from .schemas import (GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -233,6 +235,65 @@ async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_s
     await get_ledger().append_event(content_id="setting:TOC_PROFILE", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
                                     new_state=body.profile, reason=f"Profile set to {body.profile}; sample data reloaded", metadata={"name": "TOC_PROFILE"})
     return {"profile": body.profile, "dataset": dataset_for(body.profile)}
+
+
+# ---------------------------------------------------------------- §3.4 the graphics object: a control measure a section draws on the board
+
+@router.get("/graphics/catalog")
+async def graphics_catalog():
+    """What may be drawn, by whom, and what this desk calls it."""
+    from .sections import profile
+    return {"profile": profile(), "types": toc_graphics.catalog(profile())}
+
+
+@router.get("/graphics")
+async def list_graphics(all: bool = Query(False, description="include retired"), session: AsyncSession = Depends(get_session)):
+    from .sections import profile
+    q = select(GraphicRow) if all else select(GraphicRow).where(GraphicRow.status != "retired")
+    now = now_utc()
+    return [toc_graphics.out(g, now, profile()) for g in (await session.execute(q.order_by(GraphicRow.section, GraphicRow.created_at))).scalars()]
+
+
+@router.post("/graphics", status_code=201)
+async def draw_graphic(body: GraphicCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Draw a control measure. The type says which section owns it; drawing needs edit on that section, or the Battle Captain."""
+    from .sections import profile
+    c = toc_graphics.CATALOG.get(body.type)
+    if not c: raise HTTPException(422, f"unknown graphic type {body.type!r}")
+    _may_act_for(c["section"], x_toc_role, f"Drawing a {body.type}")
+    why = toc_graphics.validate(body.type, body.kind, body.geometry)
+    if why: raise HTTPException(422, why)
+    if body.window_from and body.window_to and naive(body.window_to) < naive(body.window_from): raise HTTPException(422, "window_to is before window_from")
+    if not body.name.strip(): raise HTTPException(422, "a graphic needs a name")
+    now = now_utc(); actor = actor_from(x_toc_actor)
+    g = GraphicRow(id=f"gfx_{uuid.uuid4().hex[:8]}", type=body.type, kind=body.kind, section=c["section"], name=body.name.strip(), geometry_json=json.dumps(body.geometry), window_from=naive(body.window_from), window_to=naive(body.window_to),
+                   status=body.status, note=body.note, subject_type=body.subject_type, subject_id=body.subject_id, created_by=actor, created_at=now, updated_at=now)
+    session.add(g); await session.commit()
+    o = toc_graphics.out(g, now, profile())
+    await get_ledger().append_event(content_id=g.id, event_type="cop.graphic.drawn", actor_type="human", actor_id=actor, new_state=g.status,
+                                    reason=f"{c['section']} drew {o['label'].split(' · ')[0]} {g.name}" + (f" for {body.subject_type} {body.subject_id}" if body.subject_id else ""), metadata={"type": g.type, "kind": g.kind, "section": g.section})
+    return o
+
+
+@router.patch("/graphics/{graphic_id}")
+async def update_graphic(graphic_id: str, body: GraphicUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Move it, rename it, change its window, or retire it. Retired graphics stay in the record and off the board."""
+    from .sections import profile
+    g = await one_or_404(session, GraphicRow, graphic_id, "graphic")
+    _may_act_for(g.section, x_toc_role, "Changing a graphic")
+    changes = body.model_dump(exclude_unset=True)
+    if "geometry" in changes:
+        why = toc_graphics.validate(g.type, g.kind, changes["geometry"])
+        if why: raise HTTPException(422, why)
+        g.geometry_json = json.dumps(changes.pop("geometry"))
+    old = g.status
+    for k, v in changes.items():
+        setattr(g, k, naive(v) if k in ("window_from", "window_to") else (v.strip() if k == "name" else v))
+    g.updated_at = now_utc(); await session.commit()
+    ev = "cop.graphic.retired" if changes.get("status") == "retired" and old != "retired" else "cop.graphic.updated"
+    await get_ledger().append_event(content_id=g.id, event_type=ev, actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=g.status,
+                                    reason=f"{g.section}: {g.name} {'retired' if ev.endswith('retired') else 'amended'}", metadata={"type": g.type})
+    return toc_graphics.out(g, now_utc(), profile())
 
 
 # ---------------------------------------------------------------- §5.6a the rated area assessment: what S2 judges about a place

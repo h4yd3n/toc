@@ -150,7 +150,7 @@ LOG_BUCKETS = {
     "cop.trip.created": "movement", "cop.trip.updated": "movement", "cop.trip.cancelled": "movement", "cop.person.checkin": "movement",
     "cop.event.created": "operations", "cop.event.updated": "operations", "cop.event.cancelled": "operations", "cop.event.attendees_added": "operations",
     "cop.assessment.drafted": "intel", "cop.assessment.status": "intel", "cop.pir.created": "intel", "cop.pir.updated": "intel",
-    "cop.person.shift": "personnel", "cop.watch.estimate": "estimates", "cop.area.assessed": "intel", "cop.area.updated": "intel",
+    "cop.person.shift": "personnel", "cop.watch.estimate": "estimates", "cop.area.assessed": "intel", "cop.area.updated": "intel", "cop.graphic.drawn": "operations", "cop.graphic.updated": "operations", "cop.graphic.retired": "operations",
     "cop.s4.supply": "logistics", "cop.s4.shipment": "logistics", "cop.s6.system": "signal",
     "cop.tasking.raised": "operations", "cop.tasking.accepted": "operations", "cop.tasking.scheduled": "operations", "cop.tasking.complete": "operations", "cop.tasking.declined": "operations", "cop.tasking.amended": "operations",
     "s2.requirement.created": "intel", "s2.requirement.updated": "intel", "s2.source.updated": "collection", "s2.requirements.synced": "estimates",

@@ -43,6 +43,21 @@ struct MapScreen: View {
                                 .stroke(Theme.severity(t.severity).opacity(threatAlpha), style: StrokeStyle(lineWidth: t.confirmedLinks.isEmpty ? 1.5 : 2.2, dash: t.confirmedLinks.isEmpty ? [3, 3] : []))
                         }
                     }
+                    if let gfx = snap.graphics {   // §3.4 the control measures: the owning section's forward, the rest dimmed; a range loud only in its window
+                        ForEach(gfx) { g in
+                            let a = (layer == nil || layer == g.section ? 1.0 : 0.3) * (g.windowFrom != nil && !g.inWindow ? 0.45 : 1.0)
+                            let color = g.swiftColor
+                            switch g.geometry {
+                            case .path(let ps) where g.kind == "polygon" && ps.count >= 3:
+                                MapPolygon(coordinates: g.geometry.coordinates).foregroundStyle(color.opacity((g.type == "range" && g.inWindow ? 0.22 : 0.07) * a))
+                                    .stroke(color.opacity(a), style: StrokeStyle(lineWidth: 2, dash: g.dash ? [5, 4] : []))
+                            case .path(let ps) where ps.count >= 2:
+                                MapPolyline(coordinates: g.geometry.coordinates).stroke(color.opacity(a), style: StrokeStyle(lineWidth: g.type == "boundary" || g.type == "phase_line" ? 1.5 : 2.5, dash: g.dash ? [5, 4] : []))
+                            default: EmptyMapContent()
+                            }
+                            Annotation(g.name, coordinate: g.kind == "point" ? g.geometry.coordinates[0] : g.centerCoordinate, anchor: g.kind == "point" ? .center : .bottom) { GraphicMarker(g: g).opacity(a) }.annotationTitles(.hidden)
+                        }
+                    }
                     ForEach(store.openIncidents) { inc in
                         MapCircle(center: inc.coordinate, radius: inc.radiusKm * 1000)
                             .foregroundStyle(Theme.red.opacity(0.10)).stroke(Theme.red, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
@@ -169,6 +184,20 @@ struct MovementHead: View {
         .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 3)
         .background(Theme.panel.opacity(0.94), in: RoundedRectangle(cornerRadius: 6)).overlay(RoundedRectangle(cornerRadius: 6).stroke(color, style: StrokeStyle(lineWidth: 1.5, dash: mv.status == "planned" ? [3, 3] : [])))
         .shadow(color: color.opacity(0.5), radius: 8)
+    }
+}
+
+/// §3.4 the glyph and the name of a control measure, in its section's color.
+struct GraphicMarker: View {
+    var g: Graphic
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(g.glyph).font(.system(size: 11, weight: .heavy, design: .monospaced)).foregroundStyle(g.swiftColor)
+            Text(g.name).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+        }
+        .foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Theme.panel.opacity(g.kind == "point" ? 0.92 : 0.8), in: RoundedRectangle(cornerRadius: 4))
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(g.swiftColor, style: StrokeStyle(lineWidth: g.kind == "point" ? 1.5 : 1, dash: g.status == "planned" ? [3, 3] : [])))
     }
 }
 

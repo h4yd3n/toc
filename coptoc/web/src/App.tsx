@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './MapView'
 import { BriefPanel, EstimateLine, WatchChip } from './Watch'
 import { RequirementsPanel } from './Requirements'
@@ -20,7 +20,7 @@ import { ContextRow, RollCallStrip } from './Strips'
 import { CommandBar, buildCommands } from './CommandBar'
 import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } from './Areas'
 import * as api from './api'
-import type { Overlay, UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
+import type { Draw, GraphicType, Overlay, UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE', airfield: 'AIRFIELD', cp: 'CP', fob: 'FOB', farp: 'FARP', range: 'RANGE' }
 const SITE_TYPES = ['hq', 'cp', 'fob', 'farp', 'airfield', 'range', 'office', 'datacenter', 'venue', 'residence'] as const
@@ -31,6 +31,7 @@ const LOG_LABEL: Record<string, string> = {
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
   'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗', 'cop.area.assessed': 'AREA', 'cop.area.updated': 'AREA',
+  'cop.graphic.drawn': 'GRAPHIC', 'cop.graphic.updated': 'GRAPHIC', 'cop.graphic.retired': 'GRAPHIC ✗',
   'cop.operation.opened': 'OP', 'cop.operation.status': 'OP', 'cop.operation.task': 'OP TASK', 'cop.s4.shipment': 'S4', 'cop.s4.supply': 'S4', 'cop.s6.system': 'S6',
   'cop.tasking.raised': 'TASKING', 'cop.tasking.accepted': 'TASKING', 'cop.tasking.scheduled': 'TASKING', 'cop.tasking.complete': 'TASKING ✓', 'cop.tasking.declined': 'TASKING ✗', 'cop.tasking.amended': 'TASKING',
 }
@@ -112,12 +113,30 @@ export default function App() {
   const [overlay, setOverlay] = useState<Overlay>('COP')
   const [timeBack, setTimeBack] = useState<number | null>(null)
   const [scrub, setScrub] = useState<{ t: number; pinned: boolean } | null>(null)
+  // §3.4 drawing a control measure: pick a type from the catalog, click points, double-click (or FINISH) to name it
+  const [catalog, setCatalog] = useState<GraphicType[]>([])
+  const [draw, setDraw] = useState<Draw | null>(null)
+  const [drawMenu, setDrawMenu] = useState(false)
+  useEffect(() => { api.graphicsCatalog().then(d => setCatalog(d.types)).catch(() => {}) }, [snap?.profile])
+  const finishDraw = (d: Draw | null) => {
+    if (!d) return
+    const pts = d.points.filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1])   // a double-click lands two clicks on one spot
+    const need = d.kind === 'point' ? 1 : d.kind === 'line' ? 2 : 3
+    if (pts.length < need) { setErr(`A ${d.kind} needs ${need} point${need === 1 ? '' : 's'}; ${pts.length} so far.`); return }
+    const name = window.prompt(`Name for the ${d.type.label.split(' · ')[0]}:`, '')
+    if (!name?.trim()) { setDraw(null); return }
+    const note = window.prompt('Note (optional):', '') ?? ''
+    setDraw(null)
+    act(`drawing ${name}`, () => api.drawGraphic({ type: d.type.type, kind: d.kind, name: name.trim(), geometry: d.kind === 'point' ? pts[0] : pts, note }))
+  }
+  const drawRef = useRef<Draw | null>(null); drawRef.current = draw   // read outside a state updater: StrictMode runs updaters twice and a side effect in one would draw twice
+  const onDrawPoint = (p: [number, number]) => { const d = drawRef.current; if (!d) return; if (d.kind === 'point') { finishDraw({ ...d, points: [p] }); return } setDraw({ ...d, points: [...d.points, p] }) }
   const onScrub = (t: number | null, pinned?: boolean) => setScrub(prev => pinned ? (prev?.pinned && t != null && Math.abs(prev.t - t) < 1 ? null : t == null ? null : { t, pinned: true }) : prev?.pinned ? prev : t == null ? null : { t, pinned: false })
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
   useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}); api.getCoverage().then(setCov).catch(() => {}) }, [briefReload])
-  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } if (e.key === 'Escape') { setDraw(null); setDrawMenu(false) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
@@ -264,10 +283,16 @@ export default function App() {
       </aside>
 
       <main className="center" onClick={() => setShowSettings(false)}>
-        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} />
+        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} />
         <div className="ovbar" onClick={e => e.stopPropagation()}>
           {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
           {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
+          {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
+          {drawMenu && !draw && <div className="drawmenu">
+            {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
+            {catalog.filter(t => t.section === overlay).length === 0 && <div className="dim small" style={{ padding: 6 }}>Nothing in the catalog for {overlay}.</div>}
+          </div>}
+          {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
           {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
         </div>
         {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
@@ -524,6 +549,28 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, ro
   const draftBtn = (subject_type: string, subject_id: string) => (
     <button className="mini s2" disabled={!!busy} onClick={e => { e.stopPropagation(); act('drafting S2 assessment', () => api.draftAssessment(subject_type, subject_id)) }}>✎ DRAFT S2 ASSESSMENT</button>)
 
+  if (sel.type === 'graphic') {
+    const g = snap.graphics?.find(x => x.id === sel.id); if (!g) return null
+    const OWNER: Record<string, Role> = { S2: 'analyst', S3: 'ea', S4: 'logistics', S6: 'signal' }
+    const canEdit = role === 'battle_captain' || role === OWNER[g.section]
+    const subject = g.subject_type === 'event' && g.subject_id ? byId.event.get(g.subject_id) : g.subject_type === 'location' && g.subject_id ? byId.loc.get(g.subject_id) : undefined
+    return (
+      <div className="detail graphic" style={{ borderColor: g.color }} onClick={e => e.stopPropagation()}>
+        <button className="close" onClick={onClose}>×</button>
+        <div className="d-kicker"><span style={{ color: g.color }}>{g.glyph}</span> {g.label.toUpperCase()} · {g.section} · <span className={`chip small ${g.status === 'active' ? 'green' : 'planned'}`}>{g.status.toUpperCase()}</span>{g.window_from && <span className={`chip small ${g.in_window ? 'red' : 'dim'}`}>{g.in_window ? 'IN WINDOW' : 'OUTSIDE WINDOW'}</span>}</div>
+        <div className="d-title">{g.name}</div>
+        <div className="d-sub">{g.kind} · {g.kind === 'point' ? `${(g.geometry as number[])[1].toFixed(4)}, ${(g.geometry as number[])[0].toFixed(4)}` : `${(g.geometry as [number, number][]).length} points`} · drawn by {g.created_by} {rel(g.created_at, now)}</div>
+        {g.window_from && <div className="kv"><span>Window</span>{new Date(g.window_from).toUTCString().slice(5, 22)}Z{g.window_to && <> → {new Date(g.window_to).toUTCString().slice(5, 22)}Z</>}</div>}
+        {subject && <div className="kv"><span>For</span><a onClick={() => onSelect(g.subject_type === 'event' ? { type: 'event', id: g.subject_id! } : { type: 'location', id: g.subject_id! })}>{'name' in subject ? subject.name : g.subject_id}</a></div>}
+        {g.note && <div className="bluf">{g.note}</div>}
+        {canEdit && <div className="d-actions row-btns">
+          <button className="mini" disabled={!!busy} onClick={() => { const n = window.prompt('Note:', g.note); if (n !== null) act('amending the graphic', () => api.updateGraphic(g.id, { note: n })) }}>NOTE</button>
+          <button className="mini" disabled={!!busy} onClick={() => { const n = window.prompt('Name:', g.name); if (n?.trim()) act('renaming the graphic', () => api.updateGraphic(g.id, { name: n.trim() })) }}>RENAME</button>
+          {g.status === 'planned' && <button className="mini ok" disabled={!!busy} onClick={() => act('activating the graphic', () => api.updateGraphic(g.id, { status: 'active' }))}>ACTIVATE</button>}
+          <button className="mini danger" disabled={!!busy} onClick={() => { if (window.confirm(`Retire ${g.name}? It leaves the board and stays in the record.`)) act('retiring the graphic', () => api.updateGraphic(g.id, { status: 'retired' }).then(() => onClose())) }}>RETIRE</button>
+        </div>}
+      </div>)
+  }
   if (sel.type === 'location') {
     const l = byId.loc.get(sel.id); if (!l) return null
     const teams = snap.teams.filter(t => t.location_id === l.id)

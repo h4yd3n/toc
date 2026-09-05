@@ -1,4 +1,4 @@
-import type { AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location } from './types'
+import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -115,6 +115,11 @@ export const uploadPreview = async (section: string, file: File): Promise<Upload
   return r.json()
 }
 export const uploadCommit = (section: string, body: { upload_id: string; sheet: string; mapping: Record<string, string | null>; kind?: string }) => req<ImportResult & { section: string; sheet: string }>('POST', `/v1/cop/upload/${section}/commit`, body)
+
+// §3.4 the graphics object
+export const graphicsCatalog = () => req<{ profile: string; types: GraphicType[] }>('GET', '/v1/cop/graphics/catalog')
+export const drawGraphic = (body: { type: string; kind: string; name: string; geometry: unknown; window_from?: string; window_to?: string; status?: string; note?: string; subject_type?: string; subject_id?: string }) => req<Graphic>('POST', '/v1/cop/graphics', body)
+export const updateGraphic = (id: string, body: { name?: string; geometry?: unknown; window_from?: string | null; window_to?: string | null; status?: string; note?: string }) => req<Graphic>('PATCH', `/v1/cop/graphics/${id}`, body)
 
 // §5.6a the rated area assessment
 export const areaIndicators = () => req<{ profile: string; indicators: { id: string; label: string }[] }>('GET', '/v1/cop/areas/indicators')

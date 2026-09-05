@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 Posture = Literal["normal", "guarded", "elevated", "high", "critical"]
@@ -102,6 +102,26 @@ class AreaCreate(BaseModel):
     lon: Optional[float] = None
     ratings: List[AreaRatingIn] = []
     summary: str = ""
+
+class GraphicCreate(BaseModel):
+    type: str
+    kind: Literal["point", "line", "polygon"]
+    name: str
+    geometry: Any                     # point: [lon, lat]; line / polygon: [[lon, lat], …]
+    window_from: Optional[datetime] = None
+    window_to: Optional[datetime] = None
+    status: Literal["planned", "active"] = "active"
+    note: str = ""
+    subject_type: Optional[Literal["event", "location", "operation", "trip"]] = None
+    subject_id: Optional[str] = None
+
+class GraphicUpdate(BaseModel):
+    name: Optional[str] = None
+    geometry: Optional[Any] = None
+    window_from: Optional[datetime] = None
+    window_to: Optional[datetime] = None
+    status: Optional[Literal["planned", "active", "retired"]] = None
+    note: Optional[str] = None
 
 class AreaUpdate(BaseModel):
     ratings: Optional[List[AreaRatingIn]] = None

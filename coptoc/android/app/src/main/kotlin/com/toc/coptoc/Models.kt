@@ -1,6 +1,10 @@
 package com.toc.coptoc
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.double
 
 // Mirrors coptoc/api/COP_API_CONTRACT.md. Decoded with a snake_case naming strategy and unknown keys ignored,
 // so the wall can grow without breaking the phone.
@@ -71,9 +75,19 @@ import kotlinx.serialization.Serializable
                                   val originName: String = "", val destName: String = "", val destLat: Double = 0.0, val destLon: Double = 0.0, val departAt: String? = null, val returnAt: String = "", val hoursToEta: Double? = null,
                                   val status: String = "planned", val mode: String = "unknown", val headLat: Double? = null, val headLon: Double? = null, val currentLeg: String? = null, val legs: List<MovementLeg> = emptyList(), val health: String = "green")
 @Serializable data class AreaCompact(val id: String, val place: String = "", val worst: String = "unknown", val worstIndicator: String? = null, val strip: List<String> = emptyList(), val assessedBy: String = "", val assessedAt: String = "", val ageDays: Double = 0.0, val stale: Boolean = false)
+// §3.4 a control measure a section drew by hand: a point [lon, lat] or a path [[lon, lat], …], typed from the catalog
+@Serializable data class Graphic(val id: String, val type: String = "", val kind: String = "point", val section: String = "S3", val name: String = "", val label: String = "", val geometry: JsonElement, val center: List<Double> = emptyList(),
+                                 val windowFrom: String? = null, val windowTo: String? = null, val inWindow: Boolean = true, val status: String = "active", val note: String = "", val subjectType: String? = null, val subjectId: String? = null,
+                                 val createdBy: String = "", val color: String = "#94a3b8", val dash: Boolean = false, val glyph: String = "·") {
+    /** The path as (lon, lat) pairs; a point is a path of one. */
+    val path: List<Pair<Double, Double>> get() = try {
+        val a = geometry.jsonArray
+        if (a.isNotEmpty() && a[0] is kotlinx.serialization.json.JsonArray) a.map { it.jsonArray[0].jsonPrimitive.double to it.jsonArray[1].jsonPrimitive.double } else listOf(a[0].jsonPrimitive.double to a[1].jsonPrimitive.double)
+    } catch (e: Exception) { emptyList() }
+}
 @Serializable data class MapFrame(val centerLat: Double? = null, val centerLon: Double? = null, val radiusKm: Double? = null, val source: String = "none")
 
-@Serializable data class Snapshot(val nais: List<Nai> = emptyList(), val movements: List<Movement> = emptyList(), val view: MapFrame? = null, val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
+@Serializable data class Snapshot(val graphics: List<Graphic> = emptyList(), val nais: List<Nai> = emptyList(), val movements: List<Movement> = emptyList(), val view: MapFrame? = null, val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList())

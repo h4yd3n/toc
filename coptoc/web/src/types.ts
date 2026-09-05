@@ -123,13 +123,20 @@ export interface MovementLeg { kind: 'flight' | 'ground' | 'lodging' | 'route'; 
 export interface Movement { id: string; kind: 'serial' | 'delegation' | 'individual' | 'shipment'; owner: 'S3' | 'S4'; name: string; unit: string | null; pax: number; person_ids: string[]; trip_ids: string[]; shipment_id?: string
   is_vip: boolean; event_id: string | null; purpose: string; origin_name: string; origin_lat: number | null; origin_lon: number | null; dest_name: string; dest_lat: number; dest_lon: number
   depart_at: string | null; return_at: string; eta?: string; hours_to_eta?: number; status: 'active' | 'planned'; mode: 'air' | 'ground' | 'unknown'; head_lat: number | null; head_lon: number | null; current_leg: string | null; legs: MovementLeg[]; health: Health; priority?: string }
+/** §3.4 a control measure a section drew by hand: a point, a line, or a polygon, typed from the catalog. */
+export interface Graphic { id: string; type: string; kind: 'point' | 'line' | 'polygon'; section: 'S2' | 'S3' | 'S4' | 'S6'; name: string; label: string; geometry: number[] | [number, number][]; center: [number, number]
+  window_from: string | null; window_to: string | null; in_window: boolean; status: 'planned' | 'active' | 'retired'; note: string; subject_type: string | null; subject_id: string | null; created_by: string; created_at: string; updated_at: string
+  color: string; dash: boolean; glyph: string }
+export interface GraphicType { type: string; section: 'S2' | 'S3' | 'S4' | 'S6'; kinds: ('point' | 'line' | 'polygon')[]; label: string; color: string; dash: boolean; glyph: string }
+/** What the wall is drawing right now: a type, the kind of shape, and the points so far. */
+export interface Draw { type: GraphicType; kind: 'point' | 'line' | 'polygon'; points: [number, number][] }
 export interface WatchLogEntry { id: string; at: string; type: string; bucket: string; actor: string; subject: string; summary: string | null }
-export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
+export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }
 export type Selection =
-  | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | null
+  | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | { type: 'graphic'; id: string } | null
 export interface Layers { locations: boolean; travelers: boolean; threats: boolean; routes: boolean; events: boolean; residences: boolean; s4: boolean; s6: boolean }
 
 export interface Requirement {

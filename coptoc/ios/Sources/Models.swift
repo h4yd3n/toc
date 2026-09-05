@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import CoreLocation
 
 // Mirrors apps/coptoc/COP_API_CONTRACT.md. Decoded with .convertFromSnakeCase.
@@ -80,6 +81,32 @@ struct Snapshot: Decodable {
     var warnings: [Warning]?
     var operations: [OperationSummary]?
     var nais: [NAI]?, movements: [Movement]?   // §3.4 the derived overlays
+    var graphics: [Graphic]?                    // §3.4 the control measures a section drew
+}
+
+/// §3.4 a control measure a section drew by hand: a point, a line, or a polygon, typed from the catalog.
+struct Graphic: Decodable, Identifiable, Hashable {
+    var id: String, type: String, kind: String, section: String, name: String, label: String, geometry: Geometry, center: [Double]
+    var windowFrom: String?, windowTo: String?, inWindow: Bool, status: String, note: String, subjectType: String?, subjectId: String?, createdBy: String
+    var color: String, dash: Bool, glyph: String
+    enum Geometry: Decodable, Hashable {
+        case point([Double]), path([[Double]])
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if let p = try? c.decode([[Double]].self) { self = .path(p) } else { self = .point(try c.decode([Double].self)) }
+        }
+        var coordinates: [CLLocationCoordinate2D] { switch self { case .point(let p): return [.init(latitude: p[1], longitude: p[0])]; case .path(let ps): return ps.map { .init(latitude: $0[1], longitude: $0[0]) } } }
+    }
+    var centerCoordinate: CLLocationCoordinate2D { .init(latitude: center[1], longitude: center[0]) }
+    var swiftColor: Color { Color(hex: color) }
+}
+
+extension Color {
+    /// "#rrggbb" → Color; the catalog's colors come over the wire as hex.
+    init(hex: String) {
+        var v: UInt64 = 0; Scanner(string: hex.replacingOccurrences(of: "#", with: "")).scanHexInt64(&v)
+        self.init(red: Double((v >> 16) & 0xff) / 255, green: Double((v >> 8) & 0xff) / 255, blue: Double(v & 0xff) / 255)
+    }
 }
 
 /// §3.4 an active requirement as a named area of interest: where S2 is looking, why, and how well.

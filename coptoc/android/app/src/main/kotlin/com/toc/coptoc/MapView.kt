@@ -107,9 +107,13 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
                 // §3.4 the overlays: NAIs under everything, then movements leg by leg, then threats, then the blue force; every feature carries
                 // its own alpha so a section's tab dims the others' things instead of hiding them — an overlay sits on the base, the base stays
                 style.addSource(GeoJsonSource("nais", FeatureCollection.fromFeatures(emptyList())))
+                style.addSource(GeoJsonSource("graphics", FeatureCollection.fromFeatures(emptyList())))
                 style.addSource(GeoJsonSource("moves", FeatureCollection.fromFeatures(emptyList())))
                 style.addSource(GeoJsonSource("threats", FeatureCollection.fromFeatures(emptyList())))
                 style.addSource(GeoJsonSource("blue", FeatureCollection.fromFeatures(emptyList())))
+                style.addLayer(FillLayer("gfx-fill", "graphics").withFilter(eq(geometryType(), literal("Polygon"))).withProperties(fillColor(get("color")), fillOpacity(get("fo"))))
+                style.addLayer(LineLayer("gfx-line", "graphics").withFilter(eq(get("dash"), literal(false))).withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo"))))
+                style.addLayer(LineLayer("gfx-line-dashed", "graphics").withFilter(eq(get("dash"), literal(true))).withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo")), lineDasharray(arrayOf(4f, 3f))))
                 style.addLayer(FillLayer("nai-fill", "nais").withProperties(fillColor(get("color")), fillOpacity(get("fo"))))
                 style.addLayer(LineLayer("nai-line", "nais").withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo")), lineDasharray(arrayOf(4f, 3f))))
                 style.addLayer(LineLayer("move-lines", "moves").withFilter(eq(get("dashed"), literal(false))).withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo"))))
@@ -118,7 +122,7 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
                     circleRadius(interpolate(exponential(2f), zoom(), stop(0, 2f), stop(6, 12f), stop(10, 40f))),
                     circleColor(get("color")), circleOpacity(product(literal(0.12f), get("alpha"))), circleStrokeColor(get("color")), circleStrokeWidth(1.2f), circleStrokeOpacity(product(literal(0.8f), get("alpha")))))
                 style.addLayer(CircleLayer("blue-dots", "blue").withProperties(
-                    circleRadius(switchCase(eq(get("kind"), literal("site")), literal(7f), eq(get("kind"), literal("head")), literal(6f), literal(5f))),
+                    circleRadius(switchCase(eq(get("kind"), literal("site")), literal(7f), eq(get("kind"), literal("head")), literal(6f), eq(get("kind"), literal("graphic")), literal(3.5f), literal(5f))),
                     circleColor(get("color")), circleOpacity(get("alpha")), circleStrokeColor(literal("#0b0f14")), circleStrokeWidth(1.5f), circleStrokeOpacity(get("alpha"))))
                 style.addLayer(SymbolLayer("blue-labels", "blue").withProperties(
                     textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textOpacity(get("alpha")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
@@ -195,9 +199,18 @@ private fun applySnapshotInner(style: Style, s: Snapshot?, restricted: Boolean, 
         Feature.fromGeometry(LineString.fromLngLats(listOf(Point.fromLngLat(lg.fromLon!!, lg.fromLat!!), Point.fromLngLat(lg.toLon, lg.toLat)))).also { f ->
             f.addStringProperty("id", mv.id); f.addStringProperty("color", hex(color)); f.addNumberProperty("lw", if (lg.status == "current") (if (mv.pax >= 3) 3.0 else 2.2) else 1.4)
             f.addNumberProperty("lo", (if (lg.status == "done") 0.35 else if (lg.status == "current") 0.95 else 0.7) * mA); f.addBooleanProperty("dashed", mv.kind == "shipment" || lg.status == "planned") } } }
+    // §3.4 the control measures a section drew: shapes on their own source, the glyph and name as a label in the blue source
+    val gfx = s.graphics.mapNotNull { g -> val a = (if (layer == null || layer == g.section) 1.0 else 0.3) * (if (g.windowFrom != null && !g.inWindow) 0.45 else 1.0); val p = g.path
+        val geom = when { g.kind == "polygon" && p.size >= 3 -> Polygon.fromLngLats(listOf((p + p.first()).map { Point.fromLngLat(it.first, it.second) })); g.kind != "point" && p.size >= 2 -> LineString.fromLngLats(p.map { Point.fromLngLat(it.first, it.second) }); else -> null }
+        geom?.let { Feature.fromGeometry(it).also { f -> f.addStringProperty("id", g.id); f.addStringProperty("color", g.color); f.addBooleanProperty("dash", g.dash)
+            f.addNumberProperty("fo", (if (g.type == "range" && g.inWindow) 0.22 else 0.07) * a); f.addNumberProperty("lo", 0.85 * a); f.addNumberProperty("lw", if (g.type == "boundary" || g.type == "phase_line") 1.5 else 2.5) } } }
+    val gfxLabels = s.graphics.mapNotNull { g -> val a = if (layer == null || layer == g.section) 1.0 else 0.3
+        val at = if (g.kind == "point") g.path.firstOrNull() else g.center.takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        at?.let { (lon, lat) -> feature(lon, lat, "id" to g.id, "kind" to "graphic", "label" to "${g.glyph} ${g.name}", "color" to g.color, "alpha" to a) } }
+    (style.getSource("graphics") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(gfx))
     (style.getSource("nais") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(nais))
     (style.getSource("moves") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(moves))
     (style.getSource("threats") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(threats))
-    (style.getSource("blue") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(blue))
+    (style.getSource("blue") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(blue + gfxLabels))
     android.util.Log.i("WallMap", "applied ${threats.size} threats, ${blue.size} blue features; blue source present=${style.getSource("blue") != null}, layer present=${style.getLayer("blue-dots") != null}")
 }

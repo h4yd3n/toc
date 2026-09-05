@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { Map as MLMap, Marker } from 'maplibre-gl'
-import type { CopEvent, Layers, Location, Movement, Overlay, Person, Selection, Snapshot } from './types'
+import type { CopEvent, Draw, Layers, Location, Movement, Overlay, Person, Selection, Snapshot } from './types'
 import { arc, circle } from './geo'
 
 // Free, keyless vector basemap. Attribution is carried in the style JSON.
@@ -39,6 +39,10 @@ interface Props {
   timeBack: number | null
   /** S3's scrub: a moment on the strip; what is not happening then dims. */
   scrub: number | null
+  /** §3.4 what is being drawn, if anything: clicks add points, a double-click finishes. */
+  draw: Draw | null
+  onDrawPoint: (p: [number, number]) => void
+  onDrawFinish: () => void
 }
 const HOUR = 36e5
 // how far the other sections' things fade under each overlay: an overlay sits on the base, the base stays
@@ -48,15 +52,15 @@ const ageFactor = (iso: string, now: number) => { const d = (now - +new Date(iso
 const HEALTH_COLOR: Record<string, string> = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' }
 const RATING_LETTER: Record<string, string> = { green: 'G', amber: 'A', red: 'R', unknown: '?' }
 
-export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub }: Props) {
+export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
   const framed = useRef(savedBoard() != null)   // applied once, and never over a board this browser remembers
   const waiting = useRef(false)                // an opening frame queued against a style that has not landed yet
-  const propsRef = useRef({ snapshot, layers, onSelect, selection, overlay, timeBack, scrub })
-  propsRef.current = { snapshot, layers, onSelect, selection, overlay, timeBack, scrub }
+  const propsRef = useRef({ snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish })
+  propsRef.current = { snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish }
 
   // ---- init ----
   useEffect(() => {
@@ -87,6 +91,23 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
         paint: { 'line-color': ['get', 'color'], 'line-width': 1.5, 'line-opacity': ['get', 'lo'], 'line-dasharray': [2, 2] } })
       m.addLayer({ id: 'threat-line-confirmed', type: 'line', source: 'threats', filter: ['get', 'confirmed'],
         paint: { 'line-color': ['get', 'color'], 'line-width': 2.2, 'line-opacity': ['get', 'lo'] } })
+      // §3.4 the graphics: what a section drew by hand — polygons filled faintly, lines by type, and the draft while drawing
+      m.addSource('graphics', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      m.addLayer({ id: 'gfx-fill', type: 'fill', source: 'graphics', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['get', 'fo'] } })
+      m.addLayer({ id: 'gfx-line', type: 'line', source: 'graphics', filter: ['!', ['get', 'dash']], paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'lw'], 'line-opacity': ['get', 'lo'] } })
+      m.addLayer({ id: 'gfx-line-dashed', type: 'line', source: 'graphics', filter: ['get', 'dash'], paint: { 'line-color': ['get', 'color'], 'line-width': ['get', 'lw'], 'line-opacity': ['get', 'lo'], 'line-dasharray': [4, 3] } })
+      m.addSource('draft', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      m.addLayer({ id: 'draft-fill', type: 'fill', source: 'draft', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': '#fbbf24', 'fill-opacity': 0.12 } })
+      m.addLayer({ id: 'draft-line', type: 'line', source: 'draft', paint: { 'line-color': '#fbbf24', 'line-width': 2, 'line-dasharray': [2, 2] } })
+      m.addLayer({ id: 'draft-pts', type: 'circle', source: 'draft', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-color': '#fbbf24', 'circle-radius': 4 } })
+      for (const id of ['gfx-fill', 'gfx-line', 'gfx-line-dashed']) {
+        m.on('click', id, (e: maplibregl.MapLayerMouseEvent) => { if (propsRef.current.draw) return; const f = e.features?.[0]; if (f) propsRef.current.onSelect({ type: 'graphic', id: String(f.properties?.id) }) })
+        m.on('mouseenter', id, () => { if (!propsRef.current.draw) m.getCanvas().style.cursor = 'pointer' })
+        m.on('mouseleave', id, () => (m.getCanvas().style.cursor = propsRef.current.draw ? 'crosshair' : ''))
+      }
+      // drawing: a click adds a point, a double-click finishes; the map's own double-click zoom is off while drawing
+      m.on('click', (e: maplibregl.MapMouseEvent) => { const d = propsRef.current.draw; if (!d) return; propsRef.current.onDrawPoint([+e.lngLat.lng.toFixed(5), +e.lngLat.lat.toFixed(5)]) })
+      m.on('dblclick', (e: maplibregl.MapMouseEvent) => { if (!propsRef.current.draw) return; e.preventDefault(); propsRef.current.onDrawFinish() })
       m.addSource('links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       m.addLayer({ id: 'link-line', type: 'line', source: 'links', paint: { 'line-color': '#ef4444', 'line-width': ['case', ['get', 'confirmed'], 2, 1], 'line-opacity': ['get', 'lo'], 'line-dasharray': ['case', ['get', 'confirmed'], ['literal', [1, 0]], ['literal', [2, 3]]] } })
       m.addSource('incidents', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
@@ -148,6 +169,22 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       type: 'Feature', properties: { id: n.id, color: HEALTH_COLOR[n.health], fo: (n.priority === 1 ? 0.10 : 0.05) * nWeight, lo: (n.priority === 1 ? 0.9 : 0.55) * nWeight, lw: n.priority === 1 ? 1.8 : 1 },
       geometry: { type: 'Polygon', coordinates: [circle(n.lat, n.lon, n.radius_km)] },
     })) })
+    // the graphics: the owning section's forward, the rest dimmed; a range is loud only in its window
+    const gfx = m.getSource('graphics') as maplibregl.GeoJSONSource
+    gfx.setData({ type: 'FeatureCollection', features: (snapshot.graphics ?? []).filter(g => g.kind !== 'point').map(g => {
+      const w = (cop || overlay === g.section ? 1 : DIM) * (g.status === 'planned' ? 0.7 : 1) * (g.window_from && !g.in_window ? 0.45 : 1)
+      const sel = selection?.type === 'graphic' && selection.id === g.id
+      return { type: 'Feature' as const, properties: { id: g.id, color: g.color, dash: g.dash, fo: (g.type === 'range' && g.in_window ? 0.22 : 0.07) * w, lo: (sel ? 1 : 0.85) * w, lw: sel ? 3.5 : g.type === 'boundary' || g.type === 'phase_line' ? 1.5 : 2.5 },
+        geometry: g.kind === 'polygon' ? { type: 'Polygon' as const, coordinates: [[...(g.geometry as [number, number][]), (g.geometry as [number, number][])[0]]] } : { type: 'LineString' as const, coordinates: g.geometry as [number, number][] } }
+    }) })
+    const draft = m.getSource('draft') as maplibregl.GeoJSONSource
+    const d = propsRef.current.draw
+    draft.setData({ type: 'FeatureCollection', features: !d ? [] : [
+      ...d.points.map(p => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'Point' as const, coordinates: p } })),
+      ...(d.points.length >= 2 ? [{ type: 'Feature' as const, properties: {}, geometry: d.kind === 'polygon' && d.points.length >= 3 ? { type: 'Polygon' as const, coordinates: [[...d.points, d.points[0]]] } : { type: 'LineString' as const, coordinates: d.points } }] : []),
+    ] })
+    m.getCanvas().style.cursor = d ? 'crosshair' : ''
+    if (d) m.doubleClickZoom.disable(); else m.doubleClickZoom.enable()
     const incidents = m.getSource('incidents') as maplibregl.GeoJSONSource
     incidents.setData({ type: 'FeatureCollection', features: snapshot.incidents.filter(i => i.status === 'open').map(i => ({
       type: 'Feature', properties: { id: i.id }, geometry: { type: 'Polygon', coordinates: [circle(i.lat, i.lon, i.radius_km)] },
@@ -165,7 +202,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       }))
     }) : [] })
   }
-  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers, overlay, timeBack, scrub])
+  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers, overlay, timeBack, scrub, draw, selection])
 
   // ---- markers with screen-space clustering ----
   function renderMarkers(m: MLMap) {
@@ -200,7 +237,8 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       if (c) { c.members.push(p) } else clusters.push({ x: s.x, y: s.y, lat: p.lat, lon: p.lon, members: [p] })
     }
     const eta = (h: number) => h < 0 ? `${Math.abs(Math.round(h))}h late` : h < 48 ? `ETA ${Math.round(h)}h` : `ETA ${Math.round(h / 24)}d`
-    const add = (div: HTMLElement, lon: number, lat: number, anchor: maplibregl.PositionAnchor = 'center', offset?: [number, number]) => markers.current.push(new maplibregl.Marker({ element: div, anchor, offset }).setLngLat([lon, lat]).addTo(m))
+    // MapLibre writes an inline opacity on every marker element, so the dim has to go through the marker, not the class
+    const add = (div: HTMLElement, lon: number, lat: number, anchor: maplibregl.PositionAnchor = 'center', offset?: [number, number]) => markers.current.push(new maplibregl.Marker({ element: div, anchor, offset, opacity: div.classList.contains('dim') ? String(DIM) : '1' }).setLngLat([lon, lat]).addTo(m))
 
     for (const c of clusters) {
       const div = document.createElement('div')
@@ -282,6 +320,19 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
         add(div, mv.head_lon!, mv.head_lat, 'top', [0, 12])
       }
     }
+    // §3.4 point graphics and the labels of lines and polygons: the glyph and the name, in the section's color
+    for (const g of snapshot.graphics ?? []) {
+      const w = cop || overlay === g.section
+      const div = document.createElement('div')
+      const sel = selection?.type === 'graphic' && selection.id === g.id
+      div.className = `mk mk-gfx ${g.kind} ${g.status}${w ? '' : ' dim'}${sel ? ' selected' : ''}${g.window_from && !g.in_window ? ' outside' : ''}`
+      div.style.borderColor = g.color; div.style.color = g.color
+      div.innerHTML = `<span class="glyph">${g.glyph}</span><span class="label">${g.name}</span>`
+      div.title = `${g.label} · ${g.section}${g.window_from ? ` · ${g.in_window ? 'in window' : 'outside its window'}` : ''}${g.note ? `\n${g.note}` : ''}\n${g.created_by}`
+      div.onclick = e => { e.stopPropagation(); if (!propsRef.current.draw) onSelect({ type: 'graphic', id: g.id }) }
+      const at = g.kind === 'point' ? (g.geometry as number[]) : g.center
+      add(div, at[0], at[1], g.kind === 'point' ? 'center' : 'bottom', g.kind === 'point' ? undefined : [0, -4])
+    }
     void cut
   }
 
@@ -311,10 +362,11 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     if (selection.type === 'incident') { const i = snapshot.incidents.find(x => x.id === selection.id); if (i) target = { lat: i.lat, lon: i.lon, zoom: 12 } }
     if (selection.type === 'event') { const e = snapshot.events.find(x => x.id === selection.id); if (e) target = { lat: e.venue_lat, lon: e.venue_lon, zoom: 11 } }
     if (selection.type === 'threat') { const t = snapshot.threats.find(x => x.id === selection.id); if (t) target = { lat: t.lat, lon: t.lon, zoom: Math.max(6, 11 - Math.log2(Math.max(t.radius_km, 1))) } }
+    if (selection.type === 'graphic') { const g = snapshot.graphics?.find(x => x.id === selection.id); if (g) target = { lat: g.center[1], lon: g.center[0], zoom: g.kind === 'point' ? 12 : 10 } }
     if (target) m.flyTo({ center: [target.lon, target.lat], zoom: target.zoom, speed: 1.2, curve: 1.4 })
     if (loaded.current) renderMarkers(m)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection])
 
-  return <div ref={el} className="map" onClick={() => onSelect(null)} />
+  return <div ref={el} className="map" onClick={() => { if (!draw) onSelect(null) }} />
 }

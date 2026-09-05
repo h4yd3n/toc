@@ -15,6 +15,7 @@ from . import names
 from .taskings import TaskingRow, summarize as taskings_summary
 from .areas import AreaRatingRow, compact as area_compact, out as area_out, same_place
 from . import overlays
+from .graphics import GraphicRow, out as graphic_out
 from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -186,6 +187,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     systems = (await session.execute(select(SystemRow))).scalars().all()
     taskings = (await session.execute(select(TaskingRow))).scalars().all()
     area_rows = (await session.execute(select(AreaRatingRow).where(AreaRatingRow.status == "current"))).scalars().all()
+    graphic_rows = (await session.execute(select(GraphicRow).where(GraphicRow.status != "retired"))).scalars().all()
     threats = (await session.execute(select(ThreatRow))).scalars().all()
     links = (await session.execute(select(ThreatLinkRow))).scalars().all()
     events = (await session.execute(select(EventRow))).scalars().all()
@@ -491,6 +493,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
+        "graphics": [graphic_out(g, now, prof) for g in graphic_rows],
     }
 
 

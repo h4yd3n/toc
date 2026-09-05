@@ -15,6 +15,8 @@ from . import taskings as toc_taskings
 from .taskings import TaskingRow
 from . import areas as toc_areas
 from .areas import AreaRatingRow
+from . import graphics as toc_graphics
+from .graphics import GraphicRow
 from .users import UserRow
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -367,7 +369,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await _seed_case(session, now_utc())
         await _seed_directed(session, now_utc())
         await _seed_operation(session, now_utc())
-    for model in (AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    for model in (GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
@@ -382,6 +384,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     session.add_all(toc_taskings.seed(dataset, now))  # §5.10 the work moving between sections
     from .sections import profile as _profile
     session.add_all(toc_areas.seed(dataset, now, _profile()))  # §5.6a what the analyst judges about each place
+    session.add_all(toc_graphics.seed(dataset, now))  # §3.4 the control measures on the board
     if dataset == "cab":
         from . import seed_cab
         await seed_cab.populate(session, now)
