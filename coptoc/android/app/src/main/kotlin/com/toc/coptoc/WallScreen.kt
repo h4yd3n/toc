@@ -706,8 +706,14 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
         val avail = (totalPx - headerPx).coerceAtLeast(200f)
         WallMap(st.snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section)
         val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
-        val hPx = (avail * restAnim - drag).coerceIn(90f * density.density, avail * 0.92f)
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { hPx.toDp() })
+        // The sheet is always laid out at its full height and slid down to the rest we want. Resizing it on every
+        // frame of a drag re-measured the whole section list under the finger; offsetting it is done at placement,
+        // so nothing is measured again while it moves.
+        val gripPx = 52f * density.density
+        val fullPx = avail * 0.92f
+        val visiblePx = (avail * restAnim - drag).coerceIn(gripPx, fullPx)
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { fullPx.toDp() })
+            .offset { androidx.compose.ui.unit.IntOffset(0, (fullPx - visiblePx).toInt()) }
             .background(Palette.bg.copy(alpha = .96f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
             Column(Modifier.fillMaxWidth()
                 .pointerInput(Unit) {  // own the pointer from the first touch: the map view underneath would otherwise take the gesture once it moves
@@ -717,15 +723,19 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
                         while (true) {
                             val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                             if (!ch.pressed) { ch.consume(); break }
-                            acc += ch.position.y - ch.previousPosition.y; if (kotlin.math.abs(acc) > 8f) moved = true; ch.consume()
+                            acc += ch.position.y - ch.previousPosition.y
+                            if (kotlin.math.abs(acc) > 8f) moved = true
+                            if (moved) drag = acc   // follow the finger; without this the sheet stood still and then jumped
+                            ch.consume()
                         }
                         if (moved) { val target = (avail * rest - acc) / avail; rest = if (target < .32f) .12f else if (target < .75f) .55f else .92f }
                         else rest = if (rest <= .15f) .55f else if (rest < .75f) .92f else .12f
                         drag = 0f
                     }
                 }
-                .padding(top = 10.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.size(36.dp, 4.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
+                .heightIn(min = 52.dp)   // the header is the handle, so it is a comfortable target rather than a hairline
+                .padding(top = 14.dp, bottom = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(48.dp, 5.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
                 Text(if (rest <= .15f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
             }
             content()

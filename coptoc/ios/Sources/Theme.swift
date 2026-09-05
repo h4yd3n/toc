@@ -82,28 +82,49 @@ struct SectionTab<Content: View>: View {
     @ViewBuilder var content: () -> Content
     @State private var rest: CGFloat = 0.55
     @State private var drag: CGFloat = 0
+    private let grip: CGFloat = 52     // the header is the handle, so it is a comfortable target rather than a hairline
     var body: some View {
         GeometryReader { g in
             ZStack(alignment: .bottom) {
                 MapScreen(layer: section)
-                let h = max(90, min(g.size.height * 0.92, g.size.height * rest - drag))
+                // The sheet is always laid out at its full height and slid down to the rest we want. Resizing it on
+                // every frame of a drag re-measured the whole section list under the finger, which is what made this
+                // jerky; moving it is a transform the compositor does for free.
+                let full = g.size.height * 0.92
+                let visible = max(grip, min(full, g.size.height * rest - drag))
                 VStack(spacing: 0) {
-                    VStack(spacing: 4) {
-                        Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 36, height: 4).padding(.top, 8)
-                        Text(rest <= 0.15 ? "\(section) · pull up" : "\(section)").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim).padding(.bottom, 4)
+                    VStack(spacing: 5) {
+                        Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 48, height: 5)
+                        Text(rest <= 0.15 ? "\(section) · pull up" : "\(section)").font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim)
                     }
-                    .frame(maxWidth: .infinity).contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 6).onChanged { v in drag = v.translation.height }.onEnded { v in
-                        let target = (g.size.height * rest - v.translation.height) / g.size.height
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { rest = target < 0.32 ? 0.12 : target < 0.75 ? 0.55 : 0.92; drag = 0 }
-                    })
-                    .onTapGesture { withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { rest = rest <= 0.15 ? 0.55 : rest < 0.75 ? 0.92 : 0.12 } }
+                    .frame(maxWidth: .infinity, minHeight: grip).contentShape(Rectangle())
+                    // One gesture, not a drag and a tap competing: arbitration between them cost a beat at the start
+                    // of every drag, which is most of what made this feel like it was catching. A touch that barely
+                    // moves is the tap, and cycles the rests; anything more carries the sheet.
+                    // High priority: the map underneath runs UIKit pan recognisers, and they were winning the
+                    // drag off the handle. The sheet is on top, so it gets first claim on a touch that starts there.
+                    .highPriorityGesture(DragGesture(minimumDistance: 0)
+                        .onChanged { v in if abs(v.translation.height) > 2 { drag = v.translation.height } }
+                        .onEnded { v in
+                            let moved = v.translation.height
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                                if abs(moved) < 6 {
+                                    rest = rest <= 0.15 ? 0.55 : rest < 0.75 ? 0.92 : 0.12
+                                } else {
+                                    let target = (g.size.height * rest - moved) / g.size.height
+                                    rest = target < 0.32 ? 0.12 : target < 0.75 ? 0.55 : 0.92
+                                }
+                                drag = 0
+                            }
+                        })
                     content().frame(maxHeight: .infinity)
                 }
-                .frame(height: h)
+                .frame(height: full, alignment: .top)   // slack goes below, so the handle stays at the sheet's edge
                 .background(Theme.bg.opacity(0.96), in: UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
                 .overlay(alignment: .top) { UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16).stroke(Theme.line, lineWidth: 0.5) }
                 .shadow(color: .black.opacity(0.4), radius: 12, y: -4)
+                .offset(y: full - visible)   // last: offset is a render transform, and a background applied after it
+                                             // would stay behind at the layout frame while the sheet slid away
             }
         }
     }
