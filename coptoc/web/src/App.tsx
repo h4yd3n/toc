@@ -20,7 +20,7 @@ import { ContextRow, RollCallStrip } from './Strips'
 import { CommandBar, buildCommands } from './CommandBar'
 import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } from './Areas'
 import * as api from './api'
-import type { UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
+import type { Overlay, UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE', airfield: 'AIRFIELD', cp: 'CP', fob: 'FOB', farp: 'FARP', range: 'RANGE' }
 const SITE_TYPES = ['hq', 'cp', 'fob', 'farp', 'airfield', 'range', 'office', 'datacenter', 'venue', 'residence'] as const
@@ -67,13 +67,14 @@ export default function App() {
   const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
   useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
-  const toggleRight = (p: Exclude<RightPanel, null>) => { const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true })) }
+  const toggleRight = (p: Exclude<RightPanel, null>) => { const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true }))
+    setOverlay(next === 'right' ? 'S2' : next === 's4' ? 'S4' : next === 's6' ? 'S6' : 'COP') }
   const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
   const [s3Flash, setS3Flash] = useState(false)
   const jump = (section: 'S1' | 'S2' | 'S3') => {  // a header counter opens its section
     if (section === 'S1') setLeftOpen(true)
     else if (section === 'S2') setRightPanel('right')
-    else { setS3Flash(true); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
+    else { setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
   }
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
@@ -107,6 +108,11 @@ export default function App() {
   const [cov, setCov] = useState<Coverage | null>(null)   // §3.2 the S2 headline: collection coverage
   const [cmd, setCmd] = useState(false)                    // ⌘K
   const [areaMode, setAreaMode] = useState<AreaMode | null>(null)   // §5.6a the rated area assessment over the map
+  // §3.4 the overlays: which section's picture is up; S2's window back in time; S3's scrub on the strip (hover, or pinned by a click)
+  const [overlay, setOverlay] = useState<Overlay>('COP')
+  const [timeBack, setTimeBack] = useState<number | null>(null)
+  const [scrub, setScrub] = useState<{ t: number; pinned: boolean } | null>(null)
+  const onScrub = (t: number | null, pinned?: boolean) => setScrub(prev => pinned ? (prev?.pinned && t != null && Math.abs(prev.t - t) < 1 ? null : t == null ? null : { t, pinned: true }) : prev?.pinned ? prev : t == null ? null : { t, pinned: false })
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
@@ -258,7 +264,12 @@ export default function App() {
       </aside>
 
       <main className="center" onClick={() => setShowSettings(false)}>
-        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
+        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} />
+        <div className="ovbar" onClick={e => e.stopPropagation()}>
+          {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
+          {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
+          {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
+        </div>
         {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
         {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
         {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
@@ -361,7 +372,7 @@ export default function App() {
           {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
           {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
-          <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
+          <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
         </div>
         <div className="oplog">
           <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />

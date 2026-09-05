@@ -18,14 +18,27 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression.*
 import org.maplibre.android.style.layers.CircleLayer
+import org.maplibre.android.style.layers.FillLayer
+import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.PropertyFactory.*
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import org.maplibre.geojson.Polygon
+import org.maplibre.geojson.LineString
 
 const val STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
+
+/** A ring of [lon, lat] around a centre at a radius in km — the polygon an NAI is drawn as. */
+private fun ring(lat: Double, lon: Double, km: Double, n: Int = 48): List<Point> {
+    val r = 6371.0; val p1 = Math.toRadians(lat); val l1 = Math.toRadians(lon); val d = km / r
+    return (0..n).map { i -> val th = 2 * Math.PI * i / n
+        val p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(th))
+        val l2 = l1 + Math.atan2(Math.sin(th) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2))
+        Point.fromLngLat(Math.toDegrees(l2), Math.toDegrees(p2)) }
+}
 
 private fun feature(lon: Double, lat: Double, vararg props: Pair<String, Any?>): Feature = Feature.fromGeometry(Point.fromLngLat(lon, lat)).also { f ->
     props.forEach { (k, v) -> when (v) { is String -> f.addStringProperty(k, v); is Number -> f.addNumberProperty(k, v); is Boolean -> f.addBooleanProperty(k, v); else -> {} } }
@@ -91,16 +104,24 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
             }
             map.uiSettings.isAttributionEnabled = true; map.uiSettings.isLogoEnabled = false
             map.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
+                // §3.4 the overlays: NAIs under everything, then movements leg by leg, then threats, then the blue force; every feature carries
+                // its own alpha so a section's tab dims the others' things instead of hiding them — an overlay sits on the base, the base stays
+                style.addSource(GeoJsonSource("nais", FeatureCollection.fromFeatures(emptyList())))
+                style.addSource(GeoJsonSource("moves", FeatureCollection.fromFeatures(emptyList())))
                 style.addSource(GeoJsonSource("threats", FeatureCollection.fromFeatures(emptyList())))
                 style.addSource(GeoJsonSource("blue", FeatureCollection.fromFeatures(emptyList())))
+                style.addLayer(FillLayer("nai-fill", "nais").withProperties(fillColor(get("color")), fillOpacity(get("fo"))))
+                style.addLayer(LineLayer("nai-line", "nais").withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo")), lineDasharray(arrayOf(4f, 3f))))
+                style.addLayer(LineLayer("move-lines", "moves").withFilter(eq(get("dashed"), literal(false))).withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo"))))
+                style.addLayer(LineLayer("move-lines-dashed", "moves").withFilter(eq(get("dashed"), literal(true))).withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo")), lineDasharray(arrayOf(3f, 3f))))
                 style.addLayer(CircleLayer("threat-rings", "threats").withProperties(
                     circleRadius(interpolate(exponential(2f), zoom(), stop(0, 2f), stop(6, 12f), stop(10, 40f))),
-                    circleColor(get("color")), circleOpacity(0.12f), circleStrokeColor(get("color")), circleStrokeWidth(1.2f), circleStrokeOpacity(0.8f)))
+                    circleColor(get("color")), circleOpacity(product(literal(0.12f), get("alpha"))), circleStrokeColor(get("color")), circleStrokeWidth(1.2f), circleStrokeOpacity(product(literal(0.8f), get("alpha")))))
                 style.addLayer(CircleLayer("blue-dots", "blue").withProperties(
-                    circleRadius(switchCase(eq(get("kind"), literal("site")), literal(7f), literal(5f))),
-                    circleColor(get("color")), circleStrokeColor(literal("#0b0f14")), circleStrokeWidth(1.5f)))
+                    circleRadius(switchCase(eq(get("kind"), literal("site")), literal(7f), eq(get("kind"), literal("head")), literal(6f), literal(5f))),
+                    circleColor(get("color")), circleOpacity(get("alpha")), circleStrokeColor(literal("#0b0f14")), circleStrokeWidth(1.5f), circleStrokeOpacity(get("alpha"))))
                 style.addLayer(SymbolLayer("blue-labels", "blue").withProperties(
-                    textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
+                    textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textOpacity(get("alpha")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
                     textOffset(arrayOf(0f, 1.3f)), textAllowOverlap(false), textOptional(true)))
                 applySnapshot(style, latest[0], latestRestricted[0], latestLayer[0])  // the first snapshot usually arrives before the style does
                 map.addOnMapClickListener { p ->
@@ -150,10 +171,32 @@ private fun applySnapshotInner(style: Style, s: Snapshot?, restricted: Boolean, 
     fun siteColor(l: Site): String { val h = when (layer) { "S4" -> l.s4Status; "S6" -> l.s6Status; else -> null }; return if (h != null) hex(healthColor(h)) else hex(Palette.posture(l.effectivePosture)) }
     fun siteLabel(l: Site): String = when (layer) { "S4" -> l.s4Status?.let { "${l.name} · S4 ${it.uppercase()}" + (if (l.s4Red > 0) " (${l.s4Red})" else "") } ?: l.name
         "S6" -> l.s6Status?.let { "${l.name} · S6 ${it.uppercase()}" + (l.s6InUse?.let { n -> " · on ${n.uppercase()}" } ?: "") } ?: l.name; else -> l.name }
-    val threats = if (!showThreats) emptyList() else s.threats.map { t -> feature(t.lon, t.lat, "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm) }
-    val blue = s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l -> feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to siteLabel(l), "color" to siteColor(l)) } +
-            (if (!showTravelers) emptyList() else s.people.filter { it.status == "traveling" }).map { p -> feature(p.lon, p.lat, "id" to p.id, "kind" to "traveler", "label" to (p.shortName ?: p.name.split(" ").first()), "color" to hex(if (p.isVip) Palette.amber else Palette.blue2)) } +
-            (if (!showEvents) emptyList() else s.events).map { e -> feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple)) }
+    // §3.4 dim, do not hide: the section's own things at full strength, the rest at a third
+    val tA = if (showThreats) 1.0 else 0.3; val pA = if (showTravelers) 1.0 else 0.3; val eA = if (showEvents) 1.0 else 0.3
+    val mA = if (layer == null || layer == "S3") 1.0 else if (layer == "S4") 0.6 else 0.3
+    val threats = s.threats.map { t -> feature(t.lon, t.lat, "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm, "alpha" to tA) }
+    val s2Label = { l: Site -> l.area?.let { a -> "${l.name} · rated ${a.worst.uppercase()}" } ?: l.name }
+    val blue = s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l -> feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to (if (layer == "S2") s2Label(l) else siteLabel(l)), "color" to (if (layer == "S2" && l.area != null && l.area.worst != "unknown") hex(healthColor(l.area.worst)) else siteColor(l)), "alpha" to 1.0) } +
+            s.people.filter { it.status == "traveling" }.map { p -> feature(p.lon, p.lat, "id" to p.id, "kind" to "traveler", "label" to (p.shortName ?: p.name.split(" ").first()), "color" to hex(if (p.isVip) Palette.amber else Palette.blue2), "alpha" to pA) } +
+            s.events.map { e -> feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple), "alpha" to eA) } +
+            // the head of every group movement — the unit or delegation and its count, the shipment and its ETA
+            s.movements.filter { it.kind != "individual" }.mapNotNull { mv ->
+                val c = if (mv.headLat != null && mv.headLon != null) mv.headLon to mv.headLat else mv.legs.firstOrNull()?.let { lg -> if (lg.fromLat != null && lg.fromLon != null) ((lg.fromLon + lg.toLon) / 2) to ((lg.fromLat + lg.toLat) / 2) else null }
+                c?.let { (lon, lat) -> feature(lon, lat, "id" to (mv.personIds.firstOrNull() ?: mv.id), "kind" to (if (mv.personIds.isEmpty()) "head" else "traveler"),
+                    "label" to (if (mv.kind == "shipment") "${mv.name.substringBefore(" → ")} · ETA ${Math.round(mv.hoursToEta ?: 0.0)}h" else "${mv.unit ?: mv.name.substringBefore(" · ")} · ${mv.pax} pax"),
+                    "color" to hex(if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else Palette.purple), "alpha" to mA) }
+            }
+    // §3.4 S2: every active requirement as a named area, colored by how well it is collected; only on the S2 tab
+    val nais = if (layer != "S2") emptyList() else s.nais.map { n -> Feature.fromGeometry(Polygon.fromLngLats(listOf(ring(n.lat, n.lon, n.radiusKm)))).also { f ->
+        f.addStringProperty("id", n.id); f.addStringProperty("color", hex(healthColor(n.health))); f.addNumberProperty("fo", if (n.priority == 1) 0.10 else 0.05); f.addNumberProperty("lo", if (n.priority == 1) 0.9 else 0.55); f.addNumberProperty("lw", if (n.priority == 1) 1.8 else 1.0) } }
+    // §3.4 S3: movements leg by leg — a shipment dashed orange, a planned leg dashed, the current leg bold
+    val moves = s.movements.flatMap { mv -> mv.legs.filter { it.fromLat != null && it.fromLon != null && it.kind != "lodging" }.map { lg ->
+        val color = if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else if (mv.status == "active") Palette.blue2 else Palette.dim
+        Feature.fromGeometry(LineString.fromLngLats(listOf(Point.fromLngLat(lg.fromLon!!, lg.fromLat!!), Point.fromLngLat(lg.toLon, lg.toLat)))).also { f ->
+            f.addStringProperty("id", mv.id); f.addStringProperty("color", hex(color)); f.addNumberProperty("lw", if (lg.status == "current") (if (mv.pax >= 3) 3.0 else 2.2) else 1.4)
+            f.addNumberProperty("lo", (if (lg.status == "done") 0.35 else if (lg.status == "current") 0.95 else 0.7) * mA); f.addBooleanProperty("dashed", mv.kind == "shipment" || lg.status == "planned") } } }
+    (style.getSource("nais") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(nais))
+    (style.getSource("moves") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(moves))
     (style.getSource("threats") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(threats))
     (style.getSource("blue") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(blue))
     android.util.Log.i("WallMap", "applied ${threats.size} threats, ${blue.size} blue features; blue source present=${style.getSource("blue") != null}, layer present=${style.getLayer("blue-dots") != null}")

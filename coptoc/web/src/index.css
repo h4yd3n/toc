@@ -661,3 +661,24 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .siteform .s-row > * { flex: 1; }
 .siteform .bad { color: var(--red, #ef4444); }
 .tocmark { color: var(--blue, #60a5fa); margin-right: 3px; }
+
+/* ---- §3.4 the overlays: the chooser on the map, dimming, NAI labels, movement heads, inbound chips, the scrub ---- */
+.ovbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; gap: 4px; align-items: center; padding: 4px; background: rgba(13,18,25,.9); border: 1px solid var(--line-2); border-radius: 6px; backdrop-filter: blur(4px); }
+.ov { font: 800 10px var(--mono); letter-spacing: .1em; padding: 4px 9px; border-radius: 4px; color: var(--dim); border: 1px solid transparent; }
+.ov:hover { color: var(--text); } .ov.on { color: #fff; background: var(--blue); }
+.ov.sec-S2.on { background: #b45309; } .ov.sec-S3.on { background: #7e22ce; } .ov.sec-S4.on { background: #c2410c; } .ov.sec-S6.on { background: #0f766e; } .ov.sec-S1.on { background: var(--blue); }
+.ovtime { display: inline-flex; gap: 2px; margin-left: 6px; padding-left: 8px; border-left: 1px solid var(--line-2); } .ov.time { font-weight: 600; } .ov.time.on { background: var(--panel-2); color: var(--amber); border-color: rgba(245,158,11,.5); }
+.mk.dim { opacity: .28; } .mk.dim:hover { opacity: 1; }
+.mk-event.gap { border-color: var(--red); box-shadow: 0 0 14px rgba(239,68,68,.55); }
+.mk-loc .badge.rating { color: #000; } .mk-loc .badge.rating.green { background: var(--green); } .mk-loc .badge.rating.amber { background: var(--amber); } .mk-loc .badge.rating.red { background: var(--red); color: #fff; } .mk-loc .badge.rating.unknown { background: var(--line-2); color: var(--dim); }
+.mk-loc.sec-none { border-color: var(--line-2); color: var(--dim); box-shadow: none; }
+.mk-loc .inb { position: absolute; top: -9px; left: -8px; font: 800 9px var(--mono); padding: 1px 5px; border-radius: 8px; background: var(--orange); color: #000; white-space: nowrap; } .mk-loc .inb.red { background: var(--red); color: #fff; animation: flashpulse 1.4s ease-in-out infinite; } .mk-loc .inb.amber { background: var(--amber); }
+.mk-nai { font: 10px var(--mono); padding: 2px 7px; border-radius: 3px; background: rgba(13,18,25,.9); border: 1px solid var(--amber); color: #fde68a; white-space: nowrap; pointer-events: auto; }
+.mk-nai b { color: #fff; margin-right: 2px; } .mk-nai i { font-style: normal; margin-left: 4px; } .mk-nai u { text-decoration: none; margin-left: 4px; color: var(--red); font-weight: 800; }
+.mk-nai.green { border-color: var(--green); color: #bbf7d0; } .mk-nai.green i { color: var(--green); } .mk-nai.amber i { color: var(--amber); } .mk-nai.red { border-color: var(--red); color: #fecaca; } .mk-nai.red i { color: var(--red); }
+.mk-nai.p2, .mk-nai.p3 { font-size: 9px; opacity: .85; }
+.mk-head { display: flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 6px; background: rgba(13,18,25,.94); border: 1.5px solid #c084fc; color: #fff; font: 600 11px var(--sans); box-shadow: 0 0 14px rgba(192,132,252,.45); white-space: nowrap; }
+.mk-head .glyph { color: #c084fc; font-size: 11px; } .mk-head.planned { border-style: dashed; opacity: .85; } .mk-head.vip { border-color: var(--gold); box-shadow: 0 0 16px rgba(251,191,36,.5); } .mk-head.vip .glyph { color: var(--gold); }
+.mk-head.shipment { border-color: var(--orange); box-shadow: 0 0 14px rgba(249,115,22,.45); font-family: var(--mono); font-size: 10px; } .mk-head.shipment .glyph { color: var(--orange); } .mk-head.shipment.red { border-color: var(--red); } .mk-head.shipment.amber { border-color: var(--amber); }
+.tl-scrub { position: absolute; top: 0; bottom: -100px; border-left: 1px solid var(--amber); z-index: 4; pointer-events: none; } .tl-scrub span { position: absolute; top: -1px; left: 3px; font: 800 8.5px var(--mono); letter-spacing: .1em; color: var(--amber); background: var(--panel); padding-right: 3px; white-space: nowrap; }
+.tl { cursor: crosshair; }

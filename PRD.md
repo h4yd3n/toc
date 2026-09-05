@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.29
+**Version:** 3.30
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -185,6 +185,17 @@ Travelers group by destination, because the question is where our people are, no
 ### 3.3 The strip through NOW **[BUILT]** (2026-09-05)
 
 The S3 strip is one time axis with NOW in it. The left quarter is *this watch so far*: every event on the ledger since the watch began, drawn as ticks in the colors the brief buckets them in, hour by hour, the summary on hover and the subject on click. The right is the horizon, compressed: the next 48 hours get a quarter of the width, the rest of the 90 days the remainder, so today is by hour and next month by week. Spans that began before now cross the line. The handover brief's first section, *significant events this shift*, is this left half read out; the snapshot carries it as `watch_log`.
+
+### 3.4 The section overlays **[BUILT]** (2026-09-05, Decision Z)
+
+An overlay is a section's own situation laid over the base map, the way acetate goes on a map board: the section's things forward, everything else still there, dimmed to a third. The S4 layer already worked because it repainted the sites with the section's state; S2 and S3 added their objects to the base without changing it, and their objects were thin. Now:
+
+- **The chooser.** A row on the map — COP · S1 · S2 · S3 · S4 · S6. COP is everything. Opening a section's panel puts its overlay up; closing it returns to the COP. On the phones each section tab is its overlay.
+- **S2 draws what an S2 owns.** Every active requirement is a *named area of interest*: a ring at its place and radius, numbered by priority, colored by how well it is collected (green, amber, red), labeled with its subject and coverage, marked when a PIR rides on it. Threat rings fade with age (full at observation, a quarter at thirty days); a threat with a confirmed link draws solid with a line to the site or person, a suggested one dashed. A site wears the analyst's rating (§5.6) instead of its headcount. A time window — 12 h, 3 d, 30 d, all — filters the threats, so a pattern shows. Nothing here needs data the wall does not have; the NAIs are derived from the requirements (`snapshot.nais`).
+- **S3 draws movement, leg by leg.** A flight is an arc, a ground leg runs on the ground, lodging is a stop; the current leg is bold; a planned one dashed. Everything that moves is a *movement* (`snapshot.movements`): a serial, a delegation, one named person, or a shipment. The head of every group carries the unit or the event and the count; a shipment carries its ETA, red when late. An event wears its coverage and its operation's progress, red-ringed when coverage has a gap. The strip drives the map: hover a moment and what is not happening then dims; click to pin it.
+- **Movement ownership.** S3 draws all movement, shipments included; S4 keeps stock and what is inbound, drawn as the dashed line to the site with the ETA and an inbound chip on the site marker. Same object, styled by the section looking at it.
+- **The grouping rule (Decision Z).** A movement is one or more travelers on a shared route in a shared window, drawn as one line with a count. On a military desk the *unit* is the actor: trips group by battalion, origin, destination, and a six-hour window into a serial named for the unit — "1 ATK · 6 pax · Campbell → FARP Eagle". On a corporate desk the *individual* is the actor: nobody moves as a company, so trips group only by a shared destination event into a delegation — "Global Sales Kickoff · 8 travelers → Las Vegas" — and everyone else moves alone under their own name. A VIP never folds into a group. A group needs at least three travelers. The mode follows the legs: a flight makes it air.
+- **Next: the graphics object.** Control measures need data the wall does not have — an MSR, an air corridor, a range hot window, an access control point, a retrans site, a supply point, a TAI. One generic overlay graphic (point, line, or polygon; an owning section; a type that sets its style; an optional window), drawn by the section, on the ledger, shown on all three clients. Requirements and legs generate theirs; the rest a section draws by hand. **[LATER]**
 
 ## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
 
@@ -625,6 +636,7 @@ COP never writes back to a source system.
 | V | NSTR | **Explicit** — the outgoing Battle Captain affirms "nothing significant"; the affirmation is logged | `Handover.nstr` → ledger |
 | W | Digestibility (2026-09-05) | **Keep the dark monospace wall; fix the hierarchy** — one headline per panel, exceptions as tiles, ratios as bars, cards for what happens, sections headed by their question, color as meaning only. Not a Linear / Vercel restyle; the map stays full width. Rejected as fake instruments: SIGINT waveforms, drone feeds, kill switches, hash-chain badges, invented indices, airframe OR rates without equipment data | §3.2 |
 | X | Rated area assessment (2026-09-05) | **Analyst-owned RAG per indicator with one line of why, no composite**; indicator list per profile or `TOC_AREA_INDICATORS`; a new assessment supersedes the last; the strip rides on sites, trips, and events | §5.6, `coptoc/areas.py` |
+| Z | Movement grouping (2026-09-05) | **Military: the unit is the actor** — serials by battalion, origin, destination, and a 6 h window. **Corporate: the individual is the actor** — delegations only by a shared destination event; everyone else alone under their name. A VIP never folds; a group needs three. S3 draws all movement, S4 keeps stock and inbound | §3.4, `coptoc/overlays.py` |
 | Y | Taskings create things (2026-09-05) | **Collection → operation, supply → shipment, comms / coverage → a task on the subject's operation**; linked both ways so finishing either side completes the other; movement asks create nothing yet | §5.10a, `taskings.on_accept` |
 
 ---
@@ -641,6 +653,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.30** — §3.4 the section overlays: NAIs from the requirements, threats by age and confirmation with their links, the rating on the site, an S2 time window; movements leg by leg with serials, delegations, individuals, and shipments under the profile's grouping rule; the strip scrub; dim-not-hide on the wall and both phones; decision Z.
 - **v3.29** — §3.2 the hierarchy (headline, tiles, bars, cards, questions), §3.3 the strip through NOW with the watch log, the rated area assessment (§5.6, `/v1/cop/areas`), taskings that create operations, shipments, and tasks (§5.10a), rail badges, the context row with sun times, the roll call that takes the wall, red chrome at DEFCON 1, ⌘K; decisions W–Y.
 - **v3.28** — §5.10a taskings: the object that carries work between sections, with inbox / outbox and the raise form on every section panel and tab; open taskings in the handover brief.
 - **v3.27** — §3.0 the map-first sections: site health from S4/S6 on the model, S4/S6 layers on the wall's map, every phone section tab as the map plus a pull-down sheet.

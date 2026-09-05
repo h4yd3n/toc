@@ -114,8 +114,17 @@ export interface SystemLine { id: string; name: string; category: string; locati
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
 /** Where the wall opens: the declared AO, else the box holding our sites, else nothing known yet. */
 export interface View { center_lat: number | null; center_lon: number | null; radius_km: number | null; source: 'ao' | 'force' | 'none' }
+export type Overlay = 'COP' | 'S1' | 'S2' | 'S3' | 'S4' | 'S6'
+/** §3.4 an active requirement as a named area of interest: where S2 is looking, why, and how well. */
+export interface NAI { id: string; nai: number; name: string; subject_name: string; subject_type: string; subject_id: string | null; kind: 'standing' | 'directed'; lat: number; lon: number; radius_km: number; priority: number
+  window_from: string | null; window_to: string | null; question: string; coverage_pct: number; gaps: number; pir_ids: string[]; health: Health }
+export interface MovementLeg { kind: 'flight' | 'ground' | 'lodging' | 'route'; label: string; from_lat: number | null; from_lon: number | null; to_lat: number; to_lon: number; start_at: string | null; end_at: string | null; status: 'done' | 'current' | 'planned' }
+/** §3.4 everything that moves: a serial, a delegation, one named person, or a shipment (Decision Z). */
+export interface Movement { id: string; kind: 'serial' | 'delegation' | 'individual' | 'shipment'; owner: 'S3' | 'S4'; name: string; unit: string | null; pax: number; person_ids: string[]; trip_ids: string[]; shipment_id?: string
+  is_vip: boolean; event_id: string | null; purpose: string; origin_name: string; origin_lat: number | null; origin_lon: number | null; dest_name: string; dest_lat: number; dest_lon: number
+  depart_at: string | null; return_at: string; eta?: string; hours_to_eta?: number; status: 'active' | 'planned'; mode: 'air' | 'ground' | 'unknown'; head_lat: number | null; head_lon: number | null; current_leg: string | null; legs: MovementLeg[]; health: Health; priority?: string }
 export interface WatchLogEntry { id: string; at: string; type: string; bucket: string; actor: string; subject: string; summary: string | null }
-export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
+export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }

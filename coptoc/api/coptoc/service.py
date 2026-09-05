@@ -14,6 +14,7 @@ from .watch import LOG_BUCKETS, current_watch, estimates as section_estimates, g
 from . import names
 from .taskings import TaskingRow, summarize as taskings_summary
 from .areas import AreaRatingRow, compact as area_compact, out as area_out, same_place
+from . import overlays
 from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -468,6 +469,13 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     }
     summary["s4_status"], summary["s6_status"] = s4["status"], s6["status"]
     _tk = taskings_summary(taskings, now); summary["taskings_open"], summary["taskings_overdue"] = _tk["open"], _tk["overdue"]
+    # §3.4 the section overlays, derived: every active requirement is an NAI; everything that moves is a movement
+    from sigtoc import requirements as s2req
+    req_rows = (await session.execute(select(s2req.RequirementRow).where(s2req.RequirementRow.status == "active"))).scalars().all()
+    cat = await s2req.catalog(session) if req_rows else []
+    nais_out = overlays.nais([s2req.to_dict(r, s2req.plan_for(r, cat)) for r in req_rows], pirs_out)
+    events_by_id = {e["id"]: e for e in events_out}
+    movements_out = overlays.movements(trips_out, person_by_id, team_by_id, events_by_id, s4["shipments"], loc_by_id, prof, now)
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     # §3.3 this watch so far: every ledger event since the watch began, bucketed the way the brief buckets them, so the
@@ -482,7 +490,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
-        "operations": operations_out, "areas": areas_out, "watch_log": watch_log,
+        "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
     }
 
 

@@ -26,7 +26,7 @@ function subjectSelection(snap: Snapshot, subject: string): Selection {
   return null
 }
 
-export function Timeline({ snap, now, sel, onSelect, onOp }: { snap: Snapshot | null; now: number; sel: Selection; onSelect: (s: Selection) => void; onOp: (id: string) => void }) {
+export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { snap: Snapshot | null; now: number; sel: Selection; onSelect: (s: Selection) => void; onOp: (id: string) => void; scrub?: number | null; onScrub?: (t: number | null, pinned?: boolean) => void }) {
   if (!snap) return <div className="tl" />
   const t0 = now
   const watchStart = snap.watch ? +new Date(snap.watch.started_at) : t0 - 8 * HOUR
@@ -68,11 +68,16 @@ export function Timeline({ snap, now, sel, onSelect, onOp }: { snap: Snapshot | 
   const labelEvery = days <= 28 ? 2 : days <= 56 ? 7 : 14
   for (let d = 3; d <= days; d += 1) { const t = t0 + d * DAY; ticks.push({ t, label: d % labelEvery === 0 ? new Date(t).toUTCString().slice(5, 11) : '', major: d % 7 === 0 }) }
   const eventLanes = lanes.filter(l => l.kind === 'event').length
+  // §3.4 the scrub: the strip drives the map — hover a moment and what is not happening then dims; click to pin it
+  const tAt = (pct: number): number => pct <= LEFT ? tBack + (pct / LEFT) * (t0 - tBack) : pct <= LEFT + NEAR ? t0 + ((pct - LEFT) / NEAR) * (tNear - t0) : tNear + ((pct - LEFT - NEAR) / (100 - LEFT - NEAR)) * (tFar - tNear)
+  const pctOf = (e: React.MouseEvent<HTMLDivElement>) => { const r = e.currentTarget.getBoundingClientRect(); return Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)) }
+  const scrubX = scrub != null ? x(scrub) : null
   // this watch so far: the log as ticks, one lane, bucket-colored; the summary on hover; the subject on click
   const log: WatchLogEntry[] = (snap.watch_log ?? []).filter(e => +new Date(e.at) >= tBack)
   return (
-    <div className="tl" title="">
+    <div className="tl" title="" onMouseMove={e => onScrub?.(tAt(pctOf(e)))} onMouseLeave={() => onScrub?.(null)} onClick={e => onScrub?.(tAt(pctOf(e)), true)}>
       <div className="tl-axis">
+        {scrubX != null && <div className="tl-scrub" style={{ left: `${scrubX}%` }}><span>{scrub! < t0 ? hhmm(scrub!) : scrub! < t0 + 2 * DAY ? `+${Math.round((scrub! - t0) / HOUR)}h` : new Date(scrub!).toUTCString().slice(5, 11)}</span></div>}
         <div className="tl-back" style={{ left: 0, width: `${LEFT}%` }}><span>{snap.watch ? `${snap.watch.name.toUpperCase()} WATCH SO FAR` : 'SO FAR'} · {log.length} logged</span></div>
         {ticks.map(k => <div key={k.t} className={`tl-tick ${k.major ? 'major' : ''}`} style={{ left: `${x(k.t)}%` }}>{k.label && <span>{k.label}</span>}</div>)}
         <div className="tl-now" style={{ left: `${LEFT}%` }}><span>NOW {hhmm(t0)}</span></div>

@@ -79,7 +79,24 @@ struct Snapshot: Decodable {
     var log: [LogEntry]
     var warnings: [Warning]?
     var operations: [OperationSummary]?
+    var nais: [NAI]?, movements: [Movement]?   // §3.4 the derived overlays
 }
+
+/// §3.4 an active requirement as a named area of interest: where S2 is looking, why, and how well.
+struct NAI: Decodable, Identifiable, Hashable {
+    var id: String, nai: Int, name: String, subjectName: String, subjectType: String, subjectId: String?, kind: String, lat: Double, lon: Double, radiusKm: Double, priority: Int
+    var windowFrom: String?, windowTo: String?, question: String, coveragePct: Int, gaps: Int, pirIds: [String], health: String
+    var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
+    var labelCoordinate: CLLocationCoordinate2D { .init(latitude: lat + radiusKm / 111.0, longitude: lon) }
+}
+struct MovementLeg: Decodable, Hashable { var kind: String, label: String, fromLat: Double?, fromLon: Double?, toLat: Double, toLon: Double, startAt: String?, endAt: String?, status: String }
+/// §3.4 everything that moves: a serial, a delegation, one named person, or a shipment (Decision Z).
+struct Movement: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, owner: String, name: String, unit: String?, pax: Int, personIds: [String], isVip: Bool, purpose: String, originName: String, destName: String, destLat: Double, destLon: Double
+    var departAt: String?, returnAt: String, hoursToEta: Double?, status: String, mode: String, headLat: Double?, headLon: Double?, currentLeg: String?, legs: [MovementLeg], health: String
+    var head: CLLocationCoordinate2D? { headLat.flatMap { la in headLon.map { .init(latitude: la, longitude: $0) } } }
+}
+struct AreaCompact: Decodable, Hashable { var id: String, place: String, worst: String, worstIndicator: String?, strip: [String], assessedBy: String, assessedAt: String, ageDays: Double, stale: Bool }
 
 struct Summary: Decodable {
     var totalPeople: Int, present: Int, traveling: Int, vipsTraveling: Int, securityOnShift: Int
@@ -98,6 +115,7 @@ struct Site: Decodable, Identifiable, Hashable {
     var posture: String, effectivePosture: String, sensitivity: String
     var assigned: Int, present: Int, securityOnShift: Int, vipsPresent: Int
     var threatIdsInArea: [String], confirmedThreatIds: [String]
+    var area: AreaCompact?   // §5.6a what S2 judges about this place
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
 }
 
