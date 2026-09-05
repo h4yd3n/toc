@@ -75,7 +75,7 @@ function MonthGrid({ snap, onSelect }: { snap: Snapshot; onSelect: (s: Selection
   const items: Item[] = [
     ...snap.events.map(e => ({ id: e.id, kind: 'event' as const, label: `★ ${e.name}${e.coverage ? ` · ${e.coverage.assigned}/${e.coverage.required}` : ''}`, start: day(e.start_at), end: day(e.end_at), sel: { type: 'event', id: e.id } as Selection,
       cls: `ev ${e.coverage && e.coverage.gap > 0 ? 'gap' : ''}`, title: `${e.name} · ${e.venue_name}` + (e.coverage ? ` · cover ${e.coverage.assigned}/${e.coverage.required}` : '') })),
-    ...snap.trips.filter(t => !t.event_id).map(t => ({ id: t.id, kind: 'trip' as const, label: `${t.is_vip ? '★ ' : ''}${t.person_name.split(' ')[0]} → ${t.dest_name.split(',')[0]}`, start: day(t.depart_at), end: day(t.return_at), sel: { type: 'person', id: t.person_id } as Selection, cls: `tr ${t.is_vip ? 'vip' : ''}`, title: `${t.person_name} → ${t.dest_name} · ${t.purpose}` })),
+    ...snap.trips.filter(t => !t.event_id).map(t => ({ id: t.id, kind: 'trip' as const, label: `${t.is_vip ? '★ ' : ''}${t.person_short ?? t.person_name.split(' ')[0]} → ${t.dest_name.split(',')[0]}`, start: day(t.depart_at), end: day(t.return_at), sel: { type: 'person', id: t.person_id } as Selection, cls: `tr ${t.is_vip ? 'vip' : ''}`, title: `${t.person_name} → ${t.dest_name} · ${t.purpose}` })),
   ]
   return (<div className="mgrid">
     {months.map(m0 => {

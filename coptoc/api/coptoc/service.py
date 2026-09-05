@@ -228,7 +228,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             continue
         o = loc_by_id.get(t.origin_location_id)
         trips_out.append({
-            "id": t.id, "person_id": t.person_id, "person_name": person_by_id[t.person_id]["name"],
+            "id": t.id, "person_id": t.person_id, "person_name": person_by_id[t.person_id]["name"], "person_short": person_by_id[t.person_id]["short_name"],
             "is_vip": person_by_id[t.person_id]["is_vip"],
             "origin_location_id": t.origin_location_id, "origin_name": o.name if o else "—",
             "origin_lat": o.lat if o else t.dest_lat, "origin_lon": o.lon if o else t.dest_lon,

@@ -40,7 +40,7 @@ export interface Leg {
   start_at: string; end_at: string; status: 'done' | 'current' | 'planned'; note: string; source: string
 }
 export interface Trip { operation?: OperationSummary | null; legs: Leg[]; current_leg: Leg | null;
-  id: string; person_id: string; person_name: string; is_vip: boolean
+  id: string; person_id: string; person_name: string; person_short?: string; is_vip: boolean
   origin_location_id: string; origin_name: string; origin_lat: number; origin_lon: number
   dest_location_id: string | null; dest_name: string; dest_lat: number; dest_lon: number
   depart_at: string; return_at: string; purpose: string; status: 'planned' | 'active' | 'complete'
