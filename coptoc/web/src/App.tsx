@@ -8,6 +8,7 @@ import { IntsumPanel } from './Intsum'
 import { DistributionBox, OperationPanel } from './Operation'
 import { FlashStrip, WarningsSection } from './Warnings'
 import { ImportDrawer, PlanningPanel } from './Planning'
+import { Timeline } from './Timeline'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -224,26 +225,7 @@ export default function App() {
         <div className="s3">
           <PanelHead code="S3" title="OPERATIONS" hint="Events · Travel" inline><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
-          <div className="timeline">
-            {snap?.events.map(e => (
-              <div key={e.id} className={`trip event ${sel?.type === 'event' && sel.id === e.id ? 'active' : ''}`} onClick={() => setSel({ type: 'event', id: e.id })}>
-                <div className="trip-head"><span className="chip event">{e.status === 'active' ? 'LIVE' : `T-${e.days_until}d`}</span><span className="who">★ {e.name}</span>
-                  {e.threat_ids_in_area.length > 0 && <span className="tbadge">△{e.threat_ids_in_area.length}</span>}
-                  {e.operation && <span className={`chip small op ${e.operation.status}`} title={e.operation.title} onClick={ev => { ev.stopPropagation(); setOpId(e.operation!.id) }}>OP {e.operation.tasks_done}/{e.operation.tasks_total}</span>}</div>
-                <div className="route">{short(e.venue_name)}</div>
-                <div className="when dim">{new Date(e.start_at).toUTCString().slice(5, 16)} → {new Date(e.end_at).toUTCString().slice(5, 16)}</div>
-                <div className="purpose">{e.attendee_count} attending · {e.vip_count} VIP · {e.security_count} sec · {e.trips_generated} trips</div>
-              </div>))}
-            {snap?.trips.map(t => (
-              <div key={t.id} className={`trip ${t.status} ${sel?.type === 'person' && sel.id === t.person_id ? 'active' : ''}`} onClick={() => setSel({ type: 'person', id: t.person_id })}>
-                <div className="trip-head"><span className={`chip ${t.status}`}>{t.status.toUpperCase()}</span><span className="who">{t.is_vip && <span className="vipstar">★</span>}{t.person_name}</span>
-                  {t.event_id && <span className="chip event small">EVT</span>}
-                  {t.operation && <span className={`chip small op ${t.operation.status}`} title={t.operation.title} onClick={ev => { ev.stopPropagation(); setOpId(t.operation!.id) }}>OP {t.operation.tasks_done}/{t.operation.tasks_total}</span>}</div>
-                <div className="route">{t.origin_name.split(' ')[0]} <span className="arrow">→</span> {short(t.dest_name)}</div>
-                <div className="when dim">dep {rel(t.depart_at, now)} · ret {rel(t.return_at, now)}</div>
-                <div className="purpose">{t.purpose}</div>
-              </div>))}
-          </div>
+          <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
         </div>
         <div className="oplog">
           <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />
