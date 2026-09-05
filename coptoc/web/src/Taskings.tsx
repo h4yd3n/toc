@@ -29,6 +29,8 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
       </div>
       <div className="l2">
         <span className="dim small">{t.asset}{t.subject_name ? ` · ${t.subject_name}` : ''}{t.window_from ? ` · ${fmt(t.window_from)}${t.window_to ? ' → ' + fmt(t.window_to) : ''}` : ''}{t.result ? ` · ${t.result}` : ''}</span>
+      </div>
+      <div className="l3">
         {mine && canEdit && t.open && <span className="acts">
           {t.status === 'requested' && <button className="mini" disabled={!!busy} onClick={e => { e.stopPropagation(); set(t, 'accepted') }}>ACCEPT</button>}
           {t.status !== 'scheduled' && <button className="mini" disabled={!!busy} onClick={e => { e.stopPropagation(); set(t, 'scheduled') }}>SCHEDULE</button>}

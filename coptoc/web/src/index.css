@@ -552,3 +552,6 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .mini .badge { position: relative; top: -1px; margin-left: 4px; font-style: normal; font-size: 9px; background: var(--red); color: #fff; border-radius: 8px; padding: 0 4px; }
 .mini.on { background: var(--blue); color: #fff; }
 .bottom .dform.s3-tasks { width: 620px; max-height: 60vh; overflow: auto; }
+.list .row.two .l3 { display: flex; gap: 6px; }
+.list .row.two .l3:empty { display: none; }
+.list .row.two .l3 .acts { margin-left: 0; }
