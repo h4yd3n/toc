@@ -5,6 +5,7 @@ struct PersonnelScreen: View {
     var body: some View {
         List {
             Section { PanelHead(code: store.sectionCode("S1"), title: store.sectionTitle("S1", "PERSONNEL"), hint: "Blue Force"); EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
+            TaskingsSection(section: "S1")
             if !store.openIncidents.isEmpty {
                 Section(header: SectionLabel(text: "S6 · ROLL CALLS")) {
                     ForEach(store.openIncidents) { inc in
@@ -71,6 +72,7 @@ struct IntelScreen: View {
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S2" })
             }.listRowBackground(Theme.panel)
+            TaskingsSection(section: "S2")
             Section(header: SectionLabel(text: "WARNINGS · \(store.pendingWarnings.count) AWAITING RELEASE")) {
                 if store.pendingWarnings.isEmpty {
                     HStack { Text("Nothing suggested. Confirm a link on an elevated threat, or collect a critical one.").font(.system(size: 11)).foregroundStyle(Theme.dim)
@@ -209,6 +211,7 @@ struct OpsScreen: View {
                     Color.clear.frame(height: 0).background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .named("agenda")).minY) })
                     PanelHead(code: store.sectionCode("S3"), title: store.sectionTitle("S3", "OPERATIONS"), hint: "Agenda").padding(.horizontal, 14).padding(.top, 8)
                     EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }).padding(.horizontal, 14)
+                    TaskingsSection(section: "S3", plain: true)
                     ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
                         if idx > 0, let gap = cal.dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
                             Text("— nothing for \(gap - 1) day\(gap - 1 == 1 ? "" : "s") —").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity).padding(.vertical, 10).id("g:\(Int(d.day.timeIntervalSince1970))")
@@ -389,6 +392,7 @@ struct LogisticsScreen: View {
                         Spacer(); Button(all ? "EXCEPTIONS" : "ALL") { all.toggle() }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue) }
                 }
             }.listRowBackground(Theme.bg).listRowSeparator(.hidden)
+            TaskingsSection(section: "S4")
             if let b = board {
                 let lines = all ? b.supplies : b.supplies.filter { $0.status != "green" }
                 Section(header: SectionLabel(text: "SUPPLY & EQUIPMENT · \(lines.count)" + (all ? "" : " OF \(b.supplies.count)"))) {
@@ -454,6 +458,7 @@ struct SignalScreen: View {
                         Spacer(); Button(all ? "EXCEPTIONS" : "ALL") { all.toggle() }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue) }
                 }
             }.listRowBackground(Theme.bg).listRowSeparator(.hidden)
+            TaskingsSection(section: "S6")
             if let b = board {
                 Section(header: SectionLabel(text: "PACE · HOW TO REACH EACH SITE")) {
                     ForEach(b.pace.keys.sorted(), id: \.self) { site in
@@ -540,5 +545,73 @@ struct TaskOrgSection: View {
             }.padding(.leading, CGFloat(depth) * 14)
         }.foregroundStyle(.primary).buttonStyle(.plain)
         if isOpen { ForEach(kids) { k in AnyView(rows(k, depth: depth + 1, teams: teams)) } }
+    }
+}
+
+
+// MARK: - §5.10 taskings on the phone: what a section owes and what it is waiting on
+
+struct TaskingsSection: View {
+    @Environment(COPStore.self) private var store
+    var section: String
+    var plain = false  // true inside a ScrollView (S3); false inside a List
+    @State private var raising = false
+    @State private var title = ""; @State private var asset = ""; @State private var to = "S3"; @State private var kind = "other"; @State private var priority = "routine"
+    @State private var declining: Tasking? = nil; @State private var reason = ""
+    var body: some View {
+        Group {
+            if plain { VStack(alignment: .leading, spacing: 8) { header; rows }.padding(.horizontal, 14).padding(.top, 10) }
+            else { Section(header: header) { rows }.listRowBackground(Theme.bg) }
+        }
+        .alert("Decline — why?", isPresented: Binding(get: { declining != nil }, set: { if !$0 { declining = nil } })) {
+            TextField("Reason", text: $reason)
+            Button("Decline", role: .destructive) { if let t = declining { let r = reason; store.act("declining") { try await store.client.answerTasking(t.id, status: "declined", result: r) } }; declining = nil; reason = "" }
+            Button("Cancel", role: .cancel) { declining = nil }
+        }
+    }
+    var inbox: [Tasking] { (store.snapshot?.taskings?.items ?? []).filter { $0.toSection == section && $0.open } }
+    var outbox: [Tasking] { (store.snapshot?.taskings?.items ?? []).filter { $0.fromSection == section && $0.open } }
+    var header: some View {
+        HStack { SectionLabel(text: "TASKINGS · \(inbox.count) TO DO · \(outbox.count) WAITING"); Spacer(); if store.can(section, "edit") { Button(raising ? "CANCEL" : "RAISE") { raising.toggle() }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue) } }
+    }
+    @ViewBuilder var rows: some View {
+        let board = store.snapshot?.taskings
+        let canEdit = store.can(section, "edit")
+        let others = (store.snapshot?.sections ?? []).filter { $0.enabled && $0.code != section }.map { $0.code }
+        let _ = board
+            if raising {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack { Picker("To", selection: $to) { ForEach(others, id: \.self) { Text($0) } }.pickerStyle(.segmented) }
+                    HStack { Picker("Kind", selection: $kind) { ForEach(["collection", "comms", "supply", "movement", "coverage", "other"], id: \.self) { Text($0) } }.pickerStyle(.menu)
+                        Picker("Priority", selection: $priority) { ForEach(["routine", "priority", "urgent"], id: \.self) { Text($0) } }.pickerStyle(.menu) }
+                    TextField("What", text: $title).textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    TextField("Asset or capability wanted", text: $asset).textFieldStyle(.roundedBorder).font(.system(size: 12))
+                    Button("RAISE ON \(to)") { let t = title, a = asset, k = kind, p = priority, dest = to; store.act("raising a tasking") { try await store.client.raiseTasking(from: section, to: dest, kind: k, title: t, asset: a, priority: p) }; raising = false; title = ""; asset = "" }
+                        .font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.green).disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || store.busy != nil)
+                }.padding(.vertical, 4)
+            }
+            if inbox.isEmpty && outbox.isEmpty { Text("Nothing open.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+            ForEach(inbox) { t in row(t, mine: true, canEdit: canEdit) }
+            ForEach(outbox) { t in row(t, mine: false, canEdit: false) }
+    }
+    @ViewBuilder func row(_ t: Tasking, mine: Bool, canEdit: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Chip(text: t.priority == "urgent" ? "URG" : t.priority == "priority" ? "PRI" : "RTN", color: healthColor(t.health), filled: t.health != "green")
+                Text(mine ? "\(t.fromSection) →" : "→ \(t.toSection)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                Text(t.title).font(.system(size: 12, weight: .semibold)).lineLimit(2)
+                Spacer()
+                Chip(text: t.status.uppercased() + (t.overdue ? " · LATE" : ""), color: t.status == "requested" ? Theme.amber : t.status == "complete" ? Theme.green : Theme.blue)
+            }
+            Text([t.asset, t.subjectName, t.windowFrom.map { ISO.short($0) } ?? ""].filter { !$0.isEmpty }.joined(separator: " · ")).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).lineLimit(2)
+            if mine && canEdit {
+                HStack(spacing: 6) {
+                    if t.status == "requested" { Button("ACCEPT") { store.act("accepting") { try await store.client.answerTasking(t.id, status: "accepted", result: nil) } }.tint(Theme.blue) }
+                    if t.status != "scheduled" { Button("SCHEDULE") { store.act("scheduling") { try await store.client.answerTasking(t.id, status: "scheduled", result: nil) } }.tint(Theme.blue) }
+                    Button("COMPLETE") { store.act("completing") { try await store.client.answerTasking(t.id, status: "complete", result: nil) } }.tint(Theme.green)
+                    Button("DECLINE") { declining = t }.tint(Theme.red)
+                }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+            }
+        }
     }
 }

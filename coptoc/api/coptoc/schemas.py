@@ -76,6 +76,29 @@ class SystemUpdate(BaseModel):
     pace: Optional[PaceRole] = None
     note: Optional[str] = None
 
+class TaskingCreate(BaseModel):
+    kind: Literal["collection", "comms", "supply", "movement", "coverage", "other"] = "other"
+    title: str
+    from_section: Literal["S1", "S2", "S3", "S4", "S6"]
+    to_section: Literal["S1", "S2", "S3", "S4", "S6"]
+    subject_type: Optional[Literal["operation", "event", "requirement", "location", "trip"]] = None
+    subject_id: Optional[str] = None
+    subject_name: str = ""
+    asset: str = ""
+    window_from: Optional[datetime] = None
+    window_to: Optional[datetime] = None
+    priority: Literal["routine", "priority", "urgent"] = "routine"
+    notes: str = ""
+
+class TaskingUpdate(BaseModel):
+    status: Optional[Literal["requested", "accepted", "scheduled", "complete", "declined"]] = None
+    result: Optional[str] = None
+    notes: Optional[str] = None
+    asset: Optional[str] = None
+    window_from: Optional[datetime] = None
+    window_to: Optional[datetime] = None
+    priority: Optional[Literal["routine", "priority", "urgent"]] = None
+
 class LegCreate(BaseModel):
     kind: Literal["flight", "ground", "lodging"]
     label: str = ""

@@ -14,6 +14,7 @@ import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
 import { UploadDrawer } from './Upload'
+import { TaskingBox } from './Taskings'
 import * as api from './api'
 import type { UserInfo, Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -69,6 +70,8 @@ export default function App() {
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code   // what the rail says: "S1" or "PEOPLE"
+  const enabledSections = (['S1', 'S2', 'S3', 'S4', 'S6'] as const).filter(c => sectionOn(c))
+  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} />
   const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''  // a corporate desk drops the staff codes
   const switchProfile = (profile: 'military' | 'corporate') => {
     if (!window.confirm(`Switch to the ${profile.toUpperCase()} profile? This reloads the sample data — ${profile === 'military' ? 'the Combat Aviation Brigade with S4 and S6' : 'the executive-protection sample, S1–S3 only'}.`)) return
@@ -91,6 +94,7 @@ export default function App() {
   const [showPlan, setShowPlan] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [upload, setUpload] = useState<'S1' | 'S3' | 'S4' | 'S6' | null>(null)
+  const [s3Tasks, setS3Tasks] = useState(false)
   const [briefReload, setBriefReload] = useState(0)
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
@@ -169,6 +173,7 @@ export default function App() {
         {upload === 'S1' && <UploadDrawer section="S1" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
+        {taskingsFor('S1')}
         <div className="layer-toggles">
           {(['locations', 'travelers', 'routes', 'threats', 'events'] as (keyof Layers)[]).map(k => (
             <button key={k} className={`tog ${layers[k] ? 'on' : ''}`} onClick={() => toggle(k)}>{k}</button>))}
@@ -233,12 +238,14 @@ export default function App() {
         <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>{can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}</PanelHead>
         {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
+        {taskingsFor('S4')}
         <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
       </aside>
       <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`}>
         <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>{can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}</PanelHead>
         {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
+        {taskingsFor('S6')}
         <S6Panel board={snap?.s6} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s6} toggleMap={() => toggle('s6')} />
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
           <SectionLabel>ACCOUNTABILITY · OPEN ROLL CALLS <span className="dim">{snap.incidents.filter(i => i.status === 'open').length}</span></SectionLabel>
@@ -252,6 +259,7 @@ export default function App() {
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
+        {taskingsFor('S2')}
         <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
         <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
         <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
@@ -290,8 +298,9 @@ export default function App() {
 
       <footer className="bottom">
         <div className="s3">
-          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
+          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
           {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+          {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
           <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
         </div>

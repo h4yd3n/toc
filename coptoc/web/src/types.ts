@@ -70,7 +70,7 @@ export interface Assessment {
   status: 'draft' | 'review' | 'approved' | 'superseded'; created_at: string; approved_by: string | null; approved_at: string | null
 }
 export interface LogEntry { id: string; at: string; type: string; actor: string; actor_type: string; subject: string; old: string | null; new: string | null; summary: string | null }
-export interface Summary { s4_status?: Health; s6_status?: Health;
+export interface Summary { s4_status?: Health; s6_status?: Health; taskings_open?: number; taskings_overdue?: number;
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
@@ -105,7 +105,7 @@ export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Sh
 export interface SystemLine { id: string; name: string; category: string; location_id: string | null; location_name: string; pace: 'primary' | 'alternate' | 'contingency' | 'emergency' | null
   status: 'up' | 'degraded' | 'down'; health: Health; since: string | null; hours: number; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
-export interface Snapshot { warnings: Warning[]; me: Me; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
+export interface Snapshot { warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }
@@ -186,3 +186,10 @@ export interface UserInfo { id: string; name: string; title: string; team_id?: s
 
 export interface UploadPreview { upload_id: string; section: string; filename: string; sheets: string[]; sheet: string; header_row: number; columns: string[]; rows: number
   samples: Record<string, string>[]; mapping: Record<string, string | null>; proposed_by: 'model' | 'headers'; kind: 'supply' | 'shipments'; targets: Record<string, string>; issues: string[] }
+
+export type SectionCode = 'S1' | 'S2' | 'S3' | 'S4' | 'S6'
+export interface Tasking { id: string; kind: 'collection' | 'comms' | 'supply' | 'movement' | 'coverage' | 'other'; title: string; from_section: SectionCode; to_section: SectionCode
+  subject_type: string | null; subject_id: string | null; subject_name: string; asset: string; window_from: string | null; window_to: string | null
+  priority: 'routine' | 'priority' | 'urgent'; status: 'requested' | 'accepted' | 'scheduled' | 'complete' | 'declined'; notes: string; result: string
+  requested_by: string; requested_at: string; age_h: number; owned_by: string | null; updated_at: string; open: boolean; overdue: boolean; health: Health }
+export interface TaskingBoard { items: Tasking[]; open: number; overdue: number; per_section: Record<string, { inbox: number; outbox: number; overdue: number }> }

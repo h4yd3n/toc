@@ -54,6 +54,9 @@ struct COPClient {
     func users() async throws -> [UserInfo] { let d: UsersOut = try await fetch("/v1/cop/users"); return d.users }
     // §11.2 the profile: military or corporate; reloads the sample data
     func setProfile(_ profile: String) async throws { try await send("PUT", "/v1/cop/profile", ["profile": profile]) }
+    // §5.10 taskings
+    func answerTasking(_ id: String, status: String, result: String?) async throws { var b: [String: Any] = ["status": status]; if let result, !result.isEmpty { b["result"] = result }; try await send("PATCH", "/v1/cop/taskings/\(id)", b) }
+    func raiseTasking(from: String, to: String, kind: String, title: String, asset: String, priority: String) async throws { try await send("POST", "/v1/cop/taskings", ["from_section": from, "to_section": to, "kind": kind, "title": title, "asset": asset, "priority": priority]) }
     // §7 / §8 — the background boards
     func updateSupply(_ id: String, onHand: Double, note: String?) async throws { var b: [String: Any] = ["on_hand": onHand]; if let note, !note.isEmpty { b["note"] = note }; try await send("PATCH", "/v1/cop/supply/\(id)", b) }
     func updateShipment(_ id: String, status: String) async throws { try await send("PATCH", "/v1/cop/shipments/\(id)", ["status": status]) }

@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.27
+**Version:** 3.28
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -322,6 +322,10 @@ The loop, closed: **Ops reports → S2 grades and files into cases → S2 assess
 acknowledged → Ops plans the operation → the floor watches it → Ops reports.** The wall is where all of it is visible
 at once, which is what a fusion cell is.
 
+### 5.10a Taskings — work moving between sections **[BUILT]** (2026-09-05)
+
+The object that carries a request from one staff section to another: S2 asks S3 for a collection asset over an area (a drone over the FARP during the rotation); S3 asks S6 to confirm PACE for an operation; S3 asks S4 for fuel at a site; S3 asks S1 for gate security at a ceremony. A tasking has who asked and who owes, what it is for (an operation, event, requirement, site, or trip), the asset or capability wanted, a window, a priority, and a status — requested → accepted → scheduled → complete, or declined with a reason. Raising one needs edit on the section it comes from; answering needs edit on the section it goes to; the Battle Captain can do either. A tasking whose window has opened and is not complete is late, and reads red. Every step is on the ledger; the handover brief carries what is open per section. Each section's panel on the wall, and each section's tab on the phones, shows what that section owes (with ACCEPT / SCHEDULE / COMPLETE / DECLINE), what it is waiting on, and a RAISE form. **[LATER]** taskings that create things when accepted — a collection tasking that opens an S3 operation, a supply tasking that becomes a shipment.
+
 ### 5.11 The analyst's workbench — one graph, three views
 
 The `Case` from §5.10 is the folder. This is what an analyst does inside it: link analysis, pattern of life, and
@@ -612,6 +616,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.28** — §5.10a taskings: the object that carries work between sections, with inbox / outbox and the raise form on every section panel and tab; open taskings in the handover brief.
 - **v3.27** — §3.0 the map-first sections: site health from S4/S6 on the model, S4/S6 layers on the wall's map, every phone section tab as the map plus a pull-down sheet.
 - **v3.26** — names and ranks (LAST, First M. · RANK on a military desk; pay grades as the constant); sign-in profiles are the roles themselves.
 - **v3.25** — §13 the spreadsheet upload: Excel or CSV, header found under title rows, mapping proposed (model or headers), preview then commit; S1 roster builds the task organization from unit paths. Phone SETTINGS as submenus.

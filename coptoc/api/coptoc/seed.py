@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .sections import ShipmentRow, SupplyRow, SystemRow
 from . import users as toc_users
 from .names import split_name
+from . import taskings as toc_taskings
+from .taskings import TaskingRow
 from .users import UserRow
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -363,7 +365,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await _seed_case(session, now_utc())
         await _seed_directed(session, now_utc())
         await _seed_operation(session, now_utc())
-    for model in (SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    for model in (TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
@@ -375,6 +377,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     toc_users._cache.clear()
     for spec in toc_users.seed_users(dataset):
         await toc_users.upsert(session, spec, "seed")
+    session.add_all(toc_taskings.seed(dataset, now))  # §5.10 the work moving between sections
     if dataset == "cab":
         from . import seed_cab
         await seed_cab.populate(session, now)

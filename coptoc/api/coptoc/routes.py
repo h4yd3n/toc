@@ -24,8 +24,9 @@ from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, Deli
                         TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
+from .taskings import TaskingRow, out as tasking_out
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -230,6 +231,61 @@ async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_s
     await get_ledger().append_event(content_id="setting:TOC_PROFILE", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
                                     new_state=body.profile, reason=f"Profile set to {body.profile}; sample data reloaded", metadata={"name": "TOC_PROFILE"})
     return {"profile": body.profile, "dataset": dataset_for(body.profile)}
+
+
+# ---------------------------------------------------------------- §5.10 taskings: work moving between sections
+
+SECTION_EDITORS = {"S1": "security", "S2": "analyst", "S3": "ea", "S4": "logistics", "S6": "signal"}
+
+
+def _may_act_for(section: str, x_toc_role: Optional[str], what: str) -> None:
+    require_role(x_toc_role, {"battle_captain", SECTION_EDITORS[section]}, what, section=section)
+
+
+@router.post("/taskings", status_code=201)
+async def create_tasking(body: TaskingCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Raise a tasking on another section. You need edit on the section you raise it from."""
+    _may_act_for(body.from_section, x_toc_role, f"Raising a tasking from {body.from_section}")
+    if body.from_section == body.to_section:
+        raise HTTPException(422, "a tasking goes to another section")
+    if body.window_from and body.window_to and naive(body.window_to) < naive(body.window_from):
+        raise HTTPException(422, "window_to is before window_from")
+    now = now_utc()
+    t = TaskingRow(id=f"tsk_{uuid.uuid4().hex[:8]}", kind=body.kind, title=body.title, from_section=body.from_section, to_section=body.to_section, subject_type=body.subject_type,
+                   subject_id=body.subject_id, subject_name=body.subject_name, asset=body.asset, window_from=naive(body.window_from), window_to=naive(body.window_to), priority=body.priority,
+                   status="requested", notes=body.notes, requested_by=actor_from(x_toc_actor), requested_at=now, updated_at=now)
+    session.add(t); await session.commit()
+    await get_ledger().append_event(content_id=t.id, event_type="cop.tasking.raised", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="requested",
+                                    reason=f"{body.from_section} → {body.to_section}: {body.title}" + (f" · {body.asset}" if body.asset else ""), metadata={"kind": body.kind, "priority": body.priority, "to": body.to_section})
+    return tasking_out(t, now)
+
+
+@router.patch("/taskings/{tasking_id}")
+async def update_tasking(tasking_id: str, body: TaskingUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """The owing section accepts, schedules, completes, or declines; the raising section may amend the ask while it is still requested."""
+    t = await one_or_404(session, TaskingRow, tasking_id, "tasking")
+    changes = body.model_dump(exclude_unset=True)
+    if "status" in changes:
+        _may_act_for(t.to_section, x_toc_role, f"Answering a tasking for {t.to_section}")
+        if t.status in ("complete", "declined"):
+            raise HTTPException(409, f"tasking is already {t.status}")
+        if changes["status"] == "declined" and not (changes.get("result") or t.result):
+            raise HTTPException(422, "say why when declining")
+    else:
+        try:
+            _may_act_for(t.from_section, x_toc_role, "Amending a tasking")
+        except HTTPException:
+            _may_act_for(t.to_section, x_toc_role, "Amending a tasking")
+    old = t.status
+    for k, v in changes.items():
+        setattr(t, k, naive(v) if k in ("window_from", "window_to") else v)
+    if "status" in changes and changes["status"] in ("accepted", "scheduled", "complete", "declined") and not t.owned_by:
+        t.owned_by = actor_from(x_toc_actor)
+    t.updated_at = now_utc()
+    await session.commit()
+    await get_ledger().append_event(content_id=t.id, event_type="cop.tasking." + (changes.get("status") or "amended"), actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=t.status,
+                                    reason=f"{t.from_section} → {t.to_section}: {t.title} — {t.status}" + (f" · {t.result}" if t.result and "status" in changes else ""), metadata={"kind": t.kind, "priority": t.priority})
+    return tasking_out(t, now_utc())
 
 
 # ---------------------------------------------------------------- §13 the spreadsheet upload: preview → mapping → commit

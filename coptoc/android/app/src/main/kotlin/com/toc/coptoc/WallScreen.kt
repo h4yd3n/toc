@@ -134,6 +134,8 @@ fun Header(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S1Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
+    var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    TaskingDialogs(st, store, "S1", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     Label(sectionHead(snap, "S1", "PERSONNEL"), "Blue Force")
     EstimateLine(snap.estimates.firstOrNull { it.section == "S1" })
     var openUnits by remember { mutableStateOf(setOf<String>()) }
@@ -144,6 +146,7 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
         if (roots.isNotEmpty()) {  // §4 the task organization: brigade → battalions → companies
             item { Label("TASK ORGANIZATION", "present/assigned · ↗ away") }
             fun unit(t: Team, depth: Int) {
+        taskingsSection(st, store, "S1", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
                 val kids = snap.teams.filter { it.parentId == t.id }; val m = members(t.id); val away = m.count { it.status == "traveling" }; val bad = m.count { it.availability == "unreachable" }
                 val isOpen = depth == 0 || t.id in openUnits
                 item(key = "org_" + t.id) { Row(Modifier.fillMaxWidth().clickable { if (kids.isEmpty()) store.select(Selection.SiteSel(t.locationId)) else openUnits = if (t.id in openUnits) openUnits - t.id else openUnits + t.id }
@@ -183,10 +186,13 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
+    var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    TaskingDialogs(st, store, "S2", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     Label(sectionHead(st.snap, "S2", "INTELLIGENCE"), "Sigtoc", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
     val s2State = androidx.compose.foundation.lazy.rememberLazyListState(); s2State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s2State, contentPadding = PaddingValues(bottom = 96.dp)) {
+        taskingsSection(st, store, "S2", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
         item { Label("WARNINGS", "${pending.size} awaiting release", action = { Mini("RUN RULE", enabled = st.busy == null) { store.act("running the warning rule") { runWarningRule() } } }) }
         items(pending, key = { it.id }) { w ->
@@ -475,6 +481,8 @@ fun agendaRows(snap: Snapshot): List<AgendaRow> {
 @Composable
 fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val snap = st.snap ?: return
+    var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    TaskingDialogs(st, store, "S3", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     val today = java.time.LocalDate.now()
     val rows = remember(snap) { agendaRows(snap) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState(); listState.driveDock()
@@ -491,6 +499,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
         onExpand = { on -> expanded = on; month = null }, onMonth = { m -> month = m },
         onPick = { d -> val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
     LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
+        taskingsSection(st, store, "S3", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         item { Label(sectionHead(snap, "S3", "OPERATIONS"), "Agenda"); EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
         items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
             when (val r = rows[i]) {
@@ -575,6 +584,8 @@ fun dayOfRow(r: AgendaRow): java.time.LocalDate? {
 
 @Composable
 fun ColumnScope.S4Phone(st: WallState, store: Store) {
+    var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    TaskingDialogs(st, store, "S4", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     val b = st.snap?.s4; val title = st.snap?.sections?.firstOrNull { it.code == "S4" }?.title ?: "LOGISTICS"
     var all by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<SupplyLine?>(null) }
@@ -582,6 +593,7 @@ fun ColumnScope.S4Phone(st: WallState, store: Store) {
     val canEdit = st.role in listOf("battle_captain", "logistics"); val busy = st.busy != null
     val s4State = androidx.compose.foundation.lazy.rememberLazyListState(); s4State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s4State, contentPadding = PaddingValues(bottom = 96.dp)) {
+        taskingsSection(st, store, "S4", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         item { Label("S4 · $title", "Supply & equipment"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S4" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S4 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
@@ -618,11 +630,14 @@ fun ColumnScope.S4Phone(st: WallState, store: Store) {
 
 @Composable
 fun ColumnScope.S6Phone(st: WallState, store: Store) {
+    var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    TaskingDialogs(st, store, "S6", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     val b = st.snap?.s6; val title = st.snap?.sections?.firstOrNull { it.code == "S6" }?.title ?: "SIGNAL"
     var all by remember { mutableStateOf(false) }
     val canEdit = st.role in listOf("battle_captain", "signal"); val busy = st.busy != null
     val s6State = androidx.compose.foundation.lazy.rememberLazyListState(); s6State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s6State, contentPadding = PaddingValues(bottom = 96.dp)) {
+        taskingsSection(st, store, "S6", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         item { Label("S6 · $title", "Comms & systems"); EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S6" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S6 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
@@ -692,4 +707,52 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
             content()
         }
     }
+}
+
+
+// ---------------------------------------------------------------- §5.10 taskings on the phone: what a section owes and what it is waiting on
+
+fun androidx.compose.foundation.lazy.LazyListScope.taskingsSection(st: WallState, store: Store, section: String, raising: Boolean, onRaise: () -> Unit, onDecline: (Tasking) -> Unit) {
+    val board = st.snap?.taskings ?: return
+    val inbox = board.items.filter { it.toSection == section && it.open }; val outbox = board.items.filter { it.fromSection == section && it.open }
+    val canEdit = can(st.snap, section, "edit"); val busy = st.busy != null
+    item { Label("TASKINGS", "${inbox.size} to do · ${outbox.size} waiting", action = { if (canEdit) Mini(if (raising) "CANCEL" else "RAISE") { onRaise() } }) }
+    if (inbox.isEmpty() && outbox.isEmpty()) item { Text("Nothing open.", Modifier.padding(horizontal = 14.dp), color = Palette.dim, fontSize = 11.sp) }
+    items(inbox + outbox, key = { "tk_" + it.id }) { t -> val mine = t.toSection == section
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 7.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(when (t.priority) { "urgent" -> "URG"; "priority" -> "PRI"; else -> "RTN" }, healthColor(t.health), filled = t.health != "green")
+                Text(if (mine) "${t.fromSection} →" else "→ ${t.toSection}", color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                Text(t.title, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Chip(t.status.uppercase() + (if (t.overdue) " · LATE" else ""), when (t.status) { "requested" -> Palette.amber; "complete" -> Palette.green; else -> Palette.blue2 }) }
+            Text(listOf(t.asset, t.subjectName, t.windowFrom?.take(16)?.replace('T', ' ') ?: "").filter { it.isNotEmpty() }.joinToString(" · "), color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (mine && canEdit) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (t.status == "requested") Mini("ACCEPT", Palette.blue2, !busy) { store.act("accepting") { answerTasking(t.id, "accepted", null) } }
+                if (t.status != "scheduled") Mini("SCHEDULE", Palette.blue2, !busy) { store.act("scheduling") { answerTasking(t.id, "scheduled", null) } }
+                Mini("COMPLETE", Palette.green, !busy) { store.act("completing") { answerTasking(t.id, "complete", null) } }
+                Mini("DECLINE", Palette.red, !busy) { onDecline(t) } }
+            HorizontalDivider(thickness = 0.5.dp, color = Palette.line) } }
+}
+
+/** The raise form and the decline dialog, shared by every section tab. */
+@Composable
+fun TaskingDialogs(st: WallState, store: Store, section: String, raising: Boolean, onRaised: () -> Unit, declining: Tasking?, onDeclined: () -> Unit) {
+    val others = st.snap?.sections?.filter { it.enabled && it.code != section }?.map { it.code } ?: listOf("S3")
+    var to by remember(section) { mutableStateOf(others.firstOrNull() ?: "S3") }
+    var kind by remember { mutableStateOf("other") }; var priority by remember { mutableStateOf("routine") }
+    var title by remember { mutableStateOf("") }; var asset by remember { mutableStateOf("") }; var reason by remember { mutableStateOf("") }
+    if (raising) AlertDialog(onDismissRequest = onRaised, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
+        title = { Text("Raise a tasking from $section", fontSize = 14.sp) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { others.forEach { s -> Chip(s, if (to == s) Palette.blue2 else Palette.dim, filled = to == s, onClick = { to = s }) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("collection", "comms", "supply", "movement", "coverage", "other").forEach { k -> Chip(k, if (kind == k) Palette.blue2 else Palette.dim, filled = kind == k, onClick = { kind = k }) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("routine", "priority", "urgent").forEach { k -> Chip(k, if (priority == k) Palette.amber else Palette.dim, filled = priority == k, onClick = { priority = k }) } }
+            OutlinedTextField(title, { title = it }, label = { Text("What") }, singleLine = true)
+            OutlinedTextField(asset, { asset = it }, label = { Text("Asset or capability wanted") }, singleLine = true) } },
+        confirmButton = { TextButton({ if (title.isNotBlank()) { val t = title; val a = asset; val k = kind; val p = priority; val d = to; store.act("raising a tasking") { raiseTasking(section, d, k, t, a, p) }; title = ""; asset = ""; onRaised() } }) { Text("RAISE", color = Palette.blue2) } },
+        dismissButton = { TextButton(onRaised) { Text("CANCEL", color = Palette.dim) } })
+    declining?.let { t -> AlertDialog(onDismissRequest = onDeclined, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
+        title = { Text("Decline — why?", fontSize = 14.sp) }, text = { OutlinedTextField(reason, { reason = it }, label = { Text("Reason") }) },
+        confirmButton = { TextButton({ if (reason.isNotBlank()) { val r = reason; store.act("declining") { answerTasking(t.id, "declined", r) }; reason = ""; onDeclined() } }) { Text("DECLINE", color = Palette.red) } },
+        dismissButton = { TextButton(onDeclined) { Text("CANCEL", color = Palette.dim) } }) }
 }

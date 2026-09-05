@@ -37,7 +37,16 @@ struct UserInfo: Decodable, Identifiable, Hashable {
     var battleCaptain: Bool
 }
 
+struct Tasking: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, title: String, fromSection: String, toSection: String, subjectName: String, asset: String
+    var windowFrom: String?, windowTo: String?, priority: String, status: String, notes: String, result: String, requestedBy: String, ageH: Double
+    var ownedBy: String?, open: Bool, overdue: Bool, health: String
+}
+struct TaskingCounts: Decodable, Hashable { var inbox: Int, outbox: Int, overdue: Int }
+struct TaskingBoard: Decodable, Hashable { var items: [Tasking], open: Int, overdue: Int, perSection: [String: TaskingCounts] }
+
 struct Snapshot: Decodable {
+    var taskings: TaskingBoard?
     var me: Me?
     var profile: String?, sections: [SectionCfg]?, s4: S4Board?, s6: S6Board?
     var generatedAt: String

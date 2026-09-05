@@ -1,4 +1,4 @@
-import type { UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -110,3 +110,7 @@ export const uploadPreview = async (section: string, file: File): Promise<Upload
   return r.json()
 }
 export const uploadCommit = (section: string, body: { upload_id: string; sheet: string; mapping: Record<string, string | null>; kind?: string }) => req<ImportResult & { section: string; sheet: string }>('POST', `/v1/cop/upload/${section}/commit`, body)
+
+// §5.10 taskings
+export const raiseTasking = (body: Partial<Tasking> & { title: string; from_section: string; to_section: string }) => req<Tasking>('POST', '/v1/cop/taskings', body)
+export const updateTasking = (id: string, body: Partial<Pick<Tasking, 'status' | 'result' | 'notes' | 'asset' | 'priority' | 'window_from' | 'window_to'>>) => req<Tasking>('PATCH', `/v1/cop/taskings/${id}`, body)

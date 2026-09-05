@@ -152,6 +152,7 @@ LOG_BUCKETS = {
     "cop.assessment.drafted": "intel", "cop.assessment.status": "intel", "cop.pir.created": "intel", "cop.pir.updated": "intel",
     "cop.person.shift": "personnel", "cop.watch.estimate": "estimates",
     "cop.s4.supply": "logistics", "cop.s4.shipment": "logistics", "cop.s6.system": "signal",
+    "cop.tasking.raised": "operations", "cop.tasking.accepted": "operations", "cop.tasking.scheduled": "operations", "cop.tasking.complete": "operations", "cop.tasking.declined": "operations", "cop.tasking.amended": "operations",
     "s2.requirement.created": "intel", "s2.requirement.updated": "intel", "s2.source.updated": "collection", "s2.requirements.synced": "estimates",
 }
 
@@ -195,6 +196,7 @@ async def build_brief(session: AsyncSession, snap: Dict[str, Any], row: WatchRow
         "stale_checkins": [{"id": p["id"], "name": p["name"]} for p in snap["people"] if p["checkin_stale"]],
         "logistics": {"status": snap.get("s4", {}).get("status", "green"), "exceptions": snap.get("s4", {}).get("exceptions", [])},  # §7: by exception
         "signal": {"status": snap.get("s6", {}).get("status", "green"), "exceptions": snap.get("s6", {}).get("exceptions", [])},    # §8: by exception
+        "taskings": [{"id": x["id"], "title": x["title"], "from": x["from_section"], "to": x["to_section"], "status": x["status"], "priority": x["priority"], "overdue": x["overdue"]} for x in snap.get("taskings", {}).get("items", []) if x["open"]],  # §5.10
     }
     handover_items = [{"kind": "open_incident", **i} for i in status["open_incidents"]] + \
                      [{"kind": "during_handover", "id": e["id"], "summary": e["summary"], "at": e["at"]} for e in events if e["during_handover"]]
