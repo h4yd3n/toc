@@ -114,7 +114,8 @@ export interface SystemLine { id: string; name: string; category: string; locati
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
 /** Where the wall opens: the declared AO, else the box holding our sites, else nothing known yet. */
 export interface View { center_lat: number | null; center_lon: number | null; radius_km: number | null; source: 'ao' | 'force' | 'none' }
-export interface Snapshot { areas: AreaRating[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
+export interface WatchLogEntry { id: string; at: string; type: string; bucket: string; actor: string; subject: string; summary: string | null }
+export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }

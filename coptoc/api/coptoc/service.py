@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared import settings
 from shared.db_models import LedgerEventRow
-from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
+from .watch import LOG_BUCKETS, current_watch, estimates as section_estimates, get_config, watch_summary
 from . import names
 from .taskings import TaskingRow, summarize as taskings_summary
 from .areas import AreaRatingRow, compact as area_compact, out as area_out, same_place
@@ -445,13 +445,19 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     _tk = taskings_summary(taskings, now); summary["taskings_open"], summary["taskings_overdue"] = _tk["open"], _tk["overdue"]
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
+    # §3.3 this watch so far: every ledger event since the watch began, bucketed the way the brief buckets them, so the
+    # S3 strip can draw the left half of its axis and the handover brief's first section is a picture before it is a list
+    wl_rows = (await session.execute(select(LedgerEventRow).where((LedgerEventRow.event_type.like("cop.%") | LedgerEventRow.event_type.like("s2.%")), LedgerEventRow.timestamp >= wrow.started_at)
+                                     .order_by(LedgerEventRow.id))).scalars().all()
+    watch_log = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "bucket": LOG_BUCKETS.get(r.event_type, "other"), "actor": r.actor_id, "subject": r.content_id, "summary": r.reason}
+                 for r in wl_rows if LOG_BUCKETS.get(r.event_type, "other") != "estimates"]
     return {
         "profile": toc_profile(), "sections": sections_config(), "view": default_view(), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
-        "operations": operations_out, "areas": areas_out,
+        "operations": operations_out, "areas": areas_out, "watch_log": watch_log,
     }
 
 

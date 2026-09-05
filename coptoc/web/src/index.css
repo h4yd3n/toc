@@ -640,3 +640,13 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .rt.on { opacity: 1; color: #000; } .rt.green.on { background: var(--green); border-color: var(--green); } .rt.amber.on { background: var(--amber); border-color: var(--amber); } .rt.red.on { background: var(--red); border-color: var(--red); color: #fff; } .rt.unknown.on { background: var(--line-2); color: var(--text); }
 .matrix.arate td.cell { cursor: default; } .matrix.arate td.cell .note { font-size: 11px; color: #c4d0dc; margin-top: 3px; }
 .matrix.arate td.rt-red { background: rgba(239,68,68,.06); } .matrix.arate td.rt-amber { background: rgba(245,158,11,.05); }
+
+/* ---- §3.3 the strip through NOW: this watch so far on the left, the compressed horizon on the right ---- */
+.tl-back { position: absolute; top: 0; bottom: 0; background: rgba(148,163,184,.06); border-right: 1px solid var(--line-2); } .tl-back span { position: absolute; top: -1px; right: 6px; font: 800 8.5px var(--mono); letter-spacing: .12em; color: var(--dim); white-space: nowrap; }
+.tl-now { left: auto; } .tl-now span { background: var(--panel); padding-right: 4px; }
+.tl-near { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--line-2); } .tl-near span { position: absolute; top: -1px; left: 3px; font: 8.5px var(--mono); letter-spacing: .08em; color: var(--dim); }
+.tl-log { position: relative; height: 12px; margin-top: 2px; background: rgba(148,163,184,.06); border-right: 2px solid var(--red); }
+.tl-ev { position: absolute; top: 2px; width: 3px; height: 8px; border-radius: 1px; transform: translateX(-1px); } .tl-ev.jump { cursor: pointer; } .tl-ev:hover { height: 12px; top: 0; }
+.tl-quiet { position: absolute; left: 6px; top: 0; font: 8.5px var(--mono); letter-spacing: .08em; }
+.tl-past { position: absolute; top: 0; bottom: 0; background: rgba(148,163,184,.04); }
+.tl-grid.now { border-left: 2px solid var(--red); z-index: 2; }
