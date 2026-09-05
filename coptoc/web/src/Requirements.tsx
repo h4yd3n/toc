@@ -77,7 +77,7 @@ function DirectedForm({ busy, act, onDone }: { busy: string | null; act: (l: str
     </div>)
 }
 
-function SourcesDrawer({ busy, act, reload }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; reload: number }) {
+export function SourcesDrawer({ busy, act, reload }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; reload: number }) {
   const [src, setSrc] = useState<SourceInfo[]>([])
   useEffect(() => { api.listSources().then(setSrc).catch(() => {}) }, [reload])
   return (

@@ -2,6 +2,8 @@
 grade (PRD §5.8); its significance score is theirs, never ours — it sets severity here only as a sort hint. Country-scoped.
 Parser follows the published docs (clstr.news/developers); not exercised live here without a key."""
 import os
+
+from shared import settings
 from typing import Any, Dict, List
 
 from .common import fetch, item, parse_iso, place_country_items
@@ -11,7 +13,7 @@ CATEGORY = {"health": "health", "disaster": "natural_hazard", "climate": "natura
 
 
 def configured() -> bool:
-    return bool(os.environ.get("CLSTR_API_KEY"))
+    return bool(settings.get("CLSTR_API_KEY"))
 
 
 def parse_clstr(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -32,5 +34,5 @@ def parse_clstr(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 async def collect_clstr(points, countries: Dict[str, Any], max_km: float = 0.0) -> List[Dict[str, Any]]:
     if not configured(): raise RuntimeError("CLSTR needs CLSTR_API_KEY")
     codes = ",".join(sorted(countries)[:10])
-    r = await fetch(API_URL, params={"days": 7, "limit": 50, "sort": "recent", "country": codes}, headers={"Authorization": f"Bearer {os.environ['CLSTR_API_KEY']}"}, name="CLSTR")
+    r = await fetch(API_URL, params={"days": 7, "limit": 50, "sort": "recent", "country": codes}, headers={"Authorization": f"Bearer {settings.get('CLSTR_API_KEY')}"}, name="CLSTR")
     return place_country_items(parse_clstr(r.json()), countries)

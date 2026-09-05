@@ -10,6 +10,7 @@ import { FlashStrip, WarningsSection } from './Warnings'
 import { ImportDrawer, PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
 import { S4Panel, S6Panel } from './Sections'
+import { SettingsPanel } from './Settings'
 import * as api from './api'
 import type { Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
@@ -49,7 +50,7 @@ export default function App() {
   // The wall: the map has the room; S1 and S2 live on rails and slide out over the map, never over S3 or the log.
   // Labels and the header are toggles under DISPLAY, persisted per browser.
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
-  const [openPanel, setOpenPanel] = useState<'left' | 'right' | 's4' | 's6' | null>(null)
+  const [openPanel, setOpenPanel] = useState<'left' | 'right' | 's4' | 's6' | 'settings' | null>(null)
   const sectionOn = (code: string) => snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const [showSettings, setShowSettings] = useState(false)
@@ -110,6 +111,7 @@ export default function App() {
         <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo identity — production uses the session">
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
         </select>
+        {role === 'battle_captain' && <button className={`gear ${openPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => setOpenPanel(openPanel === 'settings' ? null : 'settings')}>⚙ SETTINGS</button>}
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -184,6 +186,10 @@ export default function App() {
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
+      <aside className={`right wide ${openPanel === 'settings' ? 'open' : ''}`}>
+        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" />
+        <SettingsPanel busy={busy} act={act} reload={briefReload} />
+      </aside>
       <aside className={`right ${openPanel === 's4' ? 'open' : ''}`}>
         <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" />
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />

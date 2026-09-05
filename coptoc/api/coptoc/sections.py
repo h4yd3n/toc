@@ -8,6 +8,8 @@ Management by exception: the wall shows the roll-up, the panel shows the detail,
 The section set itself is configuration (`TOC_SECTIONS`, `TOC_SECTION_TITLES`): a commercial security desk hides S4/S6 or renames
 them; a military or police operations center keeps all five. Clients read `snapshot.sections` and show only what is enabled."""
 import os
+
+from shared import settings
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -27,9 +29,9 @@ PACE = ("primary", "alternate", "contingency", "emergency")
 def sections_config() -> List[Dict[str, Any]]:
     """Which staff sections this deployment runs, in wall order. `TOC_SECTIONS=S1,S2,S3` for a commercial desk;
     `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` to rename. S1–S3 are always present: the COP is built on them."""
-    enabled = [s.strip().upper() for s in os.environ.get("TOC_SECTIONS", "S1,S2,S3,S4,S6").split(",") if s.strip()]
+    enabled = [s.strip().upper() for s in (settings.get("TOC_SECTIONS") or "S1,S2,S3,S4,S6").split(",") if s.strip()]
     titles = dict(SECTION_TITLES)
-    for pair in os.environ.get("TOC_SECTION_TITLES", "").split(","):
+    for pair in (settings.get("TOC_SECTION_TITLES") or "").split(","):
         if "=" in pair:
             k, v = pair.split("=", 1); titles[k.strip().upper()] = v.strip().upper()
     return [{"code": c, "title": titles[c], "hint": SECTION_HINTS[c], "enabled": c in enabled or c in ("S1", "S2", "S3")} for c in ("S1", "S2", "S3", "S4", "S6")]

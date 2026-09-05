@@ -7,11 +7,14 @@ import uuid
 from datetime import timedelta, datetime, timezone
 from typing import Literal, Any, Dict, List, Optional, Tuple
 
+from pydantic import BaseModel, Field
 from fastapi import Request, APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shared.ledger import AsyncDatabaseEventLedger
+from shared import settings as toc_settings
+from shared.settings import SettingRow  # noqa: F401 — registered on Base before create_all
 from shared.database import async_session_factory, create_engine, init_db
 from . import db_models  # noqa: F401 — registers tables on Base.metadata
 from .comms import Dispatcher, public_url
@@ -194,6 +197,44 @@ async def assessments(session: AsyncSession = Depends(get_session)):
 async def ops_log(limit: int = 50, session: AsyncSession = Depends(get_session)):
     """The battle log — every write to the COP, hash-chained per subject."""
     return (await build_snapshot(session, log_limit=limit))["log"]
+
+
+# ---------------------------------------------------------------- Settings (§11.3): keys and options entered from the wall, write-only
+
+SETTINGS_OWNERS = {"battle_captain"}
+
+
+class SettingValue(BaseModel):
+    value: str = Field(min_length=1, max_length=4000)
+
+
+@router.get("/settings")
+async def list_settings(x_toc_role: Optional[str] = Header(None)):
+    """What is set and where (env or stored), never a secret's value."""
+    require_role(x_toc_role, SETTINGS_OWNERS, "Reading settings")
+    return {"settings": toc_settings.status(), "note": "Environment variables take precedence over stored values. Stored values are encrypted with TOC_SECRET and never returned."}
+
+
+@router.put("/settings/{name}")
+async def put_setting(name: str, body: SettingValue, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, SETTINGS_OWNERS, "Changing settings")
+    if name not in toc_settings.KNOWN_BY_NAME:
+        raise HTTPException(404, "unknown setting")
+    await toc_settings.store(session, name, body.value.strip(), actor_from(x_toc_actor))
+    await get_ledger().append_event(content_id=f"setting:{name}", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state="set", reason=f"{toc_settings.KNOWN_BY_NAME[name]['label']} set", metadata={"name": name})
+    return next(s for s in toc_settings.status() if s["name"] == name)
+
+
+@router.delete("/settings/{name}")
+async def delete_setting(name: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, SETTINGS_OWNERS, "Changing settings")
+    if name not in toc_settings.KNOWN_BY_NAME:
+        raise HTTPException(404, "unknown setting")
+    await toc_settings.clear(session, name)
+    await get_ledger().append_event(content_id=f"setting:{name}", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state="cleared", reason=f"{toc_settings.KNOWN_BY_NAME[name]['label']} cleared", metadata={"name": name})
+    return next(s for s in toc_settings.status() if s["name"] == name)
 
 
 # ---------------------------------------------------------------- S4 Logistics and S6 Signal (§7, §8): the background sections, by exception

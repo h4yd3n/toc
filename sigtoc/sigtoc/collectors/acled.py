@@ -1,6 +1,8 @@
 """ACLED — Armed Conflict Location & Event Data. Free key + registered email. Source reliability B. Point events.
 Parser follows the documented `acled/read` response; not exercised live here without a key."""
 import os
+
+from shared import settings
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Sequence, Tuple
 
@@ -12,7 +14,7 @@ KIND = {"Protests": "civil_unrest", "Riots": "civil_unrest", "Battles": "conflic
 
 
 def configured() -> bool:
-    return bool(os.environ.get("ACLED_API_KEY") and os.environ.get("ACLED_EMAIL"))
+    return bool(settings.get("ACLED_API_KEY") and settings.get("ACLED_EMAIL"))
 
 
 def _sev(fatalities: int, etype: str) -> str:
@@ -41,5 +43,5 @@ def parse_acled(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 async def collect_acled(points: Sequence[Tuple[float, float]], countries: Dict[str, Any], max_km: float = 100.0, days: int = 30) -> List[Dict[str, Any]]:
     if not configured(): raise RuntimeError("ACLED needs ACLED_API_KEY and ACLED_EMAIL")
     since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
-    r = await fetch(API_URL, params={"key": os.environ["ACLED_API_KEY"], "email": os.environ["ACLED_EMAIL"], "event_date": since, "event_date_where": ">", "limit": 2000}, name="ACLED", timeout=60)
+    r = await fetch(API_URL, params={"key": settings.get("ACLED_API_KEY"), "email": settings.get("ACLED_EMAIL"), "event_date": since, "event_date_where": ">", "limit": 2000}, name="ACLED", timeout=60)
     return [it for it in parse_acled(r.json()) if near(it, points, max_km)]

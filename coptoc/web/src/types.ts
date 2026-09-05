@@ -175,3 +175,6 @@ export interface PlanWeek { week: string; events: (Pick<CopEvent, 'id' | 'name' 
 export interface Planning { from: string; to: string; weeks: PlanWeek[]; security: { id: string; name: string; team_name: string; home_location_id: string; on_shift: boolean; commitments: { event_id: string; event: string; week: string; role: string }[] }[]
   gaps: { event_id: string; name: string; week: string; gap: number; required: number }[]; summary: { events: number; trips: number; events_with_gaps: number; security_available: number } }
 export interface ImportResult { kind: string; source: string; created?: number; updated?: number; skipped?: number; applied?: number; trips_generated?: number; errors: string[] }
+
+export interface SettingInfo { name: string; label: string; group: 'sources' | 'drafter' | 'comms' | 'sections'; secret: boolean; needed_by: string[]; help: string
+  set_in: 'env' | 'stored' | null; value: string | null; hint: string | null; set_by?: string; set_at?: string | null; error?: string }

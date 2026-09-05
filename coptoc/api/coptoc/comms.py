@@ -3,6 +3,8 @@
 Each channel is real when its credentials are configured and *simulated* otherwise. Simulated delivery is
 recorded as such and shown as such — the wall never claims a message went out when it didn't."""
 import os
+
+from shared import settings
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -18,7 +20,7 @@ class Delivery:
 
 
 def public_url() -> str:
-    return os.environ.get("TOC_PUBLIC_URL", "http://localhost:5173").rstrip("/")
+    return (settings.get("TOC_PUBLIC_URL") or "http://localhost:5173").rstrip("/")
 
 
 def checkin_message(person_name: str, incident_title: str, link: str) -> str:
@@ -31,9 +33,9 @@ class SMSChannel:
     name = "sms"
 
     def __init__(self) -> None:
-        self.sid = os.environ.get("TWILIO_ACCOUNT_SID")
-        self.token = os.environ.get("TWILIO_AUTH_TOKEN")
-        self.sender = os.environ.get("TWILIO_FROM")
+        self.sid = settings.get("TWILIO_ACCOUNT_SID")
+        self.token = settings.get("TWILIO_AUTH_TOKEN")
+        self.sender = settings.get("TWILIO_FROM")
 
     @property
     def configured(self) -> bool:
@@ -61,7 +63,7 @@ class ChatChannel:
     name = "chat"
 
     def __init__(self) -> None:
-        self.webhook = os.environ.get("SLACK_WEBHOOK_URL")
+        self.webhook = settings.get("SLACK_WEBHOOK_URL")
 
     @property
     def configured(self) -> bool:

@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.20
+**Version:** 3.21
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -471,6 +471,10 @@ The native apps are native for a reason: the map has to be fluid and the animati
 
 `TOC_SECTIONS=S1,S2,S3,S4,S6` (default) lists the staff sections a deployment runs; `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` renames. S1–S3 cannot be switched off — the COP is built on them. The snapshot carries `sections`; the wall shows a rail button per enabled section, and the phones a tab: six for an operations center, four for a commercial desk that only tracks executives.
 
+## 11.3 Settings — keys and options entered from the wall **[BUILT]**
+
+Connecting a data source or a channel is a key, and keys used to live only in the server's environment. Now the wall has a **SETTINGS** button (Battle Captain only) with four groups: *source keys* (ACLED, CLSTR), *comms* (Twilio, Slack, the public URL), *the S2 drafter* (Anthropic key, model), and *staff sections* (§11.2), followed by the SOURCES list (enable, grade, cadence — Decision K). Rules: the environment always wins over the store, so a deployment that sets keys the 12-factor way is unaffected; stored values are encrypted at rest with `TOC_SECRET` and are **write-only** — the API reports set / not set, who and when, the last four characters of a secret, never the value; the ledger records that a key was set, never what it was. Keyless feeds need nothing. **[LATER]** an admin role distinct from the Battle Captain, and per-user permissions once there is an identity layer (README, "Before you deploy").
+
 ## 11.1 Repository Layout
 
 | Folder | Module | Role |
@@ -588,6 +592,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.21** — §11.3 settings: keys and options entered from the wall, write-only, encrypted at rest, environment wins; the sources drawer moved under SETTINGS.
 - **v3.20** — S4 Logistics and S6 Signal reinstated as background sections for a generic operations center: supply lines, shipments, systems with PACE, roll-ups by exception, panels on the wall and tabs on the phones; the section set as configuration. iOS tab bar drawn by the app.
 - **v3.19** — S3 itineraries: optional legs (flight / ground / lodging) on every business trip; the traveler's position follows the current leg; CSV and pasted-confirmation imports; the phone calendar as a continuous day ribbon that unfolds into the month.
 - **v3.18** — the wall's layout decided: rails and slide-out panels over the map only, S3 and the log full width; posture as five levels read as DEFCON 5 → 1 with the levels menu; DISPLAY toggles. The recon-diamond identity.

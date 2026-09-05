@@ -36,6 +36,10 @@ async def _escalation_clock() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await cop_startup()
+    from shared import settings as _settings
+    from .routes import _sessions as _S
+    async with _S() as s:
+        await _settings.load(s)
     clocks = []
     if os.environ.get("TOC_INTSUM_CLOCK", "on") != "off":
         clocks.append(asyncio.create_task(_intsum_clock()))

@@ -5,6 +5,8 @@ needs the Battle Captain or the S2 lead, and every read of a case goes on the le
 timeline, and time wheel are renderings of this graph — the data for all three is served here (§5.11)."""
 import json
 import os
+
+from shared import settings
 import re
 import uuid
 from collections import Counter
@@ -188,8 +190,8 @@ async def model_extract(report: ReportRow) -> Optional[Dict[str, List[Dict[str, 
     except ImportError:
         return None
     try:
-        client = AsyncAnthropic()
-        resp = await client.messages.create(model=os.environ.get("TOC_MODEL", "claude-opus-5"), max_tokens=2048, system=SYSTEM,
+        client = AsyncAnthropic(api_key=settings.get("ANTHROPIC_API_KEY"))
+        resp = await client.messages.create(model=settings.get("TOC_MODEL") or "claude-opus-5", max_tokens=2048, system=SYSTEM,
                                             messages=[{"role": "user", "content": report.text}])
         if resp.stop_reason == "refusal":
             return None
@@ -207,7 +209,7 @@ async def model_extract(report: ReportRow) -> Optional[Dict[str, List[Dict[str, 
 
 
 def use_model() -> bool:
-    return os.environ.get("TOC_DRAFTER", "").lower() == "ai" or bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return os.environ.get("TOC_DRAFTER", "").lower() == "ai" or bool(settings.get("ANTHROPIC_API_KEY"))
 
 
 # ---------------------------------------------------------------- filing into a case

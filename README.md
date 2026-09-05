@@ -130,6 +130,7 @@ This is a prototype built to be read and run locally. It has **no authentication
 two request headers (`X-TOC-Role`, `X-TOC-Actor`), which is what lets one screen switch identities for a demo. The
 API allows any CORS origin. Cleartext HTTP is allowed only for the dev hosts the phones use. The check-in and roll-call
 links are HMAC tokens signed with `TOC_SECRET`, which defaults to a dev value. Twilio, Slack, ACLED, CLSTR, and the
-S2 drafter's model are all off until their keys are in the environment, and everything they would have done is
-recorded as *simulated* — never as sent. Put an identity layer, TLS, and a real database in front of it before any
+S2 drafter's model are all off until their keys are set — in the environment, or from the wall's **SETTINGS** panel
+(Battle Captain), where they are stored encrypted with `TOC_SECRET` and never shown again — and everything they would
+have done is recorded as *simulated*, never as sent. Change `TOC_SECRET` before entering any real key. Put an identity layer, TLS, and a real database in front of it before any
 of this touches real people.
