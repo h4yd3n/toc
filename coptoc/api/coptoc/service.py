@@ -58,13 +58,15 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
     return 2 * R * math.asin(math.sqrt(a))
 
 # ---- where the wall opens (§3.1) --------------------------------------------------------------------------------
-# A map board in a TOC is cut to the area of operations and it does not move because someone walked up to it. The
-# board is the AO if the Battle Captain declared one (TOC_AO = "lat,lon" or "lat,lon,radius_km"); otherwise it is the
-# box that holds our own sites. Restricted sites never move the frame, so every station opens on the same board
-# whether or not the viewer is cleared for the residence layer. No sites and no AO means we genuinely know nothing
-# yet, and the clients hold their wide view.
-MIN_VIEW_RADIUS_KM = 25.0   # a single site would otherwise frame to street level
-VIEW_PADDING = 1.25         # leave a margin around the outermost site
+# A map board in a TOC does not move because someone walked up to it, so the board a station is left on is the board
+# it opens on: the clients remember it per device and only ask the server where to look when they have no memory.
+# When they ask, the answer is the AO if the Battle Captain declared one (TOC_AO = "lat,lon" or "lat,lon,radius_km"),
+# otherwise the deployment's home ground — the Bay Area for a company, Baghdad for a unit. Both are opinions about
+# who is likely running this, not measurements: they are here to be overridden by TOC_AO, never to be defended.
+HOME_GROUND = {
+    "corporate": {"center_lat": 37.72, "center_lon": -122.16, "radius_km": 70.0},   # SF, Oakland, San Jose in one frame
+    "military":  {"center_lat": 33.31, "center_lon": 44.36,   "radius_km": 40.0},   # Baghdad
+}
 
 
 def declared_ao() -> Optional[Dict[str, Any]]:
@@ -83,19 +85,9 @@ def declared_ao() -> Optional[Dict[str, Any]]:
     return {"center_lat": lat, "center_lon": lon, "radius_km": radius, "source": "ao"}
 
 
-def default_view(locations: List[LocationRow]) -> Dict[str, Any]:
-    """The opening frame: the declared AO, else the box holding our sites, else nothing."""
-    ao = declared_ao()
-    if ao:
-        return ao
-    pts = [(l.lat, l.lon) for l in locations if l.sensitivity != "restricted"]
-    if not pts:
-        return {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
-    lat = (min(p[0] for p in pts) + max(p[0] for p in pts)) / 2
-    lon = (min(p[1] for p in pts) + max(p[1] for p in pts)) / 2
-    reach = max(haversine_km(lat, lon, a, b) for a, b in pts)
-    return {"center_lat": lat, "center_lon": lon, "radius_km": max(reach * VIEW_PADDING, MIN_VIEW_RADIUS_KM), "source": "force"}
-
+def default_view() -> Dict[str, Any]:
+    """Where a station with no memory of its own should look: the declared AO, else this profile's home ground."""
+    return declared_ao() or {**HOME_GROUND.get(toc_profile(), HOME_GROUND["corporate"]), "source": "profile"}
 
 def trip_status(t: TripRow, now: datetime) -> str:
     if t.return_at <= now:
@@ -441,7 +433,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     return {
-        "profile": toc_profile(), "sections": sections_config(), "view": default_view(locations), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
+        "profile": toc_profile(), "sections": sections_config(), "view": default_view(), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,

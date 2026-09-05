@@ -41,7 +41,23 @@ private fun hex(c: androidx.compose.ui.graphics.Color) = String.format("#%06X", 
 private object Board {
     var position: CameraPosition? = null
     var framed = false
-    val world: CameraPosition = CameraPosition.Builder().target(LatLng(32.0, -30.0)).zoom(0.9).build()
+    /// Where a phone that remembers nothing and cannot reach the API opens: the Bay Area.
+    val bayArea: CameraPosition = CameraPosition.Builder().target(LatLng(37.72, -122.16)).zoom(8.0).build()
+
+    private const val PREFS = "toc.map"
+    fun load(ctx: android.content.Context) {
+        if (position != null) return
+        val p = ctx.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        val lat = p.getFloat("lat", Float.NaN); val lon = p.getFloat("lon", Float.NaN); val z = p.getFloat("zoom", Float.NaN)
+        if (lat.isNaN() || lon.isNaN() || z.isNaN()) return
+        position = CameraPosition.Builder().target(LatLng(lat.toDouble(), lon.toDouble())).zoom(z.toDouble()).build()
+        framed = true   // a remembered board is never overridden by the server's default
+    }
+    fun save(ctx: android.content.Context, c: CameraPosition) {
+        val t = c.target ?: return
+        ctx.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+            .putFloat("lat", t.latitude.toFloat()).putFloat("lon", t.longitude.toFloat()).putFloat("zoom", c.zoom.toFloat()).apply()
+    }
 }
 
 /** The map at the center of the wall: sites by posture, travelers, events, threat rings by severity. Tap selects. */
@@ -65,8 +81,9 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
         mapView.onCreate(null)
         mapView.getMapAsync { map ->
             mapHolder[0] = map
-            map.cameraPosition = Board.position ?: Board.world
-            map.addOnCameraIdleListener { Board.position = map.cameraPosition }
+            Board.load(context)
+            map.cameraPosition = Board.position ?: Board.bayArea
+            map.addOnCameraIdleListener { Board.position = map.cameraPosition; Board.save(context, map.cameraPosition) }
             map.uiSettings.isAttributionEnabled = true; map.uiSettings.isLogoEnabled = false
             map.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
                 style.addSource(GeoJsonSource("threats", FeatureCollection.fromFeatures(emptyList())))

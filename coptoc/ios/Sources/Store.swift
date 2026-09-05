@@ -10,11 +10,24 @@ final class COPStore {
     /// §3.1 — the wall has one board. Every section draws on the same ground, so moving between S1 and S2 changes
     /// the overlay and never the view. Held here rather than in MapScreen, whose state a tab switch throws away, and
     /// held as a region rather than a MapCameraPosition: a position the operator panned by hand does not survive
-    /// being handed to a freshly built Map, but a region does.
-    var board: MKCoordinateRegion? = nil
+    /// being handed to a freshly built Map, but a region does. Persisted per device, so the app reopens on the
+    /// board you left it on.
+    var board: MKCoordinateRegion? = COPStore.savedBoard() { didSet { COPStore.saveBoard(board) } }
     /// Bumps once, when the opening frame is applied — the only signal that should ever pull the map somewhere.
     var framedAt = 0
-    private var framed = false
+    private var framed = COPStore.savedBoard() != nil   // a remembered board is never overridden by the server's default
+
+    private static let boardKey = "toc.board"
+    static func savedBoard() -> MKCoordinateRegion? {
+        guard let a = UserDefaults.standard.array(forKey: boardKey) as? [Double], a.count == 4,
+              a[2] > 0, a[3] > 0, abs(a[0]) <= 90, abs(a[1]) <= 180 else { return nil }
+        return MKCoordinateRegion(center: .init(latitude: a[0], longitude: a[1]),
+                                  span: MKCoordinateSpan(latitudeDelta: a[2], longitudeDelta: a[3]))
+    }
+    static func saveBoard(_ r: MKCoordinateRegion?) {
+        guard let r, r.span.latitudeDelta > 0, r.span.latitudeDelta <= 180 else { return }
+        UserDefaults.standard.set([r.center.latitude, r.center.longitude, r.span.latitudeDelta, r.span.longitudeDelta], forKey: boardKey)
+    }
     var requirements: [Requirement] = []
     var intsums: [IntsumHead] = []
     var warnings: [Warning] = []
@@ -73,8 +86,8 @@ final class COPStore {
         catch { self.error = error.localizedDescription }
     }
 
-    /// Frame the AO the Battle Captain declared, or the box that holds our sites. Once — a later refresh must not
-    /// haul the map back while someone is working it.
+    /// Frame where the server says a station with no memory of its own should look. Once, and never on a device
+    /// that already remembers a board — a refresh must not haul the map back while someone is working it.
     private func frameOpening() {
         guard !framed, let v = snapshot?.view, let c = v.coordinate else { return }
         framed = true

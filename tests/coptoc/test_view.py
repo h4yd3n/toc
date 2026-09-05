@@ -1,4 +1,5 @@
-"""§3.1 the opening frame: the wall opens on the declared AO, else on the box that holds our own sites."""
+"""§3.1 the opening frame: a station that remembers a board opens on it; one that does not asks the server, and the
+server answers with the declared AO or this deployment's home ground."""
 import os, tempfile
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp.name}"
@@ -7,7 +8,7 @@ os.environ["TOC_OFFLINE"] = "1"; os.environ["TOC_INTSUM_CLOCK"] = "off"; os.envi
 import pytest
 from fastapi.testclient import TestClient
 from coptoc.app import app
-from coptoc.service import default_view
+from coptoc.service import HOME_GROUND, default_view
 
 
 @pytest.fixture(scope="module")
@@ -17,52 +18,43 @@ def client():
         yield c
 
 
-class FakeSite:
-    def __init__(self, lat, lon, sensitivity="normal"):
-        self.lat, self.lon, self.sensitivity = lat, lon, sensitivity
+def no_ao(monkeypatch):
+    monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: None)
 
 
-def test_no_ao_frames_our_own_sites(client, monkeypatch):
-    """With no AO declared the frame is the force's own footprint — never a point in the ocean."""
-    snap = client.get("/v1/cop/snapshot").json()
-    v = snap["view"]
-    assert v["source"] == "force"
-    sites = [l for l in snap["locations"] if l["sensitivity"] != "restricted"]
-    lats = [l["lat"] for l in sites]; lons = [l["lon"] for l in sites]
-    assert min(lats) <= v["center_lat"] <= max(lats)
-    assert min(lons) <= v["center_lon"] <= max(lons)
-    assert v["radius_km"] >= 25.0
+def test_the_snapshot_carries_a_frame(client):
+    v = client.get("/v1/cop/snapshot").json()["view"]
+    assert v["source"] in {"ao", "profile"}
+    assert v["center_lat"] is not None and v["center_lon"] is not None and v["radius_km"] > 0
+
+
+def test_home_ground_follows_the_profile(monkeypatch):
+    """A unit opens on Baghdad, a company on the Bay Area — opinions about who is running this, overridable by TOC_AO."""
+    no_ao(monkeypatch)
+    monkeypatch.setattr("coptoc.service.toc_profile", lambda: "military")
+    assert default_view() == {**HOME_GROUND["military"], "source": "profile"}
+    monkeypatch.setattr("coptoc.service.toc_profile", lambda: "corporate")
+    assert default_view() == {**HOME_GROUND["corporate"], "source": "profile"}
+
+
+def test_an_unknown_profile_still_gets_a_board(monkeypatch):
+    no_ao(monkeypatch)
+    monkeypatch.setattr("coptoc.service.toc_profile", lambda: "something-else")
+    assert default_view()["source"] == "profile" and default_view()["center_lat"] is not None
 
 
 def test_declared_ao_wins(monkeypatch):
     monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: "36.66,-87.48,150" if name == "TOC_AO" else None)
-    v = default_view([FakeSite(48.86, 2.35)])
-    assert v == {"center_lat": 36.66, "center_lon": -87.48, "radius_km": 150.0, "source": "ao"}
+    assert default_view() == {"center_lat": 36.66, "center_lon": -87.48, "radius_km": 150.0, "source": "ao"}
 
 
-def test_ao_without_a_radius_and_a_junk_ao(monkeypatch):
+def test_an_ao_without_a_radius_gets_one(monkeypatch):
     monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: "36.66,-87.48" if name == "TOC_AO" else None)
-    assert default_view([])["radius_km"] == 250.0
-    monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: "Fort Campbell" if name == "TOC_AO" else None)
-    assert default_view([])["source"] == "none"          # unparseable is not fatal; we just don't know where to look
-    monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: "91,0" if name == "TOC_AO" else None)
-    assert default_view([])["source"] == "none"          # off the globe
+    assert default_view()["radius_km"] == 250.0
 
 
-def test_restricted_sites_never_move_the_board(monkeypatch):
-    """Everyone opens on the same board whether or not they are cleared for the residence layer."""
-    monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: None)
-    sites = [FakeSite(36.6, -87.4), FakeSite(36.7, -87.5)]
-    cleared = default_view(sites + [FakeSite(0.0, 0.0, "restricted")])
-    assert cleared == default_view(sites)
-
-
-def test_a_single_site_is_not_framed_to_street_level(monkeypatch):
-    monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: None)
-    v = default_view([FakeSite(38.9, -77.0)])
-    assert v["center_lat"] == 38.9 and v["radius_km"] == 25.0
-
-
-def test_an_empty_wall_admits_it_knows_nothing(monkeypatch):
-    monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None: None)
-    assert default_view([]) == {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
+def test_a_junk_ao_falls_through_rather_than_failing(monkeypatch):
+    """Unparseable or off the globe is not fatal — we just fall back to home ground."""
+    for junk in ("Fort Campbell", "91,0", "36.66", "0,0,-5"):
+        monkeypatch.setattr("coptoc.service.settings.get", lambda name, default=None, j=junk: j if name == "TOC_AO" else None)
+        assert default_view()["source"] == "profile", junk

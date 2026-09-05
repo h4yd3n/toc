@@ -7,8 +7,20 @@ import { arc, circle } from './geo'
 // Free, keyless vector basemap. Attribution is carried in the style JSON.
 const STYLE = 'https://tiles.openfreemap.org/styles/dark'
 
-// Held only until the first snapshot lands, and kept as the frame for a wall that has no sites and no declared AO.
-const WORLD = { center: [-30, 30] as [number, number], zoom: 1.6 }
+// Where a wall that remembers nothing and cannot reach the API opens: the Bay Area.
+const BAY_AREA = { center: [-122.16, 37.72] as [number, number], zoom: 8 }
+const BOARD_KEY = 'toc.board'
+
+/** The board this browser was left on. A wall that remembers is never pulled somewhere by the server's default. */
+function savedBoard(): { center: [number, number]; zoom: number } | null {
+  try {
+    const raw = localStorage.getItem(BOARD_KEY); if (!raw) return null
+    const b = JSON.parse(raw)
+    if (typeof b?.zoom !== 'number' || !Array.isArray(b.center) || b.center.length !== 2) return null
+    if (Math.abs(b.center[0]) > 180 || Math.abs(b.center[1]) > 90) return null
+    return b
+  } catch { return null }   // private mode, or someone else's key
+}
 
 const SEV_COLOR: Record<string, string> = { low: '#f59e0b', moderate: '#f97316', elevated: '#ef4444', critical: '#dc2626' }
 const TYPE_GLYPH: Record<string, string> = { hq: '◆', office: '■', datacenter: '▣', residence: '⌂', venue: '★', airfield: '✈', cp: '▲', fob: '⬢', farp: '⛽', range: '◎' }
@@ -28,7 +40,7 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
-  const framed = useRef(false)   // the opening frame is applied once per session, never re-applied
+  const framed = useRef(savedBoard() != null)   // applied once, and never over a board this browser remembers
   const propsRef = useRef({ snapshot, layers, onSelect, selection })
   propsRef.current = { snapshot, layers, onSelect, selection }
 
@@ -36,9 +48,10 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   useEffect(() => {
     if (!el.current || map.current) return
     const m = new maplibregl.Map({
-      container: el.current, style: STYLE, center: WORLD.center, zoom: WORLD.zoom,
+      container: el.current, style: STYLE, ...(savedBoard() ?? BAY_AREA),
       attributionControl: false, dragRotate: false, pitchWithRotate: false,
     })
+    m.on('moveend', () => { try { localStorage.setItem(BOARD_KEY, JSON.stringify({ center: m.getCenter().toArray(), zoom: m.getZoom() })) } catch { /* private mode */ } })
     m.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right')
     m.on('load', () => {
@@ -169,8 +182,8 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   }
 
   // ---- the opening frame (§3.1) ----
-  // The board is cut to the AO, or to the box that holds our sites. It is set once: after that the map is the
-  // operator's to move, and a panel opening or a section changing never takes it back.
+  // Only for a browser with no board of its own: the declared AO, else this deployment's home ground. Set once,
+  // after which the map is the operator's to move and nothing takes it back.
   useEffect(() => {
     const m = map.current, v = snapshot?.view
     if (!m || !v || framed.current || v.center_lat == null || v.center_lon == null) return

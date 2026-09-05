@@ -10,9 +10,10 @@ struct MapScreen: View {
     var showsRoutesLayer: Bool { layer == nil ? showRoutes : layer == "S3" }
     var showsTravelers: Bool { layer == nil || layer == "S1" || layer == "S3" }
     var showsEvents: Bool { layer == nil || layer == "S3" }
-    /// Held only until the board is known, and kept for a wall with no sites and no declared AO.
+    /// Where a phone that remembers nothing and cannot reach the API opens: the Bay Area. Replaced on appear by the
+    /// board this device was left on, and on the first snapshot by the server's answer for this deployment.
     @State private var camera: MapCameraPosition = .region(MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 38, longitude: -60), span: MKCoordinateSpan(latitudeDelta: 90, longitudeDelta: 140)))
+        center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000))
     @State private var showThreats = true
     @State private var showRoutes = true
 
