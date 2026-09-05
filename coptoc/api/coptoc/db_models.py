@@ -36,9 +36,14 @@ class TeamRow(Base):
 class PersonRow(Base):
     __tablename__ = "cop_people"
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String)
+    name: Mapped[str] = mapped_column(String)  # the full name as entered; the display name is built per profile (names.py)
     role: Mapped[str] = mapped_column(String)
     team_id: Mapped[str] = mapped_column(ForeignKey("cop_teams.id"), index=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    first_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    middle_initial: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    rank: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # "SSG", "CW3", "CPT", "CIV"
+    grade: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "E6", "W3", "O3", "CIV", "CTR" — the cross-service constant
     is_vip: Mapped[bool] = mapped_column(Boolean, default=False)
     on_shift: Mapped[bool] = mapped_column(Boolean, default=False)
     shift_role: Mapped[Optional[str]] = mapped_column(String, nullable=True)

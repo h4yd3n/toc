@@ -11,7 +11,7 @@ export interface Location {
   threat_ids_in_area: string[]; confirmed_threat_ids: string[]
 }
 export interface Team { id: string; name: string; location_id: string; function: string; is_security: boolean; parent_id: string | null; echelon: 'brigade' | 'battalion' | 'company' | 'team'; short: string | null; equipment: string | null }
-export interface Person { availability: 'on_shift' | 'off_duty' | 'available' | 'unreachable';
+export interface Person { availability: 'on_shift' | 'off_duty' | 'available' | 'unreachable'; full_name?: string; first_name?: string | null; last_name?: string | null; middle_initial?: string | null; rank?: string | null; grade?: string | null; short_name?: string; sort_name?: string;
   id: string; name: string; role: string; team_id: string; team_name: string
   home_location_id: string; location_id: string | null; is_vip: boolean
   on_shift: boolean; shift_role: string | null; status: 'at_post' | 'traveling'

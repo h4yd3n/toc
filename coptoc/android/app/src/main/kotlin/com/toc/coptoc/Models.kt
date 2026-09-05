@@ -14,7 +14,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class Site(val id: String, val name: String, val type: String = "", val lat: Double, val lon: Double, val city: String = "", val country: String = "", val posture: String = "normal",
                               val effectivePosture: String = "normal", val sensitivity: String = "standard", val assigned: Int = 0, val present: Int = 0, val securityOnShift: Int = 0, val vipsPresent: Int = 0,
                               val threatIdsInArea: List<String> = emptyList(), val confirmedThreatIds: List<String> = emptyList())
-@Serializable data class Person(val teamId: String = "", val id: String, val name: String, val role: String = "", val teamName: String = "", val homeLocationId: String = "", val locationId: String? = null, val isVip: Boolean = false,
+@Serializable data class Person(val shortName: String? = null, val rank: String? = null, val grade: String? = null, val lastName: String? = null, val firstName: String? = null, val teamId: String = "", val id: String, val name: String, val role: String = "", val teamName: String = "", val homeLocationId: String = "", val locationId: String? = null, val isVip: Boolean = false,
                                 val onShift: Boolean = false, val status: String = "at_post", val lat: Double = 0.0, val lon: Double = 0.0, val tripId: String? = null, val positionSource: String = "derived",
                                 val checkinAgeH: Double? = null, val checkinStale: Boolean = false, val lastCheckinNote: String? = null, val threatIdsInArea: List<String> = emptyList(),
                                 val phone: String? = null, val email: String? = null, val incidentStatus: String? = null, val availability: String = "available")

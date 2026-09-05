@@ -132,7 +132,7 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
       } else if (c.members.length === 1 && ppl.length === 1) {
         const p = ppl[0].person!
         div.className = `mk mk-person${p.is_vip ? ' vip' : ''}${p.position_source === 'checkin' ? ' checked' : ''}${p.confirmed_threat_ids.length ? ' threatened' : ''}${selected ? ' selected' : ''}`
-        div.innerHTML = `<span class="glyph">●</span><span class="label">${p.name.split(' ')[0]}</span>`
+        div.innerHTML = `<span class="glyph">●</span><span class="label">${p.short_name ?? p.name.split(' ')[0]}</span>`
         div.title = `${p.name} — ${p.role}`
         div.onclick = e => { e.stopPropagation(); onSelect({ type: 'person', id: p.id }) }
       } else if (c.members.length === 1 && evs.length === 1) {

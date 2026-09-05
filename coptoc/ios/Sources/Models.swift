@@ -83,6 +83,7 @@ struct Site: Decodable, Identifiable, Hashable {
 struct Team: Decodable, Identifiable, Hashable { var id: String, name: String, locationId: String, function: String, isSecurity: Bool; var parentId: String?, echelon: String?, short: String?, equipment: String? }
 
 struct Person: Decodable, Identifiable, Hashable {
+    var shortName: String?, rank: String?, grade: String?, lastName: String?, firstName: String?
     var id: String, name: String, role: String, teamId: String, teamName: String
     var homeLocationId: String, locationId: String?, isVip: Bool, onShift: Bool, shiftRole: String?
     var status: String, lat: Double, lon: Double, tripId: String?

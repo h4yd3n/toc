@@ -168,23 +168,23 @@ class Identity:
 
 
 def seed_users(dataset: str) -> List[Dict[str, Any]]:
-    """The prototype's directory: everyone gets the shape of their job; the Battle Captain and the admin see everything."""
+    """The sign-in profiles are the roles themselves (the author's call): one profile per staff role, no invented people.
+    A brigade signs in as its staff sections; a corporate desk as its security roles. The Battle Captain is also the admin."""
     if dataset == "cab":
         return [
-            {"id": "u_bc", "name": "MAJ Dakota Vance", "title": "Battle Captain, Brigade TOC", "preset": "battle_captain", "admin": True},
-            {"id": "u_admin", "name": "CW3 Reese Okafor", "title": "Knowledge Manager (admin)", "preset": "battle_captain", "admin": True},
-            {"id": "u_s4", "name": "MAJ Harper Lindqvist", "title": "Brigade S4", "preset": "logistics", "perms": {"S1": "view", "S2": "view", "S3": "view", "S6": "view"}},
-            {"id": "u_supply", "name": "SSG Jordan Reyes", "title": "Supply Sergeant, A/5 ASB", "preset": "logistics", "team_id": "t_5asb_a"},
-            {"id": "u_s2", "name": "CPT Morgan Nakamura", "title": "S2, 1st Attack", "preset": "analyst", "team_id": "t_1atk_hhc"},
-            {"id": "u_s3", "name": "MAJ Casey Whitfield", "title": "Brigade S3", "preset": "ea", "perms": {"S2": "view", "S4": "view", "S6": "view"}},
-            {"id": "u_s6", "name": "SFC Quinn Haddad", "title": "Signal NCO, C/5 ASB", "preset": "signal", "team_id": "t_5asb_c"},
-            {"id": "u_s1", "name": "CPT Taylor Moreau", "title": "Brigade S1", "preset": "security", "perms": {"S3": "view"}},
+            {"id": "u_battle_captain", "name": "Battle Captain", "title": "the floor", "preset": "battle_captain", "admin": True},
+            {"id": "u_security", "name": "S1 Personnel", "title": "personnel", "preset": "security", "perms": {"S3": "view", "S4": "view"}},
+            {"id": "u_analyst", "name": "S2 Intelligence", "title": "intelligence", "preset": "analyst"},
+            {"id": "u_ea", "name": "S3 Operations", "title": "operations", "preset": "ea", "perms": {"S2": "view", "S4": "view", "S6": "view"}},
+            {"id": "u_logistics", "name": "S4 Logistics", "title": "supply & equipment", "preset": "logistics"},
+            {"id": "u_signal", "name": "S6 Signal", "title": "comms & systems", "preset": "signal"},
+            {"id": "u_admin", "name": "Admin", "title": "the directory", "preset": "battle_captain", "admin": True},
         ]
     return [
-        {"id": "u_bc", "name": "Nora Vale", "title": "Battle Captain, Watch Floor", "preset": "battle_captain", "admin": True},
-        {"id": "u_admin", "name": "Sam Achterberg", "title": "GSOC Manager (admin)", "preset": "battle_captain", "admin": True},
-        {"id": "u_ep", "name": "Dana Whitfield", "title": "Executive Protection Lead", "preset": "ep"},
-        {"id": "u_analyst", "name": "R. Kovac", "title": "S2 Analyst", "preset": "analyst"},
-        {"id": "u_ea", "name": "EA — Office of the CEO", "title": "Executive Assistant", "preset": "ea"},
-        {"id": "u_sec", "name": "Lee Castellano", "title": "Security Lead, SF", "preset": "security"},
+        {"id": "u_battle_captain", "name": "Battle Captain", "title": "the watch floor", "preset": "battle_captain", "admin": True},
+        {"id": "u_ep", "name": "Executive Protection", "title": "the principals", "preset": "ep"},
+        {"id": "u_security", "name": "Security", "title": "sites and coverage", "preset": "security"},
+        {"id": "u_analyst", "name": "S2 Analyst", "title": "intelligence", "preset": "analyst"},
+        {"id": "u_ea", "name": "Executive Assistant", "title": "travel and events", "preset": "ea"},
+        {"id": "u_admin", "name": "Admin", "title": "the directory", "preset": "battle_captain", "admin": True},
     ]

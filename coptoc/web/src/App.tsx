@@ -139,13 +139,13 @@ export default function App() {
           {(s?.unreachable ?? 0) > 0 && <Stat onJump={jump} label="UNREACHABLE" v={s?.unreachable} accent="red" />}
           <Stat onJump={jump} label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat onJump={jump} label="EVENTS" v={s?.upcoming_events} />
         </div>
-        <select className="role" value={userId} onChange={e => { api.signIn(e.target.value); setUserId(e.target.value); load() }} title="Sign in as — a prototype: pick a user, no password (§9)">
-          <option value="">— sign in as —</option>{users.map(u => <option key={u.id} value={u.id}>{u.name}{u.title ? ` · ${u.title}` : ''}</option>)}
+        <select className="role" value={userId} onChange={e => { api.signIn(e.target.value); setUserId(e.target.value); load() }} title="Profile — the role you are signed in as (§9)">
+          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
-        {!userId && <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo role — until someone signs in">
+        {false && <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo role — until someone signs in">
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
         </select>}
-        {(me ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
+        {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -224,7 +224,7 @@ export default function App() {
 
       <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`}>
         <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
-        {(me?.admin ?? true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
+        {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
       <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`}>

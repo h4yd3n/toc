@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .sections import ShipmentRow, SupplyRow, SystemRow
 from . import users as toc_users
+from .names import split_name
 from .users import UserRow
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -73,7 +74,8 @@ def _people():
     rng = random.Random(1907); rows = []; used = set(); n = 0
     for pid, name, role, tid in VIPS:
         ph, em = _contact(rng, name)
-        rows.append(PersonRow(id=pid, name=name, role=role, team_id=tid, is_vip=True, phone=ph, email=em, source="hris:workday"))
+        f, l, mi = split_name(name)
+        rows.append(PersonRow(id=pid, name=name, first_name=f, last_name=l, middle_initial=mi, role=role, team_id=tid, is_vip=True, phone=ph, email=em, source="hris:workday"))
     for tid, tname, _loc, func, is_sec, count in TEAMS:
         if tid == "t_exec":
             continue
@@ -86,14 +88,16 @@ def _people():
             ph, em = _contact(rng, nm)
             if is_sec:
                 on = rng.random() < 0.45
-                rows.append(PersonRow(id=f"p_{n:03d}", name=nm, role=("Security Lead" if i == 0 else "Security Officer"), phone=ph, email=em, source="hris:workday",
+                f, l, mi = split_name(nm)
+                rows.append(PersonRow(id=f"p_{n:03d}", name=nm, first_name=f, last_name=l, middle_initial=mi, role=("Security Lead" if i == 0 else "Security Officer"), phone=ph, email=em, source="hris:workday",
                                       team_id=tid, on_shift=on, shift_role=(rng.choice(SHIFT_ROLES) if on else None)))
             else:
                 role = {"engineering": "Engineer", "sales": "Account Executive", "policy": "Policy Analyst",
                         "operations": "Operations Manager", "infra": "SRE"}.get(func, "Staff")
                 if i == 0:
                     role = f"Head of {tname.split(' — ')[0]}"
-                rows.append(PersonRow(id=f"p_{n:03d}", name=nm, role=role, team_id=tid, phone=ph, email=em, source="hris:workday"))
+                f, l, mi = split_name(nm)
+                rows.append(PersonRow(id=f"p_{n:03d}", name=nm, first_name=f, last_name=l, middle_initial=mi, role=role, team_id=tid, phone=ph, email=em, source="hris:workday"))
     return rows
 
 def _sections(now):

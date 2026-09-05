@@ -92,7 +92,7 @@ struct PersonMarker: View {
         let color = !person.confirmedThreatIds.isEmpty ? Theme.red : person.isVip ? Theme.gold : Theme.blue
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 8, height: 8)
-            Text(person.name.split(separator: " ").first.map(String.init) ?? person.name).font(.system(size: 11, weight: .semibold, design: .monospaced))
+            Text(person.shortName ?? person.name.split(separator: " ").first.map(String.init) ?? person.name).font(.system(size: 11, weight: .semibold, design: .monospaced))
             if person.positionSource == "checkin" { Text("✓").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.green) }
         }
         .padding(.horizontal, 8).padding(.vertical, 4).foregroundStyle(.white)

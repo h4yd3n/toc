@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.db_models import LedgerEventRow
 from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
+from . import names
 from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
@@ -147,6 +148,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     threat_by_id = {t.id: t for t in threats}
 
     counts = {l.id: {"assigned": 0, "present": 0, "security_on_shift": 0, "vips_present": 0} for l in locations}
+    prof = toc_profile()
     people_out: List[Dict[str, Any]] = []
     for p in people:
         team = team_by_id[p.team_id]
@@ -184,7 +186,10 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
                 counts[home.id]["security_on_shift"] += 1
         my_links = confirmed.get(("person", p.id), [])
         people_out.append({
-            "id": p.id, "name": p.name, "role": p.role, "team_id": team.id, "team_name": team.name,
+            "id": p.id, "name": names.display(prof, p.first_name, p.last_name, p.middle_initial, p.rank, p.name), "full_name": p.name,
+            "first_name": p.first_name, "last_name": p.last_name, "middle_initial": p.middle_initial, "rank": p.rank, "grade": p.grade,
+            "short_name": names.short(prof, p.first_name, p.last_name, p.rank, p.name), "sort_name": names.sort_key(p.last_name, p.first_name, p.name),
+            "role": p.role, "team_id": team.id, "team_name": team.name,
             "home_location_id": home.id, "location_id": loc_id, "is_vip": p.is_vip,
             "on_shift": p.on_shift, "shift_role": p.shift_role, "status": status,
             "lat": lat, "lon": lon, "trip_id": trip.id if trip else None,
@@ -214,6 +219,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     teams_out = [{"id": t.id, "name": t.name, "location_id": t.location_id, "function": t.function, "is_security": t.is_security,
                   "parent_id": t.parent_id, "echelon": t.echelon or "company", "short": t.short, "equipment": t.equipment} for t in teams if t.location_id in loc_by_id]
 
+    people_out.sort(key=lambda x: x["sort_name"])  # a roster sorts by last name, in either profile
     person_by_id = {p["id"]: p for p in people_out}
     trips_out = []
     for t in sorted(trips, key=lambda x: x.depart_at):

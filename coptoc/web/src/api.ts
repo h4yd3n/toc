@@ -3,7 +3,7 @@ import type { UploadPreview, ImportResult, Me, UserInfo, SettingInfo, AreaAssess
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
-export const session = { role: 'battle_captain' as Role, actor: '', userId: (() => { try { return localStorage.getItem('toc.user') || '' } catch { return '' } })() }
+export const session = { role: 'battle_captain' as Role, actor: '', userId: (() => { try { return localStorage.getItem('toc.user') || 'u_battle_captain' } catch { return 'u_battle_captain' } })() }
 const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant', logistics: 'S4 Logistics', signal: 'S6 Signal' }
 const actor = () => `${ROLE_LABEL[session.role]} (web)`
 

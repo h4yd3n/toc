@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.25
+**Version:** 3.26
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -163,6 +163,8 @@ change brief is the Battle Captain's product across all sections, once per watch
 is drawn from the same picture the INTSUM summarizes.
 
 ## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
+
+**[BUILT] — names and ranks (2026-09-05).** A person carries last name, first name, middle initial, a rank abbreviation ("SSG", "CW3", "CPT"), and a pay grade — E1–E9, W1–W5, O1–O10, plus CIV and CTR — because the grade is the cross-service constant and services spell the same grade differently. Display follows the profile, the author's call: a military desk reads **LAST, First M. · SSG** — last name first so a roster sorts the way a roster does, the rank after the name; a corporate desk reads First Last. Both sort by last name. Map labels read "SSG Reyes" on a military desk and "Jordan" on a corporate one. Uploads accept a rank or a grade (E-6, e6, SSG all land as SSG / E6) and other services' abbreviations map to the same grade.
 
 **[BUILT] — the task organization (2026-09-04).** A team can have a parent, an echelon (brigade / battalion / company), a short designation ("B/1", "3 AHB"), and an equipment line ("AH-64E ×8"). The S1 panel and the S1 tab lead with the task organization: brigade → battalions → companies, each with present/assigned, how many are away, and a red count for anyone unreachable or under a confirmed threat. Battalions fold and unfold; a company selects its site on the map. A flat set of teams (no parents) shows no tree and the team lists stand as before.
 
@@ -424,7 +426,7 @@ after-action report.
 
 ## 9. Who Uses It
 
-**[BUILT] — users and permissions (2026-09-05).** One app; what you see and what you can change follows your permissions. A user has, per staff section, *edit*, *view*, or nothing, plus two flags: *battle captain* (the floor: watch, roll calls, FLASH release, DEFCON, operations) and *admin* (the directory). Presets name the common shapes — a supply sergeant is S4 edit with S1 and S3 view — and the grid is the truth. Tabs and rails you cannot view do not appear; panels you can view but not edit show no controls; the API enforces it, not just the UI. Sign-in for the prototype is picking a user from a list, no password (the author's call): the client sends `X-TOC-User`, and the server derives the role and the actor the rest of the API already checks, so the ledger names the person. Requests without a user keep working on the role header alone. The admin's grid lives under SETTINGS on the wall; the phones sign in from their SETTINGS menu. The sample directories: for the brigade, a Battle Captain, a knowledge manager (admin), the brigade S1/S3/S4, a battalion S2, a supply sergeant, a signal NCO; for the corporate desk, the equivalents. **[LATER]** a real login in front of it (README, "Before you deploy").
+**[BUILT] — users and permissions (2026-09-05).** One app; what you see and what you can change follows your permissions. A user has, per staff section, *edit*, *view*, or nothing, plus two flags: *battle captain* (the floor: watch, roll calls, FLASH release, DEFCON, operations) and *admin* (the directory). Presets name the common shapes — a supply sergeant is S4 edit with S1 and S3 view — and the grid is the truth. Tabs and rails you cannot view do not appear; panels you can view but not edit show no controls; the API enforces it, not just the UI. Sign-in for the prototype is picking a *profile* from a list — and the profiles are the roles themselves (Battle Captain, S1 Personnel, S2 Intelligence, S3 Operations, S4 Logistics, S6 Signal, Admin; on a corporate desk Executive Protection, Security, S2 Analyst, Executive Assistant), not invented people — the author's call, so the MVP has no fake roster to maintain and a real login later maps each person onto the same grid: the client sends `X-TOC-User`, and the server derives the role and the actor the rest of the API already checks, so the ledger names the person. Requests without a user keep working on the role header alone. The admin's grid lives under SETTINGS on the wall; the phones sign in from their SETTINGS menu. The sample directories: for the brigade, a Battle Captain, a knowledge manager (admin), the brigade S1/S3/S4, a battalion S2, a supply sergeant, a signal NCO; for the corporate desk, the equivalents. **[LATER]** a real login in front of it (README, "Before you deploy").
 
 **Header counters open their section.** On the wall and the phones, PERSONNEL and the S1 counters open S1, THREATS / CONFIRMED / FLASH open S2, TRAVELING / VIP OUT / EVENTS go to S3.
 
@@ -606,6 +608,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.26** — names and ranks (LAST, First M. · RANK on a military desk; pay grades as the constant); sign-in profiles are the roles themselves.
 - **v3.25** — §13 the spreadsheet upload: Excel or CSV, header found under title rows, mapping proposed (model or headers), preview then commit; S1 roster builds the task organization from unit paths. Phone SETTINGS as submenus.
 - **v3.24** — §9 users and permissions: per-section view/edit, Battle Captain and admin flags, sign-in as a user, the admin's grid; header counters open their section; the phone header floats over the picture (clock left, DEFCON centered, gear right; the watch and counters as a card); the phone dock folds on scroll.
 - **v3.23** — the profile: a Military / Corporate menu beside the wordmark that reshapes the sections and reloads the matching sample data; corporate is the product as it was before S4 and S6.

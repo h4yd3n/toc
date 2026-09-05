@@ -12,6 +12,7 @@ from datetime import timedelta
 
 from .db_models import EventAttendeeRow, EventRow, LocationRow, PersonRow, PIRRow, AssessmentRow, TeamRow, ThreatRow, TripLegRow, TripRow
 from .sections import ShipmentRow, SupplyRow, SystemRow
+from .names import GRADE_RANK, split_name
 
 # (id, name, type, lat, lon, city, country, posture, sensitivity)
 LOCATIONS = [
@@ -81,6 +82,26 @@ ROLES = {
 }
 
 
+def _grade_for(role: str, echelon: str, func: str, rng) -> str:
+    """Approximate grades by duty — a generic table, not any real unit's."""
+    r = role.lower()
+    if r == "commander": return "O6" if func == "hq" and echelon == "company" and rng.random() < 0 else ("O5" if "battalion" in r or True else "O5")
+    if r == "command sergeant major": return "E9"
+    if r in ("executive officer",): return "O4"
+    if r in ("s3", "s2", "s1", "s4", "s6"): return rng.choice(["O3", "O4"])
+    if r == "battle captain": return "O3"
+    if r == "company commander": return "O3"
+    if r == "first sergeant": return "E8"
+    if r == "platoon leader": return "O2"
+    if r == "pilot in command": return rng.choice(["W3", "W4"])
+    if r == "pilot": return rng.choice(["W2", "O2", "O1"])
+    if r in ("maintenance officer",): return rng.choice(["W3", "O3"])
+    if "nco" in r or r in ("supply sergeant", "farp team chief", "quality control", "technical inspector", "production control nco"): return rng.choice(["E6", "E7"])
+    if r in ("intelligence analyst", "flight medic", "flight engineer", "crew chief", "loadmaster", "network technician", "satellite systems operator"): return rng.choice(["E4", "E5", "E5"])
+    if r in ("medic", "door gunner", "radio operator", "fuel handler", "ammunition specialist", "motor transport operator", "flight operations", "information systems specialist", "tool room"): return rng.choice(["E3", "E4"])
+    return rng.choice(["E3", "E4", "E4", "E5"])
+
+
 def _people():
     rng = random.Random(1187); rows = []; used = set(); n = 0
     def name():  # 2,400 people from two short lists: a middle initial keeps every name distinct
@@ -95,13 +116,17 @@ def _people():
             if echelon == "company" and func == "hq" and i < 2:  # the battalion or brigade command group sits in its HHC
                 role = "Commander" if i == 0 else "Command Sergeant Major"
                 is_vip = True
+                cmd_grade = ("O6" if parent == "t_cab" else "O5") if i == 0 else "E9"
             else:
                 role = roles[min(i, len(roles) - 1)] if i < len(roles) else rng.choice(roles[3:] or roles)
                 is_vip = False
+            grade = cmd_grade if (echelon == "company" and func == "hq" and i < 2) else _grade_for(role, echelon, func, rng)
+            first, last, mi = split_name(nm)
             phone = f"+1 270 555-{rng.randint(100, 999):03d}{rng.randint(0, 9)}"
             email = f"{nm.split()[0].lower()}.{nm.split()[-1].lower()}@example.mil"
             on = func == "hq" and rng.random() < 0.3
-            rows.append(PersonRow(id=f"p_{n:04d}", name=nm, role=role, team_id=tid, is_vip=is_vip, phone=phone, email=email, source="hris:ipps-a",
+            rows.append(PersonRow(id=f"p_{n:04d}", name=nm, first_name=first, last_name=last, middle_initial=mi, rank=GRADE_RANK[grade], grade=grade,
+                                  role=role, team_id=tid, is_vip=is_vip, phone=phone, email=email, source="hris:ipps-a",
                                   on_shift=on, shift_role=("Battle Captain" if on and i == 8 else ("Watch" if on else None))))
     return rows
 

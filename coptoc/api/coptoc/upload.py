@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared import settings
 from .db_models import EventRow, LocationRow, PersonRow, TeamRow, TripRow
 from .imports import _dt, _people_index
+from .names import GRADE_RANK, parse_rank, split_name
 from .sections import PACE, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, ShipmentRow, SupplyRow, SystemRow
 
 # ---------------------------------------------------------------- what each section's sheet can carry
@@ -32,7 +33,9 @@ TARGETS: Dict[str, Dict[str, Dict[str, Any]]] = {
         "name":  {"label": "Name", "required": True, "syn": ["name", "full name", "soldier", "member", "employee", "person"]},
         "last_name": {"label": "Last name", "syn": ["last name", "last", "surname", "family name", "lname"]},
         "first_name": {"label": "First name", "syn": ["first name", "first", "given name", "fname"]},
-        "rank":  {"label": "Rank / grade", "syn": ["rank", "grade", "pay grade", "rk"]},
+        "rank":  {"label": "Rank", "syn": ["rank", "rk", "abbreviated rank"]},
+        "grade": {"label": "Pay grade (E6, W3, O3, CIV, CTR)", "syn": ["grade", "pay grade", "paygrade", "pg"]},
+        "middle_initial": {"label": "Middle initial", "syn": ["mi", "middle", "middle initial", "middle name"]},
         "unit":  {"label": "Unit (path)", "required": True, "syn": ["unit", "uic", "company", "co", "unit path", "organization", "org", "team", "department", "dept", "section", "assigned unit"]},
         "role":  {"label": "Duty position / MOS", "syn": ["duty", "duty position", "position", "mos", "title", "role", "job", "job title", "aoc"]},
         "phone": {"label": "Phone", "syn": ["phone", "cell", "mobile", "telephone", "phone number", "cell phone"]},
@@ -310,18 +313,29 @@ async def commit(session: AsyncSession, upload_id: str, sheet: str, mapping: Dic
             unit = g(r, "unit")
             if not name or not unit:
                 skipped += 1; errors.append(f"row {i}: needs a name and a unit"); continue
-            rank = g(r, "rank")
-            if rank and not name.upper().startswith(rank.upper()): name = f"{rank} {name}"
+            rank, grade = parse_rank(g(r, "rank") or g(r, "grade"))
+            if g(r, "grade") and not grade:
+                _, grade = parse_rank(g(r, "grade"))
+            if grade and not rank: rank = GRADE_RANK.get(grade)
+            if g(r, "first_name") or g(r, "last_name"):
+                first, last, mi = g(r, "first_name"), g(r, "last_name"), (g(r, "middle_initial") or "")[:1] or None
+            else:
+                first, last, mi = split_name(name)
+            mi = (g(r, "middle_initial") or "")[:1] or mi
+            name = f"{first} {last}".strip() if first else name
             team = await _team_for_unit(session, unit, teams, root_loc)
             p = by_id.get(g(r, "id")) or by_email.get(g(r, "email").lower()) or by_name.get(name.lower())
             if p:
                 p.name, p.team_id, p.role, p.source = name, team.id, g(r, "role") or p.role, src
+                p.first_name, p.last_name, p.middle_initial = first or p.first_name, last or p.last_name, mi or p.middle_initial
+                if rank: p.rank, p.grade = rank, grade
                 if g(r, "phone"): p.phone = g(r, "phone")
                 if g(r, "email"): p.email = g(r, "email")
                 if "is_vip" in col_of: p.is_vip = _bool(g(r, "is_vip"))
                 updated += 1
             else:
-                p = PersonRow(id=g(r, "id") or f"p_up_{uuid.uuid4().hex[:6]}", name=name, role=g(r, "role"), team_id=team.id, is_vip=_bool(g(r, "is_vip")), phone=g(r, "phone") or None, email=g(r, "email") or None, source=src)
+                p = PersonRow(id=g(r, "id") or f"p_up_{uuid.uuid4().hex[:6]}", name=name, first_name=first or None, last_name=last or None, middle_initial=mi, rank=rank, grade=grade,
+                              role=g(r, "role"), team_id=team.id, is_vip=_bool(g(r, "is_vip")), phone=g(r, "phone") or None, email=g(r, "email") or None, source=src)
                 session.add(p); by_id[p.id] = p; by_name[name.lower()] = p
                 if p.email: by_email[p.email.lower()] = p
                 created += 1

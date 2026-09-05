@@ -9,7 +9,7 @@ struct COPClient {
         ?? "http://localhost:8000")!
     var actor = "Battle Captain (iOS)"
     var role = "battle_captain"  // Decision C: only battle_captain / ep may see the restricted layer
-    var userId: String = UserDefaults.standard.string(forKey: "toc.user") ?? ""  // §9: signed in as; the server derives role and actor from it
+    var userId: String = UserDefaults.standard.string(forKey: "toc.user") ?? "u_battle_captain"  // the sign-in profile; the Battle Captain until someone picks another  // §9: signed in as; the server derives role and actor from it
 
     private var decoder: JSONDecoder { let d = JSONDecoder(); d.keyDecodingStrategy = .convertFromSnakeCase; return d }
 
