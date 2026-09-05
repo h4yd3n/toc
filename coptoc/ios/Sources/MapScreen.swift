@@ -10,6 +10,7 @@ struct MapScreen: View {
     var showsRoutesLayer: Bool { layer == nil ? showRoutes : layer == "S3" }
     var showsTravelers: Bool { layer == nil || layer == "S1" || layer == "S3" }
     var showsEvents: Bool { layer == nil || layer == "S3" }
+    /// Held only until the board is known, and kept for a wall with no sites and no declared AO.
     @State private var camera: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 38, longitude: -60), span: MKCoordinateSpan(latitudeDelta: 90, longitudeDelta: 140)))
     @State private var showThreats = true
@@ -63,6 +64,9 @@ struct MapScreen: View {
             }
             .padding(8) }
         }
+        .onAppear { if let r = store.board { camera = .region(r) } }         // this section inherits the board as it stands
+        .onChange(of: store.framedAt) { if let r = store.board { camera = .region(r) } }
+        .onMapCameraChange(frequency: .onEnd) { ctx in store.board = ctx.region }   // wherever it is left is where every section finds it
         .onChange(of: store.selection) { _, sel in fly(to: sel) }
     }
 

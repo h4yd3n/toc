@@ -34,6 +34,7 @@ KNOWN: List[Dict[str, Any]] = [
     {"name": "TOC_PUBLIC_URL",     "label": "Public URL",           "group": "comms",   "secret": False, "needed_by": ["sms", "chat"], "help": "Where check-in links point. Must be reachable from a phone."},
     {"name": "TOC_PROFILE",        "label": "Profile",              "group": "sections", "secret": False, "needed_by": [],       "help": "military (S1–S6, the brigade) or corporate (S1–S3, the executive-protection sample). The wall's menu sets this and reloads the sample data."},
     {"name": "TOC_SECTIONS",       "label": "Staff sections",       "group": "sections", "secret": False, "needed_by": [],       "help": "Comma list. S1,S2,S3 always on; add S4,S6 for an operations center."},
+    {"name": "TOC_AO",             "label": "Area of operations",   "group": "sections", "secret": False, "needed_by": [],       "help": "Where the wall opens: lat,lon or lat,lon,radius_km (e.g. 36.66,-87.48,150). Blank means the wall frames your own sites."},
     {"name": "TOC_SECTION_TITLES", "label": "Section titles",       "group": "sections", "secret": False, "needed_by": [],       "help": "Renames, e.g. S4=SUPPLY,S6=COMMS."},
 ]
 KNOWN_BY_NAME = {k["name"]: k for k in KNOWN}

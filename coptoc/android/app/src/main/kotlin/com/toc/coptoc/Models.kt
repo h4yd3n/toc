@@ -62,7 +62,10 @@ import kotlinx.serialization.Serializable
                                  val requestedBy: String = "", val ageH: Double = 0.0, val ownedBy: String? = null, val open: Boolean = true, val overdue: Boolean = false, val health: String = "green")
 @Serializable data class TaskingCounts(val inbox: Int = 0, val outbox: Int = 0, val overdue: Int = 0)
 @Serializable data class TaskingBoard(val items: List<Tasking> = emptyList(), val open: Int = 0, val overdue: Int = 0, val perSection: Map<String, TaskingCounts> = emptyMap())
-@Serializable data class Snapshot(val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
+/** §3.1 — where the wall opens: the declared AO, else the box holding our sites, else nothing known yet. */
+@Serializable data class MapFrame(val centerLat: Double? = null, val centerLon: Double? = null, val radiusKm: Double? = null, val source: String = "none")
+
+@Serializable data class Snapshot(val view: MapFrame? = null, val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList())

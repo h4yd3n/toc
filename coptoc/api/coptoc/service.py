@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared import settings
 from shared.db_models import LedgerEventRow
 from .watch import current_watch, estimates as section_estimates, get_config, watch_summary
 from . import names
@@ -55,6 +56,46 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
     dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * R * math.asin(math.sqrt(a))
+
+# ---- where the wall opens (§3.1) --------------------------------------------------------------------------------
+# A map board in a TOC is cut to the area of operations and it does not move because someone walked up to it. The
+# board is the AO if the Battle Captain declared one (TOC_AO = "lat,lon" or "lat,lon,radius_km"); otherwise it is the
+# box that holds our own sites. Restricted sites never move the frame, so every station opens on the same board
+# whether or not the viewer is cleared for the residence layer. No sites and no AO means we genuinely know nothing
+# yet, and the clients hold their wide view.
+MIN_VIEW_RADIUS_KM = 25.0   # a single site would otherwise frame to street level
+VIEW_PADDING = 1.25         # leave a margin around the outermost site
+
+
+def declared_ao() -> Optional[Dict[str, Any]]:
+    """TOC_AO as the Battle Captain typed it, or None if unset or unparseable."""
+    raw = (settings.get("TOC_AO") or "").strip()
+    if not raw:
+        return None
+    parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+    try:
+        lat, lon = float(parts[0]), float(parts[1])
+        radius = float(parts[2]) if len(parts) > 2 else 250.0
+    except (IndexError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180 and radius > 0):
+        return None
+    return {"center_lat": lat, "center_lon": lon, "radius_km": radius, "source": "ao"}
+
+
+def default_view(locations: List[LocationRow]) -> Dict[str, Any]:
+    """The opening frame: the declared AO, else the box holding our sites, else nothing."""
+    ao = declared_ao()
+    if ao:
+        return ao
+    pts = [(l.lat, l.lon) for l in locations if l.sensitivity != "restricted"]
+    if not pts:
+        return {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
+    lat = (min(p[0] for p in pts) + max(p[0] for p in pts)) / 2
+    lon = (min(p[1] for p in pts) + max(p[1] for p in pts)) / 2
+    reach = max(haversine_km(lat, lon, a, b) for a, b in pts)
+    return {"center_lat": lat, "center_lon": lon, "radius_km": max(reach * VIEW_PADDING, MIN_VIEW_RADIUS_KM), "source": "force"}
+
 
 def trip_status(t: TripRow, now: datetime) -> str:
     if t.return_at <= now:
@@ -400,7 +441,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     return {
-        "profile": toc_profile(), "sections": sections_config(), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
+        "profile": toc_profile(), "sections": sections_config(), "view": default_view(locations), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,

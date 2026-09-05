@@ -10,6 +10,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import org.maplibre.android.camera.CameraPosition
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
@@ -30,6 +32,17 @@ private fun feature(lon: Double, lat: Double, vararg props: Pair<String, Any?>):
 }
 
 private fun hex(c: androidx.compose.ui.graphics.Color) = String.format("#%06X", 0xFFFFFF and android.graphics.Color.argb((c.alpha * 255).toInt(), (c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt()))
+
+/**
+ * §3.1 — the wall has one board. A section tab builds its own MapView, so the camera is kept here instead: leaving
+ * S1 for S2 changes the overlay and never the view. `framed` makes the opening frame a one-time thing — a refresh
+ * fifteen seconds later must not haul the map back while someone is working it.
+ */
+private object Board {
+    var position: CameraPosition? = null
+    var framed = false
+    val world: CameraPosition = CameraPosition.Builder().target(LatLng(32.0, -30.0)).zoom(0.9).build()
+}
 
 /** The map at the center of the wall: sites by posture, travelers, events, threat rings by severity. Tap selects. */
 @Composable
@@ -52,7 +65,8 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
         mapView.onCreate(null)
         mapView.getMapAsync { map ->
             mapHolder[0] = map
-            map.cameraPosition = CameraPosition.Builder().target(LatLng(32.0, -30.0)).zoom(0.9).build()
+            map.cameraPosition = Board.position ?: Board.world
+            map.addOnCameraIdleListener { Board.position = map.cameraPosition }
             map.uiSettings.isAttributionEnabled = true; map.uiSettings.isLogoEnabled = false
             map.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
                 style.addSource(GeoJsonSource("threats", FeatureCollection.fromFeatures(emptyList())))
@@ -82,8 +96,25 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
         mapView
     }, modifier = modifier, update = {
         latest[0] = snap; latestRestricted[0] = restricted
-        mapHolder[0]?.style?.let { applySnapshot(it, snap, restricted, layer) }
+        mapHolder[0]?.let { map ->
+            frameOpening(map, snap)
+            map.style?.let { applySnapshot(it, snap, restricted, layer) }
+        }
     })
+}
+
+/** Frame the AO the Battle Captain declared, or the box that holds our sites. Once per process. */
+private fun frameOpening(map: MapLibreMap, snap: Snapshot?) {
+    if (Board.framed) return   // once per process — and never mind that the idle listener already saved the world view
+    val v = snap?.view ?: return
+    val lat = v.centerLat ?: return; val lon = v.centerLon ?: return
+    Board.framed = true
+    val r = v.radiusKm ?: 250.0
+    val dLat = r / 111.0
+    val dLon = r / (111.0 * Math.max(Math.cos(Math.toRadians(lat)), 0.01))
+    val bounds = LatLngBounds.from(lat + dLat, lon + dLon, lat - dLat, lon - dLon)
+    map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 48))
+    Board.position = map.cameraPosition
 }
 
 private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean, layer: String? = null) = try {

@@ -1,11 +1,20 @@
 import SwiftUI
 import Foundation
+import MapKit
 import Observation
 
 @Observable
 @MainActor
 final class COPStore {
     var snapshot: Snapshot?
+    /// §3.1 — the wall has one board. Every section draws on the same ground, so moving between S1 and S2 changes
+    /// the overlay and never the view. Held here rather than in MapScreen, whose state a tab switch throws away, and
+    /// held as a region rather than a MapCameraPosition: a position the operator panned by hand does not survive
+    /// being handed to a freshly built Map, but a region does.
+    var board: MKCoordinateRegion? = nil
+    /// Bumps once, when the opening frame is applied — the only signal that should ever pull the map somewhere.
+    var framedAt = 0
+    private var framed = false
     var requirements: [Requirement] = []
     var intsums: [IntsumHead] = []
     var warnings: [Warning] = []
@@ -56,11 +65,22 @@ final class COPStore {
         if users.isEmpty { await loadUsers() }
         do {
             snapshot = try await client.snapshot(restricted: showRestricted); error = nil
+            frameOpening()
             async let r = client.requirements(); async let i = client.intsums(); async let w = client.warnings(); async let c = client.cases()
             requirements = (try? await r) ?? []; intsums = (try? await i) ?? []; warnings = (try? await w) ?? []; cases = (try? await c) ?? []
         }
         catch let e as DecodingError { self.error = "contract drift: \(e)" }  // name the missing key, not just "data is missing"
         catch { self.error = error.localizedDescription }
+    }
+
+    /// Frame the AO the Battle Captain declared, or the box that holds our sites. Once — a later refresh must not
+    /// haul the map back while someone is working it.
+    private func frameOpening() {
+        guard !framed, let v = snapshot?.view, let c = v.coordinate else { return }
+        framed = true
+        let meters = max((v.radiusKm ?? 250) * 2_000, 20_000)   // radius to span, floored so one site is not street level
+        board = MKCoordinateRegion(center: c, latitudinalMeters: meters, longitudinalMeters: meters)
+        framedAt += 1
     }
 
     func act(_ label: String, _ op: @escaping () async throws -> Void) {

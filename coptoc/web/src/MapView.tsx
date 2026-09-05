@@ -7,6 +7,9 @@ import { arc, circle } from './geo'
 // Free, keyless vector basemap. Attribution is carried in the style JSON.
 const STYLE = 'https://tiles.openfreemap.org/styles/dark'
 
+// Held only until the first snapshot lands, and kept as the frame for a wall that has no sites and no declared AO.
+const WORLD = { center: [-30, 30] as [number, number], zoom: 1.6 }
+
 const SEV_COLOR: Record<string, string> = { low: '#f59e0b', moderate: '#f97316', elevated: '#ef4444', critical: '#dc2626' }
 const TYPE_GLYPH: Record<string, string> = { hq: '◆', office: '■', datacenter: '▣', residence: '⌂', venue: '★', airfield: '✈', cp: '▲', fob: '⬢', farp: '⛽', range: '◎' }
 
@@ -25,6 +28,7 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
+  const framed = useRef(false)   // the opening frame is applied once per session, never re-applied
   const propsRef = useRef({ snapshot, layers, onSelect, selection })
   propsRef.current = { snapshot, layers, onSelect, selection }
 
@@ -32,7 +36,7 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
   useEffect(() => {
     if (!el.current || map.current) return
     const m = new maplibregl.Map({
-      container: el.current, style: STYLE, center: [-30, 30], zoom: 1.6,
+      container: el.current, style: STYLE, center: WORLD.center, zoom: WORLD.zoom,
       attributionControl: false, dragRotate: false, pitchWithRotate: false,
     })
     m.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right')
@@ -163,6 +167,19 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
       markers.current.push(new maplibregl.Marker({ element: div, anchor: 'center' }).setLngLat([c.lon, c.lat]).addTo(m))
     }
   }
+
+  // ---- the opening frame (§3.1) ----
+  // The board is cut to the AO, or to the box that holds our sites. It is set once: after that the map is the
+  // operator's to move, and a panel opening or a section changing never takes it back.
+  useEffect(() => {
+    const m = map.current, v = snapshot?.view
+    if (!m || !v || framed.current || v.center_lat == null || v.center_lon == null) return
+    framed.current = true
+    const r = v.radius_km ?? 250
+    const dLat = r / 111, dLon = r / (111 * Math.max(Math.cos((v.center_lat * Math.PI) / 180), 0.01))
+    const fit = () => m.fitBounds([[v.center_lon! - dLon, v.center_lat! - dLat], [v.center_lon! + dLon, v.center_lat! + dLat]], { padding: 48, duration: 0, maxZoom: 12 })
+    if (loaded.current) fit(); else m.once('load', fit)
+  }, [snapshot?.view])
 
   // ---- fly on selection ----
   useEffect(() => {

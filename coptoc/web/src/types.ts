@@ -105,7 +105,9 @@ export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Sh
 export interface SystemLine { id: string; name: string; category: string; location_id: string | null; location_name: string; pace: 'primary' | 'alternate' | 'contingency' | 'emergency' | null
   status: 'up' | 'degraded' | 'down'; health: Health; since: string | null; hours: number; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
-export interface Snapshot { warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board;
+/** Where the wall opens: the declared AO, else the box holding our sites, else nothing known yet. */
+export interface View { center_lat: number | null; center_lon: number | null; radius_km: number | null; source: 'ao' | 'force' | 'none' }
+export interface Snapshot { warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
 }

@@ -45,7 +45,18 @@ struct Tasking: Decodable, Identifiable, Hashable {
 struct TaskingCounts: Decodable, Hashable { var inbox: Int, outbox: Int, overdue: Int }
 struct TaskingBoard: Decodable, Hashable { var items: [Tasking], open: Int, overdue: Int, perSection: [String: TaskingCounts] }
 
+/// §3.1 — where the wall opens: the declared AO, else the box holding our sites, else nothing known yet.
+struct MapFrame: Decodable {
+    var centerLat: Double?, centerLon: Double?, radiusKm: Double?
+    var source: String
+    var coordinate: CLLocationCoordinate2D? {
+        guard let centerLat, let centerLon else { return nil }
+        return .init(latitude: centerLat, longitude: centerLon)
+    }
+}
+
 struct Snapshot: Decodable {
+    var view: MapFrame?
     var taskings: TaskingBoard?
     var me: Me?
     var profile: String?, sections: [SectionCfg]?, s4: S4Board?, s6: S6Board?
