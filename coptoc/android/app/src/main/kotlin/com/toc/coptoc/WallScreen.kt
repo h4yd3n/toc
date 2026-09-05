@@ -1,6 +1,8 @@
 package com.toc.coptoc
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,10 +23,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 val ROLES = listOf("battle_captain", "ep", "security", "analyst", "ea")
 
-/** The wall on a phone or tablet: header strip, map in the middle, S1 left, S2 right, S3 + log below. */
+/** Entry: a phone gets the tabbed layout (map, S1, S2, S3) like iOS; a wide screen (tablet) gets the wall. */
 @Composable
 fun WallScreen(store: Store) {
     val st by store.state.collectAsStateWithLifecycle()
+    if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840) TabletWall(st, store) else PhoneScreen(st, store)
+}
+
+/** The wall on a tablet: header strip, map in the middle, S1 left, S2 right, S3 + log below. */
+@Composable
+fun TabletWall(st: WallState, store: Store) {
     val snap = st.snap
     Column(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding()) {  // stay clear of the cutout and the system bars on a real phone
         Header(st, store)
@@ -250,7 +258,7 @@ fun FlashStrip(st: WallState, store: Store) {
 /** §5.10 #3 — the operation against its subject: tasks by section and S4 asks; tap a task to advance it. */
 @Composable
 fun OperationSheet(op: Operation, st: WallState, store: Store, onClose: () -> Unit) {
-    Column(Modifier.padding(10.dp).width(360.dp).background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.purple.copy(alpha = .5f), RoundedCornerShape(6.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+    Column(Modifier.padding(10.dp).widthIn(max = 420.dp).fillMaxWidth().background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.purple.copy(alpha = .5f), RoundedCornerShape(6.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("S3 OPERATION · ${op.status.uppercase()}" + (op.fromProductId?.let { " · from $it" } ?: ""), color = Palette.dim, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.2.sp); Spacer(Modifier.weight(1f)); Text("×", Modifier.clickable { onClose() }, color = Palette.dim, fontSize = 18.sp) }
         Text(op.title, color = Palette.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold); Text(op.subjectName, color = Palette.dim, fontSize = 11.sp)
         Text("${op.tasksDone}/${op.tasksTotal} tasks", color = Palette.text, fontSize = 11.sp)
@@ -261,5 +269,106 @@ fun OperationSheet(op: Operation, st: WallState, store: Store, onClose: () -> Un
             Chip(t.status.uppercase(), when (t.status) { "done" -> Palette.green; "doing" -> Palette.amber; "blocked" -> Palette.red; else -> Palette.dim }, filled = true); Chip(t.section)
             Text(t.title, color = if (t.status == "done") Palette.dim else Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text(t.owner, color = Palette.dim, fontSize = 9.sp) } }
         if (op.resources.isNotEmpty()) { Label("S4 · RESOURCES"); op.resources.forEach { r -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { Chip(r.status.uppercase(), when (r.status) { "issued" -> Palette.green; "approved" -> Palette.amber; "denied" -> Palette.red; else -> Palette.dim }); Text("${r.qty} × ${r.item}", color = Palette.text, fontSize = 11.sp) } } }
+    }
+}
+
+
+// ---------------------------------------------------------------- the phone: four tabs, like iOS
+
+enum class Tab(val label: String, val glyph: String) { COP("COP", "◇"), S1("PERSONNEL", "S1"), S2("INTEL", "S2"), S3("OPS", "S3") }
+
+@Composable
+fun PhoneScreen(st: WallState, store: Store) {
+    var tab by remember { mutableStateOf(Tab.COP) }
+    val snap = st.snap
+    Column(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding()) {
+        PhoneHeader(st, store)
+        FlashStrip(st, store)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (tab) {
+                Tab.COP -> {
+                    WallMap(snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize())
+                    if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                }
+                Tab.S1 -> Column(Modifier.fillMaxSize().background(Palette.panel)) { S1Panel(st, store) }
+                Tab.S2 -> Column(Modifier.fillMaxSize().background(Palette.panel)) { S2Panel(st, store) }
+                Tab.S3 -> Column(Modifier.fillMaxSize().background(Palette.panel)) { S3Phone(st, store) }
+            }
+            st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+            st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
+            st.busy?.let { Text(it.uppercase() + "…", Modifier.align(Alignment.BottomCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).padding(6.dp), color = Palette.blue2, fontSize = 10.sp, fontFamily = FontFamily.Monospace) }
+            st.error?.let { Text(it, Modifier.align(Alignment.TopCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).border(1.dp, Palette.red, RoundedCornerShape(4.dp)).padding(8.dp).clickable { store.dismissError() }, color = Palette.red, fontSize = 11.sp) }
+        }
+        Row(Modifier.fillMaxWidth().background(Palette.panel).border(0.5.dp, Palette.line), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Tab.values().forEach { t ->
+                val on = t == tab
+                val badge = when (t) { Tab.S1 -> snap?.incidents?.count { it.status == "open" } ?: 0; Tab.S2 -> snap?.summary?.warningsPending ?: 0; else -> 0 }
+                Column(Modifier.weight(1f).clickable { tab = t; store.select(null) }.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box { Text(t.glyph, color = if (on) Palette.blue2 else Palette.dim, fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp) }
+                    Text(t.label, color = if (on) Palette.blue2 else Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PhoneHeader(st: WallState, store: Store) {
+    val s = st.snap?.summary; val w = st.snap?.watch
+    var roleMenu by remember { mutableStateOf(false) }
+    var defconMenu by remember { mutableStateOf(false) }
+    var dispMenu by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Column(Modifier.fillMaxWidth().background(Palette.panel).border(0.5.dp, Palette.line).padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("TOC", color = Palette.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+            s?.let { Box {
+                Text("DEFCON ${it.defcon}", Modifier.clickable { defconMenu = true }.border(2.dp, Palette.posture(it.posture).copy(alpha = .8f), RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 4.dp), color = Palette.posture(it.posture), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+                DropdownMenu(defconMenu, { defconMenu = false }) { it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}", color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) } } } }
+            Spacer(Modifier.weight(1f))
+            Box { Chip("DISPLAY ▾", Palette.dim, onClick = { dispMenu = true })
+                DropdownMenu(dispMenu, { dispMenu = false }) {
+                    DropdownMenuItem({ Text((if (Ui.lean) "✓ " else "   ") + "Lean labels", fontSize = 12.sp) }, { Ui.lean = !Ui.lean; Ui.save(ctx) })
+                    DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) }) } }
+            Box { Chip(st.role.uppercase().replace('_', ' ').take(14), Palette.text, onClick = { roleMenu = true })
+                DropdownMenu(roleMenu, { roleMenu = false }) { ROLES.forEach { r -> DropdownMenuItem({ Text(r, fontSize = 12.sp) }, { store.setRole(r); roleMenu = false }) } } }
+        }
+        w?.let { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("${it.name.uppercase()} WATCH", color = Palette.blue2, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace)
+            Text(it.battleCaptain?.let { bc -> "BC $bc" } ?: "UNASSIGNED", color = Palette.text, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            Spacer(Modifier.weight(1f))
+            Text(if (it.overdue) "OVERDUE ${"%.0f".format(-it.remainingH)}h" else "→ ${it.nextWatch.split(" ").first()} in ${"%.0f".format(it.remainingH)}h", color = if (it.overdue) Palette.red else if (it.inOverlap) Palette.amber else Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            if (it.battleCaptain == null && st.role == "battle_captain") Mini("TAKE", enabled = st.busy == null) { store.act("taking the watch") { takeWatch("Battle Captain (Android)") } } } }
+        s?.let { Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Stat("${it.totalPeople}", "PERSONNEL"); Stat("${it.traveling}", "TRAVELING", Palette.blue2); Stat("${it.vipsTraveling}", "VIP OUT", Palette.amber)
+            Stat("${it.realThreats}", "LIVE THR", Palette.red); Stat("${it.confirmedLinks}", "CONFIRMED", Palette.amber)
+            if (it.flash > 0) Stat("${it.flash}", "FLASH", Palette.red); if (it.unaccounted > 0) Stat("${it.unaccounted}", "UNACCTD", Palette.red)
+            if (!Ui.posture) { Stat("${it.present}", "PRESENT"); Stat("${it.securityOnShift}", "SEC ON", Palette.green); Stat("${it.openPirs}", "PIRS", Palette.amber) } } }
+    }
+}
+
+/** S3 on the phone: events, then trips, as a vertical list; the battle log beneath. */
+@Composable
+fun ColumnScope.S3Phone(st: WallState, store: Store) {
+    val snap = st.snap ?: return
+    Label("S3 · OPERATIONS", "Events · Travel")
+    EstimateLine(snap.estimates.firstOrNull { it.section == "S3" })
+    LazyColumn(Modifier.weight(1f)) {
+        item { Label("EVENTS", "${snap.events.size}") }
+        items(snap.events, key = { it.id }) { e -> Column(Modifier.fillMaxWidth().clickable { store.select(Selection.EventSel(e.id)) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                e.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) }; e.coverage?.let { Chip("COVER ${it.assigned}/${it.required}", if (it.gap > 0) Palette.red else Palette.green) } }
+            Text(e.venueName, color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text("${e.startAt.take(10)} → ${e.endAt.take(10)} · ${e.attendeeCount} attending · ${e.vipCount} VIP", color = Palette.dim, fontSize = 10.sp) } }
+        item { Label("TRAVEL", "${snap.trips.size}") }
+        items(snap.trips, key = { it.id }) { t -> Column(Modifier.fillMaxWidth().clickable { store.select(Selection.PersonSel(t.personId)) }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(t.status.uppercase(), if (t.status == "active") Palette.blue2 else Palette.dim, filled = true); Text((if (t.isVip) "★ " else "") + t.personName, color = Palette.text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); t.operation?.let { Chip("OP ${it.tasksDone}/${it.tasksTotal}", Palette.purple, onClick = { store.openOperation(it.id) }) } }
+            Text("${t.originName.split(" ").first()} → ${t.destName}", color = Palette.text.copy(alpha = .8f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            Text(t.purpose, color = Palette.dim, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+        item { Label("LOG · BATTLE LOG", "hash-chained") }
+        items(snap.log, key = { it.id }) { e -> Row(Modifier.padding(horizontal = 12.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(e.type.removePrefix("cop.").removePrefix("s2.").uppercase().take(14), color = if (e.actorType == "human") Palette.blue2 else Palette.amber, fontSize = 8.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(78.dp))
+            Text(e.summary, color = Palette.text.copy(alpha = .85f), fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
     }
 }

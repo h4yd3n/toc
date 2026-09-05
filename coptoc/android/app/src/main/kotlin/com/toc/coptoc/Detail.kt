@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit) {
     val snap = st.snap ?: return
     val isBC = st.role == "battle_captain"; val busy = st.busy != null
-    Column(Modifier.padding(10.dp).width(340.dp).fillMaxHeight().background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.line, RoundedCornerShape(6.dp)).padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.padding(10.dp).widthIn(max = 420.dp).fillMaxWidth().fillMaxHeight().background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.line, RoundedCornerShape(6.dp)).padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) { Spacer(Modifier.weight(1f)); Text("×", Modifier.clickable { onClose() }, color = Palette.dim, fontSize = 18.sp) }
         when (sel) {
             is Selection.SiteSel -> snap.locations.firstOrNull { it.id == sel.id }?.let { l ->
