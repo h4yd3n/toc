@@ -63,7 +63,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp }: { snap: Snapshot | 
   const ticks: { t: number; label: string; major: boolean }[] = []
   const backH = (t0 - tBack) / HOUR
   const hourEvery = backH <= 4 ? 1 : backH <= 9 ? 2 : backH <= 14 ? 3 : 4
-  for (let h = Math.ceil((tBack - Math.floor(tBack / HOUR) * HOUR) / HOUR), t = Math.ceil(tBack / HOUR) * HOUR; t < t0; t += HOUR, h++) { const hr = new Date(t).getUTCHours(); ticks.push({ t, label: hr % hourEvery === 0 ? hhmm(t) : '', major: hr % (hourEvery * 2) === 0 }) }
+  for (let h = Math.ceil((tBack - Math.floor(tBack / HOUR) * HOUR) / HOUR), t = Math.ceil(tBack / HOUR) * HOUR; t < t0; t += HOUR, h++) { const hr = new Date(t).getUTCHours(); ticks.push({ t, label: backH > 2 && hr % hourEvery === 0 ? hhmm(t) : '', major: hr % (hourEvery * 2) === 0 }) }   // a watch under two hours old has no room for hour labels beside the caption
   for (let h = 6; h <= NEAR_H && t0 + h * HOUR < tFar; h += 6) ticks.push({ t: t0 + h * HOUR, label: h % 12 === 0 ? `+${h}h` : '', major: h % 24 === 0 })
   const labelEvery = days <= 28 ? 2 : days <= 56 ? 7 : 14
   for (let d = 3; d <= days; d += 1) { const t = t0 + d * DAY; ticks.push({ t, label: d % labelEvery === 0 ? new Date(t).toUTCString().slice(5, 11) : '', major: d % 7 === 0 }) }
