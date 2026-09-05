@@ -68,7 +68,7 @@ struct PostureBar: View {
                 Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
                 Spacer()
                 Menu {
-                    Section("Signed in as") {
+                    Menu("Signed in as" + (store.users.first { $0.id == store.client.userId }.map { " · \($0.name)" } ?? "")) {
                         ForEach(store.users) { u in
                             Button { store.signIn(u.id) } label: { Label("\(u.name)\(u.title.map { " · \($0)" } ?? "")", systemImage: store.client.userId == u.id ? "checkmark" : (u.battleCaptain ? "star" : "person")) }
                         }
@@ -76,7 +76,7 @@ struct PostureBar: View {
                     if store.me?.admin ?? (store.client.role == "battle_captain") {
                         // Buttons, not a Picker: a Picker's binding can fire without a tap; these fire only when chosen, and then ask.
                         let current = store.snapshot?.profile ?? "military"
-                        Section("Profile") {
+                        Menu("Profile · \(current.capitalized)") {
                             Button { if current != "military" { pendingProfile = "military" } } label: { Label("Military · S1–S6, the brigade", systemImage: current == "military" ? "checkmark" : "") }
                             Button { if current != "corporate" { pendingProfile = "corporate" } } label: { Label("Corporate · S1–S3", systemImage: current == "corporate" ? "checkmark" : "") }
                         }
@@ -86,7 +86,7 @@ struct PostureBar: View {
                             ForEach(["battle_captain", "ep", "security", "analyst", "ea", "logistics", "signal"], id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) }
                         }
                     }
-                    Section("Display") {
+                    Menu("Display") {
                         Toggle("Lean labels", isOn: Binding(get: { store.leanLabels }, set: { store.leanLabels = $0 }))
                         Toggle("Posture header", isOn: Binding(get: { store.postureHeader }, set: { store.postureHeader = $0 }))
                     }

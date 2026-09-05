@@ -8,7 +8,7 @@ from datetime import timedelta, datetime, timezone
 from typing import Literal, Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
-from fastapi import Request, APIRouter, Depends, Header, HTTPException, Query
+from fastapi import Request, APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -230,6 +230,57 @@ async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_s
     await get_ledger().append_event(content_id="setting:TOC_PROFILE", event_type="cop.settings.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
                                     new_state=body.profile, reason=f"Profile set to {body.profile}; sample data reloaded", metadata={"name": "TOC_PROFILE"})
     return {"profile": body.profile, "dataset": dataset_for(body.profile)}
+
+
+# ---------------------------------------------------------------- §13 the spreadsheet upload: preview → mapping → commit
+
+UPLOAD_SECTIONS = {"S1": ("security", "S1"), "S3": ("ea", "S3"), "S4": ("logistics", "S4"), "S6": ("signal", "S6")}
+
+
+class UploadCommit(BaseModel):
+    upload_id: str
+    sheet: str
+    mapping: Dict[str, Optional[str]]
+    kind: str = "supply"
+    source: Optional[str] = None
+
+
+@router.post("/upload/{section}/preview")
+async def upload_preview(section: str, file: UploadFile = File(...), sheet: Optional[str] = Form(None), header_row: Optional[int] = Form(None),
+                         x_toc_role: Optional[str] = Header(None)):
+    """Read the workbook, find the header, propose the mapping. Lands nothing."""
+    from . import upload as U
+    if section not in UPLOAD_SECTIONS:
+        raise HTTPException(404, "section must be S1, S3, S4, or S6")
+    require_role(x_toc_role, {"battle_captain", UPLOAD_SECTIONS[section][0]}, f"Uploading to {section}", section=section)
+    data = await file.read()
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(413, "file over 25 MB")
+    try:
+        return await U.preview(section, data, file.filename or "upload", sheet, header_row)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except Exception as e:  # a workbook openpyxl cannot read
+        raise HTTPException(422, f"could not read the file: {e.__class__.__name__}")
+
+
+@router.post("/upload/{section}/commit")
+async def upload_commit(section: str, body: UploadCommit, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Land the rows under the approved mapping. Rows that cannot be placed are reported, never guessed."""
+    from . import upload as U
+    if section not in UPLOAD_SECTIONS:
+        raise HTTPException(404, "section must be S1, S3, S4, or S6")
+    require_role(x_toc_role, {"battle_captain", UPLOAD_SECTIONS[section][0]}, f"Uploading to {section}", section=section)
+    try:
+        result = await U.commit(session, body.upload_id, body.sheet, body.mapping, actor_from(x_toc_actor), body.kind, body.source)
+    except KeyError as e:
+        raise HTTPException(410, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await sync_standing_requirements(session)
+    await get_ledger().append_event(content_id=f"upload:{section}", event_type="cop.import", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    reason=f"{section} upload {result['source']}: " + ", ".join(f"{k} {v}" for k, v in result.items() if isinstance(v, int)), metadata=result)
+    return result
 
 
 # ---------------------------------------------------------------- §9 users and permissions

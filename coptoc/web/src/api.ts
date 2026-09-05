@@ -1,4 +1,4 @@
-import type { Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
+import type { UploadPreview, ImportResult, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -101,3 +101,12 @@ export const createUser = (body: Partial<UserInfo>) => req<UserInfo>('POST', '/v
 export const updateUser = (id: string, body: Partial<UserInfo> & { perms?: Record<string, string | null> }) => req<UserInfo>('PATCH', `/v1/cop/users/${id}`, body)
 export const deleteUser = (id: string) => req<{ id: string }>('DELETE', `/v1/cop/users/${id}`)
 export const signIn = (userId: string) => { session.userId = userId; try { localStorage.setItem('toc.user', userId) } catch { /* private mode */ } }
+
+// §13 the spreadsheet upload: preview → mapping → commit
+export const uploadPreview = async (section: string, file: File): Promise<UploadPreview> => {
+  const fd = new FormData(); fd.append('file', file)
+  const r = await fetch(`/v1/cop/upload/${section}/preview`, { method: 'POST', body: fd, headers: { 'X-TOC-Actor': actor(), 'X-TOC-Role': session.role, ...(session.userId ? { 'X-TOC-User': session.userId } : {}) } })
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`)
+  return r.json()
+}
+export const uploadCommit = (section: string, body: { upload_id: string; sheet: string; mapping: Record<string, string | null>; kind?: string }) => req<ImportResult & { section: string; sheet: string }>('POST', `/v1/cop/upload/${section}/commit`, body)

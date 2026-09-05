@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.24
+**Version:** 3.25
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -534,6 +534,8 @@ Connecting a data source or a channel is a key, and keys used to live only in th
 
 ## 13. Data Sources & Integrations
 
+**[BUILT] — the spreadsheet upload (2026-09-05).** Every section takes what its people actually keep: an Excel workbook or a CSV, formatted however it was formatted — the author's requirement, because units keep Excel and keep it inconsistently. The flow is preview → mapping → commit. The app reads the workbook (values, not formulas), finds the header row under whatever title rows sit above it, proposes what each column means — the S2 drafter's model when a key is set, header matching otherwise — and shows a sample with what it cannot place. Nothing lands until a person presses COMMIT; rows that cannot be placed are reported, never guessed. S1 takes a roster (rank, name, a unit path like `B/1-101 ARB` that the importer splits into battalion and company, building the task organization as it goes; new companies hang under existing battalions, new battalions under the brigade). S3 takes a schedule (events, operations, travel; a place must be a known site or carry coordinates; a traveler must be in the directory). S4 takes a LOGSTAT (site or unit, class of supply, item, on hand, authorized) or a shipment list. S6 takes a comms status (site, system, PACE role, status). Upload needs edit on the section. Wall only — a spreadsheet is not a phone task. **[LATER]** the tasking object between sections (S3 schedules a collection asset against S2's plan; S6 confirms comms for an operation).
+
 Every fact on the wall came from somewhere, and the wall says where. Each record carries a `source`
 (provenance) and the model is one-directional: **source system → connector → COP tables → the wall.** The
 COP never writes back to a source system.
@@ -604,6 +606,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.25** — §13 the spreadsheet upload: Excel or CSV, header found under title rows, mapping proposed (model or headers), preview then commit; S1 roster builds the task organization from unit paths. Phone SETTINGS as submenus.
 - **v3.24** — §9 users and permissions: per-section view/edit, Battle Captain and admin flags, sign-in as a user, the admin's grid; header counters open their section; the phone header floats over the picture (clock left, DEFCON centered, gear right; the watch and counters as a card); the phone dock folds on scroll.
 - **v3.23** — the profile: a Military / Corporate menu beside the wordmark that reshapes the sections and reloads the matching sample data; corporate is the product as it was before S4 and S6.
 - **v3.22** — the sample force is a Combat Aviation Brigade: task organization on S1 (brigade → battalions → companies) on all three clients; S4 and S6 seeded the way a brigade keeps them (classes of supply, aircraft readiness, PACE per command post). No corporate/military fork.

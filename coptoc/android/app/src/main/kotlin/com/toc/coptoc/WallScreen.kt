@@ -414,19 +414,25 @@ fun PhoneHeader(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
                 confirmButton = { TextButton({ store.act("switching to $prof") { setProfile(prof) }; pendingProfile = null }) { Text("SWITCH", color = Palette.blue2) } },
                 dismissButton = { TextButton({ pendingProfile = null }) { Text("CANCEL", color = Palette.dim) } }) }
             Box { Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Palette.dim, modifier = Modifier.size(22.dp).clickable { dispMenu = true })
+                var sub by remember { mutableStateOf<String?>(null) }  // which submenu is open: users | profile | role | display
+                androidx.compose.runtime.LaunchedEffect(dispMenu) { if (dispMenu && st.users.isEmpty()) store.loadUsers() }
+                val meName = st.users.firstOrNull { it.id == st.userId }?.name
                 DropdownMenu(dispMenu, { dispMenu = false }) {
-                    androidx.compose.runtime.LaunchedEffect(dispMenu) { if (dispMenu && st.users.isEmpty()) store.loadUsers() }
-                    st.users.forEach { u -> DropdownMenuItem({ Text((if (st.userId == u.id) "✓ " else "   ") + u.name + (u.title?.let { " · $it" } ?: ""), fontSize = 12.sp) }, { store.signIn(u.id, ctx); dispMenu = false }) }
-                    HorizontalDivider()
-                    if (st.snap?.me?.admin ?: (st.role == "battle_captain")) {
-                        listOf("military" to "Military · S1–S6, the brigade", "corporate" to "Corporate · S1–S3").forEach { (k, label) ->
-                            DropdownMenuItem({ Text((if ((st.snap?.profile ?: "military") == k) "✓ " else "   ") + label, fontSize = 12.sp) }, { dispMenu = false; if ((st.snap?.profile ?: "military") != k) pendingProfile = k }) }
-                        HorizontalDivider()
-                    }
+                    DropdownMenuItem({ Text("Signed in as" + (meName?.let { " · $it" } ?: "") + "  ▸", fontSize = 12.sp) }, { sub = "users"; dispMenu = false })
+                    if (st.snap?.me?.admin ?: (st.role == "battle_captain")) DropdownMenuItem({ Text("Profile · ${(st.snap?.profile ?: "military").replaceFirstChar { it.uppercase() }}  ▸", fontSize = 12.sp) }, { sub = "profile"; dispMenu = false })
+                    if (st.userId.isEmpty()) DropdownMenuItem({ Text("Role · ${st.role.replace('_', ' ')}  ▸", fontSize = 12.sp) }, { sub = "role"; dispMenu = false })
+                    DropdownMenuItem({ Text("Display  ▸", fontSize = 12.sp) }, { sub = "display"; dispMenu = false })
+                }
+                DropdownMenu(sub == "users", { sub = null }) {
+                    st.users.forEach { u -> DropdownMenuItem({ Text((if (st.userId == u.id) "✓ " else "   ") + u.name + (u.title?.let { " · $it" } ?: ""), fontSize = 12.sp) }, { store.signIn(u.id, ctx); sub = null }) } }
+                DropdownMenu(sub == "profile", { sub = null }) {
+                    listOf("military" to "Military · S1–S6, the brigade", "corporate" to "Corporate · S1–S3").forEach { (k, label) ->
+                        DropdownMenuItem({ Text((if ((st.snap?.profile ?: "military") == k) "✓ " else "   ") + label, fontSize = 12.sp) }, { sub = null; if ((st.snap?.profile ?: "military") != k) pendingProfile = k }) } }
+                DropdownMenu(sub == "role", { sub = null }) {
+                    ROLES.forEach { r -> DropdownMenuItem({ Text((if (st.role == r) "✓ " else "   ") + r.replace('_', ' '), fontSize = 12.sp) }, { store.setRole(r); sub = null }) } }
+                DropdownMenu(sub == "display", { sub = null }) {
                     DropdownMenuItem({ Text((if (Ui.lean) "✓ " else "   ") + "Lean labels", fontSize = 12.sp) }, { Ui.lean = !Ui.lean; Ui.save(ctx) })
-                    DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) })
-                    HorizontalDivider()
-                    if (st.userId.isEmpty()) ROLES.forEach { r -> DropdownMenuItem({ Text((if (st.role == r) "✓ " else "   ") + "role: " + r.replace('_', ' '), fontSize = 12.sp) }, { store.setRole(r); dispMenu = false }) } } }
+                    DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) }) } }
         }
         }
         Column(Modifier.padding(horizontal = 10.dp).padding(top = 8.dp, bottom = 6.dp).fillMaxWidth().background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {  // the watch and the counters: a lighter card floating over the picture

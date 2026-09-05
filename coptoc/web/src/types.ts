@@ -182,3 +182,6 @@ export interface SettingInfo { name: string; label: string; group: 'sources' | '
 export type PermLevel = 'view' | 'edit'
 export interface Me { user_id: string | null; name: string; role: string; perms: Partial<Record<'S1' | 'S2' | 'S3' | 'S4' | 'S6', PermLevel>>; battle_captain: boolean; admin: boolean; sections_visible: string[] }
 export interface UserInfo { id: string; name: string; title: string; team_id?: string | null; preset: string; perms?: Record<string, string>; battle_captain: boolean; admin?: boolean; active?: boolean; created_by?: string }
+
+export interface UploadPreview { upload_id: string; section: string; filename: string; sheets: string[]; sheet: string; header_row: number; columns: string[]; rows: number
+  samples: Record<string, string>[]; mapping: Record<string, string | null>; proposed_by: 'model' | 'headers'; kind: 'supply' | 'shipments'; targets: Record<string, string>; issues: string[] }
