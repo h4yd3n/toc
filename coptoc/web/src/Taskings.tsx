@@ -1,6 +1,7 @@
 // §5.10 — taskings: the work moving between sections. Each panel shows what it owes (inbox), what it is waiting on (outbox), and can raise one.
 import { useState } from 'react'
 import * as api from './api'
+import { Question } from './Headline'
 import type { SectionCode, Tasking, TaskingBoard } from './types'
 
 const SEC_TITLE: Record<SectionCode, string> = { S1: 'Personnel', S2: 'Intelligence', S3: 'Operations', S4: 'Logistics', S6: 'Signal' }
@@ -40,8 +41,8 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
       </div>
     </li>)
   return (<>
-    <div className="section-label">TASKINGS <span className="dim">{inbox.filter(t => t.open).length} to do · {outbox.filter(t => t.open).length} waiting</span>
-      <span className="grp"><button className={`chip btn ${showDone ? 'on' : ''}`} onClick={() => setShowDone(v => !v)}>DONE</button>{canEdit && <button className={`chip btn ${raise ? 'on' : ''}`} onClick={() => setRaise(v => !v)}>RAISE</button>}</span></div>
+    <Question q="What we owe, and are waiting on" count={`${inbox.filter(t => t.open).length} to do · ${outbox.filter(t => t.open).length} waiting`}>
+      <span className="grp"><button className={`chip btn ${showDone ? 'on' : ''}`} onClick={() => setShowDone(v => !v)}>DONE</button>{canEdit && <button className={`chip btn ${raise ? 'on' : ''}`} onClick={() => setRaise(v => !v)}>RAISE</button>}</span></Question>
     {raise && <div className="dform">
       <div className="dform-head">RAISE A TASKING <span className="dim">from {section} · what you need, from whom, by when</span></div>
       <div className="row-btns">

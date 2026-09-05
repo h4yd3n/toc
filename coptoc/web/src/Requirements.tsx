@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as api from './api'
+import { Question } from './Headline'
 import type { AreaAssessment, Coverage, Plan, Requirement, Selection, SourceInfo } from './types'
 
 const rel = (iso: string | null) => { if (!iso) return ''; const d = (new Date(iso).getTime() - Date.now()) / 864e5; return d < 0 ? `${Math.round(-d)}d ago` : `in ${Math.round(d)}d` }
@@ -21,11 +22,11 @@ export function RequirementsPanel({ reload, busy, act, onSelect, role, onArea }:
   const pick = (id: string) => setPicked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const flyTo = (r: Requirement) => { if (r.subject_type === 'trip' && r.subject_id) { /* trip → its person is what the wall selects */ } onSelect(r.subject_type === 'location' ? { type: 'location', id: r.subject_id! } : r.subject_type === 'event' ? { type: 'event', id: r.subject_id! } : null) }
   return (<>
-    <div className="section-label">REQUIREMENTS <span className="dim">{reqs.length} active · {cov ? `${cov.avg_coverage_pct}% avg coverage` : ''}</span>
+    <Question q="What we are asking" count={`${reqs.length} requirements${cov ? ` · ${cov.avg_coverage_pct}% covered` : ''}`}>
       <span className="btns">
         {canAssess && picked.size > 0 && <button className="mini ok" disabled={!!busy} onClick={() => act('drafting area assessment', () => api.draftArea([...picked]).then(a => { setPicked(new Set()); onArea(a.id) }))}>ASSESS {picked.size}</button>}
         {canCreate && <button className="mini" onClick={() => setShowForm(v => !v)}>+ DIRECTED</button>}
-        <button className="mini" onClick={() => setShowSources(v => !v)}>SOURCES</button></span></div>
+        <button className="mini" onClick={() => setShowSources(v => !v)}>SOURCES</button></span></Question>
     {showForm && <DirectedForm busy={busy} act={act} onDone={() => setShowForm(false)} />}
     {showSources && <SourcesDrawer busy={busy} act={act} reload={reload} />}
     {cov && cov.gaps.length > 0 && <div className="gaps">

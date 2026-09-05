@@ -9,14 +9,17 @@ import { DistributionBox, OperationPanel } from './Operation'
 import { FlashStrip, WarningsSection } from './Warnings'
 import { ImportDrawer, PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
-import { S4Panel, S6Panel } from './Sections'
+import { S4Headline, S4Panel, S6Headline, S6Panel } from './Sections'
 import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
 import { UploadDrawer } from './Upload'
 import { TaskingBox } from './Taskings'
+import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
+import { ContextRow, RollCallStrip } from './Strips'
+import { CommandBar, buildCommands } from './CommandBar'
 import * as api from './api'
-import type { UserInfo, Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
+import type { UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE' }
 const LOG_LABEL: Record<string, string> = {
@@ -96,10 +99,13 @@ export default function App() {
   const [upload, setUpload] = useState<'S1' | 'S3' | 'S4' | 'S6' | null>(null)
   const [s3Tasks, setS3Tasks] = useState(false)
   const [briefReload, setBriefReload] = useState(0)
+  const [cov, setCov] = useState<Coverage | null>(null)   // §3.2 the S2 headline: collection coverage
+  const [cmd, setCmd] = useState(false)                    // ⌘K
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
-  useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}) }, [briefReload])
+  useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}); api.getCoverage().then(setCov).catch(() => {}) }, [briefReload])
+  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
@@ -117,9 +123,19 @@ export default function App() {
   const toggle = (k: keyof Layers) => setLayers(l => ({ ...l, [k]: !l[k] }))
   const s = snap?.summary
   const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
+  // the wall in a critical state: DEFCON 1, or a critical warning on the floor — the chrome goes red and the primary actions grow
+  const alert = (s?.defcon === 1) || (snap?.warnings.some(w => w.status === 'released' && w.severity === 'critical') ?? false)
+  const inbox = (sec: string) => snap?.taskings?.per_section?.[sec]?.inbox ?? 0
+  const badge = (n: number | undefined, tone: 'red' | 'amber' | 'dim', title: string) => n ? <i className={`badge ${tone}`} title={title}>{n}</i> : null
+  const openPanel2 = (p: 'S1' | 'S2' | 'S3' | 'S4' | 'S6' | 'brief' | 'settings' | 'plan' | 'intsum') => {
+    if (p === 'S1' || p === 'S2' || p === 'S3') jump(p); else if (p === 'S4' || p === 'S6') setRightPanel(p.toLowerCase() as 's4' | 's6'); else if (p === 'settings') setRightPanel('settings')
+    else if (p === 'brief') setShowBrief(true); else if (p === 'plan') setShowPlan(true); else if (p === 'intsum') { setRightPanel('right'); setShowIntsum(true) }
+  }
+  const eventsWithCover = snap?.events.filter(e => e.coverage) ?? []
+  const nextEvent = snap?.events.find(e => e.status === 'upcoming')
 
   return (
-    <div className={`wall ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
@@ -150,6 +166,7 @@ export default function App() {
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
         </select>}
         {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
+        <button className="gear kbd" title="Find anything on the picture (⌘K / Ctrl+K)" onClick={() => setCmd(true)}>⌘K</button>
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -157,21 +174,32 @@ export default function App() {
           <div className="s-row"><span>HEADER</span>{(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}<span className="dim small">POSTURE: one big posture tile, five counters</span></div>
         </div>}
       </header>
-      <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
+      <div className="strips">
+        <ContextRow view={snap?.view} now={now} />
+        <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
+        <RollCallStrip incidents={snap?.incidents ?? []} now={now} role={role} busy={busy} act={act} onSelect={setSel} selected={sel} />
+      </div>
+      {cmd && snap && <CommandBar commands={buildCommands(snap, { select: setSel, open: openPanel2 })} onClose={() => setCmd(false)} />}
 
       <nav className="rail rail-left">
-        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}</button>}
+        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
         {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>}
-        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
-        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
+        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
+        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
+        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
       </nav>
       <aside className={`left ${leftOpen ? 'open' : ''}`}>
         <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>{can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
         {upload === 'S1' && <UploadDrawer section="S1" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
+        {s && <Headline big={s.present.toLocaleString()} label="at post" sub={`of ${s.total_people.toLocaleString()} · ${s.traveling} traveling · ${s.checked_in_fresh} checked in`} pct={(100 * s.present) / Math.max(1, s.total_people)} tone="blue" />}
+        {s && <Tiles items={[
+          { v: s.unaccounted, l: 'UNACCOUNTED', tone: 'red', hide: s.unaccounted === 0, title: 'open roll calls: not yet accounted for' }, { v: s.unreachable, l: 'UNREACHABLE', tone: 'red', hide: s.unreachable === 0 },
+          { v: s.traveling, l: 'TRAVELING', tone: 'blue', onClick: () => jump('S3') }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 }, { v: s.security_on_shift, l: 'SEC ON SHIFT', tone: 'green' },
+          { v: inbox('S1'), l: 'OWED', tone: 'amber', hide: inbox('S1') === 0, title: 'taskings S1 owes' },
+        ]} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         {taskingsFor('S1')}
         <div className="layer-toggles">
@@ -182,7 +210,7 @@ export default function App() {
           <button className={`tog restricted ${layers.residences ? (snap?.restricted_denied ? 'denied' : 'on') : ''}`} onClick={() => toggle('residences')} title={snap?.restricted_denied ? 'Restricted layer — your role is not cleared (Battle Captain / EP only)' : 'Restricted layer — off by default'}>⚿ residences{layers.residences && snap?.restricted_denied ? ' · DENIED' : ''}</button>
         </div>
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
-          <SectionLabel><span className="s6">S6 · ROLL CALLS</span></SectionLabel>
+          <Question q="Who is not accounted for" count={snap.incidents.filter(i => i.status === 'open').length + ' open'} />
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
           <ul className="list">
             {snap.incidents.filter(i => i.status === 'open').map(i => (
@@ -193,7 +221,7 @@ export default function App() {
           </ul>
         </>}
         {snap && <TaskOrg teams={snap.teams} people={snap.people} onSelect={setSel} sel={sel} />}
-        <SectionLabel>LOCATIONS</SectionLabel>
+        <Question q="Where we are" count={snap?.locations.length} />
         <ul className="list">
           {snap?.locations.map(l => (
             <li key={l.id} className={`row ${sel?.type === 'location' && sel.id === l.id ? 'active' : ''}`} onClick={() => setSel({ type: 'location', id: l.id })}>
@@ -201,19 +229,25 @@ export default function App() {
               <span className="name">{l.name}{l.sensitivity === 'restricted' && <span className="lock">⚿</span>}</span>
               {l.confirmed_threat_ids.length > 0 ? <span className="tbadge confirmed" title="confirmed threat link">▲{l.confirmed_threat_ids.length}</span>
                 : l.threat_ids_in_area.length > 0 ? <span className="tbadge" title="threat in area — unconfirmed">△{l.threat_ids_in_area.length}</span> : null}
+              <MiniBar a={l.present} b={l.assigned} tone="blue" />
               <span className="meta">{l.present}<span className="dim">/{l.assigned}</span>{l.security_on_shift ? <span className="sec"> ·{l.security_on_shift}⛨</span> : null}</span>
             </li>))}
         </ul>
-        <SectionLabel>TRAVELING <span className="dim">{travelers.length}</span></SectionLabel>
-        <ul className="list">
-          {travelers.map(p => (
-            <li key={p.id} className={`row ${sel?.type === 'person' && sel.id === p.id ? 'active' : ''}`} onClick={() => setSel({ type: 'person', id: p.id })}>
-              <span className={`dot ${p.confirmed_threat_ids.length ? 'red' : 'blue'}`} />
-              <span className="name">{p.is_vip && <span className="vipstar">★</span>}{p.name}</span>
-              <Presence p={p} />
-              <span className="meta dim">{short(byId.trip.get(p.trip_id ?? '')?.dest_name ?? '')}</span>
-            </li>))}
-        </ul>
+        <Question q="Who is moving" count={travelers.length} />
+        {(() => {  // travelers by destination: the question is where our people are, not the alphabet
+          const groups = new Map<string, Person[]>()
+          for (const p of travelers) { const k = short(byId.trip.get(p.trip_id ?? '')?.dest_name ?? 'en route'); groups.set(k, [...(groups.get(k) ?? []), p]) }
+          return [...groups.entries()].sort((a, b) => b[1].length - a[1].length).map(([dest, ps]) => (<div key={dest} className="group">
+            <div className="group-head"><span className="name">→ {dest}</span><span className="meta">{ps.length}{ps.some(p => p.is_vip) && <span className="vipstar"> ★</span>}</span></div>
+            <ul className="list">{ps.map(p => (
+              <li key={p.id} className={`row ${sel?.type === 'person' && sel.id === p.id ? 'active' : ''}`} onClick={() => setSel({ type: 'person', id: p.id })}>
+                <span className={`dot ${p.confirmed_threat_ids.length ? 'red' : 'blue'}`} />
+                <span className="name">{p.is_vip && <span className="vipstar">★</span>}{p.name}</span>
+                <Presence p={p} />
+                <span className="meta dim">{byId.trip.get(p.trip_id ?? '')?.current_leg?.label || p.role}</span>
+              </li>))}</ul></div>))
+        })()}
+        {travelers.length === 0 && <div className="dim small" style={{ padding: '2px 14px 8px' }}>Nobody is away.</div>}
       </aside>
 
       <main className="center" onClick={() => setShowSettings(false)}>
@@ -237,6 +271,7 @@ export default function App() {
       <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`}>
         <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>{can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}</PanelHead>
         {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+        <S4Headline board={snap?.s4} owed={inbox('S4')} />
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
         {taskingsFor('S4')}
         <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
@@ -244,6 +279,7 @@ export default function App() {
       <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`}>
         <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>{can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}</PanelHead>
         {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+        <S6Headline board={snap?.s6} owed={inbox('S6')} />
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
         {taskingsFor('S6')}
         <S6Panel board={snap?.s6} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s6} toggleMap={() => toggle('s6')} />
@@ -258,12 +294,18 @@ export default function App() {
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
+        {cov && <Headline big={`${cov.avg_coverage_pct}%`} label="collection coverage" sub={`${cov.fully_covered} of ${cov.requirements} requirements fully covered · ${cov.gaps.length} indicator${cov.gaps.length === 1 ? '' : 's'} nobody collects`} pct={cov.avg_coverage_pct} tone={toneFor(cov.avg_coverage_pct, 90, 70)} />}
+        {snap && <SevBlocks threats={snap.threats} />}
+        {s && <Tiles items={[
+          { v: s.warnings_pending, l: 'TO RELEASE', tone: 'red', hide: s.warnings_pending === 0, title: 'warnings awaiting the Battle Captain' }, { v: s.flash, l: 'FLASH LIVE', tone: 'red', hide: s.flash === 0 },
+          { v: s.confirmed_links, l: 'CONFIRMED', tone: s.confirmed_links ? 'red' : 'neutral', title: 'confirmed threat links' }, { v: s.real_threats, l: 'LIVE', title: 'threats from a live source, not the sample' },
+          { v: s.open_pirs, l: 'OPEN PIRs', tone: 'amber' }, { v: snap?.assessments.filter(a => a.status === 'review').length ?? 0, l: 'IN REVIEW', hide: !snap?.assessments.some(a => a.status === 'review') },
+          { v: inbox('S2'), l: 'OWED', tone: 'amber', hide: inbox('S2') === 0, title: 'taskings S2 owes' },
+        ]} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
         {taskingsFor('S2')}
         <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
-        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
-        <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
-        <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>
+        <Question q="What is threatening us" count={`${snap?.threats.length ?? 0} · ${s?.real_threats ?? 0} live`} />
         <ul className="list">
           {snap?.threats.map(t => (
             <li key={t.id} className={`row ${sel?.type === 'threat' && sel.id === t.id ? 'active' : ''}`} onClick={() => setSel({ type: 'threat', id: t.id })}>
@@ -274,7 +316,8 @@ export default function App() {
               <span className="meta dim">{rel(t.observed_at, now)}</span>
             </li>))}
         </ul>
-        <SectionLabel>ASSESSMENTS</SectionLabel>
+        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
+        <Question q="What we assess" count={snap?.assessments.length} />
         <ul className="list cards">
           {snap?.assessments.map(a => (
             <li key={a.id} className={`card ${a.confidence === 'insufficient' ? 'gap' : ''}`}>
@@ -286,7 +329,7 @@ export default function App() {
               <AssessmentActions a={a} busy={busy} act={act} />
             </li>))}
         </ul>
-        <SectionLabel>PIRs <span className="dim">{s?.open_pirs ?? 0} open</span></SectionLabel>
+        <Question q="What we still need to know" count={`${s?.open_pirs ?? 0} open PIRs`} />
         <ul className="list cards">
           {snap?.pirs.map(p => (
             <li key={p.id} className="card pir" onClick={() => p.subject_type && p.subject_id && byId[p.subject_type === 'trip' ? 'trip' : p.subject_type === 'event' ? 'event' : p.subject_type === 'location' ? 'loc' : 'person'].has(p.subject_id) && setSel(p.subject_type === 'trip' ? { type: 'person', id: byId.trip.get(p.subject_id)!.person_id } : { type: p.subject_type as 'event' | 'location' | 'person', id: p.subject_id })}>
@@ -294,11 +337,18 @@ export default function App() {
               <div className="q">{p.question}</div>
             </li>))}
         </ul>
+        <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
       </aside>
 
       <footer className="bottom">
         <div className="s3">
-          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
+          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button>
+            {s && <Tiles inline items={[
+              { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
+              { v: snap?.trips.filter(t => t.status === 'active').length ?? 0, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
+              { v: nextEvent ? `${nextEvent.name.split(' — ')[0]} · ${nextEvent.days_until}d` : '—', l: 'NEXT', hide: !nextEvent, onClick: () => nextEvent && setSel({ type: 'event', id: nextEvent.id }) },
+              { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
+            ]} />}</PanelHead>
           {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
           {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />

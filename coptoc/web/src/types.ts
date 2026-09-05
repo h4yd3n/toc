@@ -7,7 +7,7 @@ export type Confidence = 'low' | 'moderate' | 'high' | 'insufficient'
 export interface Location {
   s4_status?: Health | null; s4_lines?: number; s4_red?: number; s4_amber?: number; s4_inbound?: number; s6_status?: Health | null; s6_systems?: number; s6_down?: number; s6_degraded?: number; s6_in_use?: string | null
   id: string; name: string; type: LocationType; lat: number; lon: number
-  city: string; country: string; posture: Posture; effective_posture: Posture; sensitivity: 'standard' | 'restricted'
+  city: string; country: string; posture: Posture; effective_posture: Posture; defcon?: number; sensitivity: 'standard' | 'restricted'
   assigned: number; present: number; security_on_shift: number; vips_present: number
   threat_ids_in_area: string[]; confirmed_threat_ids: string[]
 }

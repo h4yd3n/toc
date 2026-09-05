@@ -1,9 +1,32 @@
 // §7 S4 Logistics and §8 S6 Signal — the background boards. Mostly green; the wall shows the roll-up, the panel shows the detail.
 import { useState } from 'react'
 import * as api from './api'
+import { Headline, Question, Tiles, toneFor } from './Headline'
 import type { Location, Role, S4Board, S6Board, Shipment, SupplyLine, SystemLine } from './types'
 
 const STATUS_CLASS: Record<string, string> = { green: 'green', amber: 'elevated', red: 'critical' }
+export const healthTone = toneFor
+
+/** §3.2 the S4 headline: how many supply lines are at or above the required level, then the exceptions as tiles. */
+export function S4Headline({ board, owed }: { board: S4Board | undefined; owed: number }) {
+  if (!board) return null
+  const okLines = board.supplies.filter(x => x.status === 'green').length
+  return (<>
+    <Headline big={`${okLines}/${board.supplies.length}`} label="supply lines at or above required" sub={`${board.counts.red} red · ${board.counts.amber} amber · ${board.counts.inbound} inbound${board.counts.late ? ` · ${board.counts.late} late` : ''}`} pct={board.supplies.length ? (100 * okLines) / board.supplies.length : 100} tone={board.status} />
+    <Tiles items={[{ v: board.counts.red, l: 'RED', tone: 'red', hide: board.counts.red === 0 }, { v: board.counts.amber, l: 'AMBER', tone: 'amber', hide: board.counts.amber === 0 }, { v: board.counts.inbound, l: 'INBOUND', tone: 'blue' }, { v: board.counts.late, l: 'LATE', tone: 'red', hide: board.counts.late === 0 }, { v: owed, l: 'OWED', tone: 'amber', hide: owed === 0, title: 'taskings S4 owes' }]} />
+  </>)
+}
+
+/** §3.2 the S6 headline: systems up, then what is down, degraded, or off its primary net. */
+export function S6Headline({ board, owed }: { board: S6Board | undefined; owed: number }) {
+  if (!board) return null
+  const up = board.counts.total - board.counts.down - board.counts.degraded
+  const pace = Object.values(board.pace)
+  return (<>
+    <Headline big={`${up}/${board.counts.total}`} label="systems up" sub={`${board.counts.down} down · ${board.counts.degraded} degraded · ${pace.filter(p => p.in_use === 'primary').length}/${pace.length} sites on PRIMARY`} pct={board.counts.total ? (100 * up) / board.counts.total : 100} tone={board.status} />
+    <Tiles items={[{ v: board.counts.down, l: 'DOWN', tone: 'red', hide: board.counts.down === 0 }, { v: board.counts.degraded, l: 'DEGRADED', tone: 'amber', hide: board.counts.degraded === 0 }, { v: pace.filter(p => !p.in_use).length, l: 'NO NET', tone: 'red', hide: !pace.some(p => !p.in_use) }, { v: pace.filter(p => p.in_use && p.in_use !== 'primary').length, l: 'OFF PRIMARY', tone: 'amber', hide: !pace.some(p => p.in_use && p.in_use !== 'primary') }, { v: owed, l: 'OWED', tone: 'amber', hide: owed === 0, title: 'taskings S6 owes' }]} />
+  </>)
+}
 export const statusChip = (s: string, label?: string) => <span className={`chip ${STATUS_CLASS[s] ?? ''}`}>{(label ?? s).toUpperCase()}</span>
 const S4_ROLES: Role[] = ['battle_captain', 'logistics']
 const S6_ROLES: Role[] = ['battle_captain', 'signal']
@@ -23,11 +46,10 @@ export function S4Panel({ board, role, busy, act, site, onClearSite, onMap, togg
   return (<>
     <div className="s4-summary">
       {statusChip(board.status, `S4 ${board.status}`)}
-      <span className="dim small">{board.counts.red} red · {board.counts.amber} amber · {board.counts.inbound} inbound{board.counts.late > 0 && <> · <b className="bad">{board.counts.late} late</b></>}</span>
       <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}{toggleMap && <button className={`chip btn ${onMap ? 'on' : ''}`} onClick={toggleMap} title="S4 health on every site of the picture">ON MAP</button>}</span>
     </div>
     {site && <div className="site-filter">AT <b>{site.name}</b>{site.s4_status && statusChip(site.s4_status)}<button className="mini" onClick={onClearSite}>ALL SITES</button></div>}
-    <div className="section-label">SUPPLY &amp; EQUIPMENT <span className="dim">{supplies.length}{group === 'exceptions' && ` of ${board.supplies.length}`}</span></div>
+    <Question q={group === 'exceptions' ? 'What is below the line' : 'Every line'} count={`${supplies.length}${group === 'exceptions' ? ` of ${board.supplies.length}` : ''}`} />
     <ul className="list">
       {supplies.length === 0 && <li className="row dim small">All lines at or above required.</li>}
       {supplies.map(x => (
@@ -38,7 +60,7 @@ export function S4Panel({ board, role, busy, act, site, onClearSite, onMap, togg
           <span className="bar small"><span style={{ width: `${Math.min(100, x.pct)}%` }} className={x.status === 'green' ? 'ok' : x.status} /></span>
         </li>))}
     </ul>
-    <div className="section-label">INBOUND <span className="dim">{inbound.length}</span></div>
+    <Question q="What is on its way" count={inbound.length} />
     <ul className="list">
       {inbound.length === 0 && <li className="row dim small">Nothing inbound.</li>}
       {inbound.map(x => <ShipmentRow key={x.id} x={x} canEdit={canEdit} busy={busy} act={act} />)}
@@ -80,11 +102,10 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
   return (<>
     <div className="s4-summary">
       {statusChip(board.status, `S6 ${board.status}`)}
-      <span className="dim small">{board.counts.down} down · {board.counts.degraded} degraded · {board.counts.total} systems</span>
       <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}{toggleMap && <button className={`chip btn ${onMap ? 'on' : ''}`} onClick={toggleMap} title="S6 health on every site of the picture">ON MAP</button>}</span>
     </div>
     {site && <div className="site-filter">AT <b>{site.name}</b>{site.s6_status && statusChip(site.s6_status)}<button className="mini" onClick={onClearSite}>ALL SITES</button></div>}
-    <div className="section-label">PACE · HOW TO REACH EACH SITE</div>
+    <Question q="How to reach each site" count="PACE" />
     <ul className="list pace">
       {paceSites.map(([site, p]) => (
         <li key={site} className="row">
@@ -94,7 +115,7 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
           <span className="meta dim">{p.in_use ? `on ${p.in_use.toUpperCase()}` : 'NO NET'}</span>
         </li>))}
     </ul>
-    <div className="section-label">SYSTEMS <span className="dim">{systems.length}{group === 'exceptions' && ` of ${board.systems.length}`}</span></div>
+    <Question q={group === 'exceptions' ? 'What is down or degraded' : 'Every system'} count={`${systems.length}${group === 'exceptions' ? ` of ${board.systems.length}` : ''}`} />
     <ul className="list">
       {systems.length === 0 && <li className="row dim small">Everything up.</li>}
       {systems.map(x => (
