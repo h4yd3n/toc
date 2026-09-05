@@ -653,3 +653,11 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 
 /* §5.10a what a tasking made, as a chip that opens it */
 .chip.made { color: #c084fc; border-color: rgba(192,132,252,.5); cursor: pointer; } .chip.made:hover { background: rgba(192,132,252,.12); }
+
+/* §3.1 sites: the add/edit form on the S1 rail and in a site's card, and the mark on the CP the TOC runs from */
+.siteform { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; background: var(--panel-2, rgba(255,255,255,.03)); border: 1px solid var(--line-2); border-radius: 3px; margin: 4px 0; }
+.siteform .in { background: #0b0f14; border: 1px solid var(--line-2); color: var(--text); font: inherit; font-size: 11px; padding: 3px 5px; border-radius: 2px; min-width: 0; }
+.siteform .s-row { display: flex; gap: 4px; }
+.siteform .s-row > * { flex: 1; }
+.siteform .bad { color: var(--red, #ef4444); }
+.tocmark { color: var(--blue, #60a5fa); margin-right: 3px; }

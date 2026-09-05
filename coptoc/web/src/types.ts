@@ -1,7 +1,7 @@
 export type Posture = 'normal' | 'guarded' | 'elevated' | 'high' | 'critical'
 export interface DefconLevel { defcon: number; posture: Posture; meaning: string; sites: number }
 export type Severity = 'low' | 'moderate' | 'elevated' | 'critical'
-export type LocationType = 'hq' | 'office' | 'datacenter' | 'residence' | 'venue'
+export type LocationType = 'hq' | 'office' | 'datacenter' | 'residence' | 'venue' | 'airfield' | 'cp' | 'fob' | 'farp' | 'range'
 export type Confidence = 'low' | 'moderate' | 'high' | 'insufficient'
 
 export type Rating = 'green' | 'amber' | 'red' | 'unknown'
@@ -14,7 +14,7 @@ export interface Location {
   area?: AreaCompact | null
   s4_status?: Health | null; s4_lines?: number; s4_red?: number; s4_amber?: number; s4_inbound?: number; s6_status?: Health | null; s6_systems?: number; s6_down?: number; s6_degraded?: number; s6_in_use?: string | null
   id: string; name: string; type: LocationType; lat: number; lon: number
-  city: string; country: string; posture: Posture; effective_posture: Posture; defcon?: number; sensitivity: 'standard' | 'restricted'
+  city: string; country: string; posture: Posture; effective_posture: Posture; defcon?: number; sensitivity: 'standard' | 'restricted'; is_toc: boolean
   assigned: number; present: number; security_on_shift: number; vips_present: number
   threat_ids_in_area: string[]; confirmed_threat_ids: string[]
 }

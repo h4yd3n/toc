@@ -12,12 +12,15 @@ final class COPStore {
     /// held as a region rather than a MapCameraPosition: a position the operator panned by hand does not survive
     /// being handed to a freshly built Map, but a region does. Persisted per device, so the app reopens on the
     /// board you left it on.
-    var board: MKCoordinateRegion? = COPStore.savedBoard() { didSet { COPStore.saveBoard(board) } }
+    /// Persisted only once the board is real — the opening frame applied, or a remembered one restored. Saving
+    /// before that keeps the placeholder we show while the first snapshot is in flight, and the app would open
+    /// there forever. It still follows the map in the meantime, so the sections share one board either way.
+    var board: MKCoordinateRegion? = COPStore.savedBoard() { didSet { if framed { COPStore.saveBoard(board) } } }
     /// Bumps once, when the opening frame is applied — the only signal that should ever pull the map somewhere.
     var framedAt = 0
     private var framed = COPStore.savedBoard() != nil   // a remembered board is never overridden by the server's default
 
-    private static let boardKey = "toc.board"
+    private static let boardKey = "toc.board.2"   // bumped when home station replaced the fixed defaults, so a device remembering the old one starts over
     static func savedBoard() -> MKCoordinateRegion? {
         guard let a = UserDefaults.standard.array(forKey: boardKey) as? [Double], a.count == 4,
               a[2] > 0, a[3] > 0, abs(a[0]) <= 90, abs(a[1]) <= 180 else { return nil }

@@ -62,12 +62,18 @@ def haversine_km(lat1, lon1, lat2, lon2) -> float:
 # A map board in a TOC does not move because someone walked up to it, so the board a station is left on is the board
 # it opens on: the clients remember it per device and only ask the server where to look when they have no memory.
 # When they ask, the answer is the AO if the Battle Captain declared one (TOC_AO = "lat,lon" or "lat,lon,radius_km"),
-# otherwise the deployment's home ground — the Bay Area for a company, Baghdad for a unit. Both are opinions about
-# who is likely running this, not measurements: they are here to be overridden by TOC_AO, never to be defended.
-HOME_GROUND = {
-    "corporate": {"center_lat": 37.72, "center_lon": -122.16, "radius_km": 70.0},   # SF, Oakland, San Jose in one frame
-    "military":  {"center_lat": 33.31, "center_lon": 44.36,   "radius_km": 40.0},   # Baghdad
-}
+# otherwise home station — the site of type "hq". That is the company's headquarters on the corporate profile and the
+# brigade TOC on the military one, read from the data rather than written down here, so a deployment that moves its
+# headquarters moves the board with it. Restricted sites never set the frame, so every station opens on the same
+# board whether or not the viewer is cleared for the residence layer.
+# Two display choices, not measurements. The board opens on the headquarters and widens to take in the subordinate
+# units around it, so a commander sees "that is the TOC, and there are my units" without touching anything. A site
+# beyond REGIONAL_KM is a different problem — a rotation, a deployment, an office on another continent — and it does
+# not get to pull the board out to a view where nothing is legible. Everyone can pan and zoom from there, and the
+# board they leave is the one they come back to.
+HQ_VIEW_RADIUS_KM = 30.0     # the floor: a lone headquarters is framed with its own ground, not its own rooftop
+REGIONAL_KM = 250.0          # "around the headquarters" — roughly a day's move
+VIEW_PADDING = 1.25          # a margin outside the farthest unit we framed
 
 
 def declared_ao() -> Optional[Dict[str, Any]]:
@@ -86,9 +92,28 @@ def declared_ao() -> Optional[Dict[str, Any]]:
     return {"center_lat": lat, "center_lon": lon, "radius_km": radius, "source": "ao"}
 
 
-def default_view() -> Dict[str, Any]:
-    """Where a station with no memory of its own should look: the declared AO, else this profile's home ground."""
-    return declared_ao() or {**HOME_GROUND.get(toc_profile(), HOME_GROUND["corporate"]), "source": "profile"}
+def command_post(locations: List[LocationRow]) -> Optional[LocationRow]:
+    """Where the board is anchored: the CP the TOC is running from if one is flagged, else home station (the site of
+    type "hq"), else whatever site we have. A deployed unit flags its new CP and the board goes with it; home station
+    stays in the list, because it has not stopped being home station."""
+    open_sites = [l for l in locations if l.sensitivity != "restricted"]
+    return (next((l for l in open_sites if l.is_toc), None)
+            or next((l for l in open_sites if l.type == "hq"), None)
+            or (open_sites[0] if open_sites else None))
+
+
+def default_view(locations: List[LocationRow]) -> Dict[str, Any]:
+    """Where a station with no memory of its own should look: the declared AO, else the CP and the units around it."""
+    ao = declared_ao()
+    if ao:
+        return ao
+    hq = command_post(locations)
+    if hq is None:
+        return {"center_lat": None, "center_lon": None, "radius_km": None, "source": "none"}
+    nearby = [haversine_km(hq.lat, hq.lon, l.lat, l.lon) for l in locations if l.sensitivity != "restricted"]
+    reach = max((d for d in nearby if d <= REGIONAL_KM), default=0.0)
+    return {"center_lat": hq.lat, "center_lon": hq.lon,
+            "radius_km": max(reach * VIEW_PADDING, HQ_VIEW_RADIUS_KM), "source": "hq"}
 
 def trip_status(t: TripRow, now: datetime) -> str:
     if t.return_at <= now:
@@ -268,7 +293,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         effective = POSTURES[max(POSTURE_RANK[l.posture], forced)]
         locations_out.append({
             "id": l.id, "name": l.name, "type": l.type, "lat": l.lat, "lon": l.lon, "city": l.city,
-            "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity,
+            "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity, "is_toc": bool(l.is_toc),
             "threat_ids_in_area": in_area, "confirmed_threat_ids": [lk.threat_id for lk in my_links],
             "area": area_for(l.id, l.name),
             **counts[l.id], **site_health(l.id),
@@ -452,7 +477,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     watch_log = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "bucket": LOG_BUCKETS.get(r.event_type, "other"), "actor": r.actor_id, "subject": r.content_id, "summary": r.reason}
                  for r in wl_rows if LOG_BUCKETS.get(r.event_type, "other") != "estimates"]
     return {
-        "profile": toc_profile(), "sections": sections_config(), "view": default_view(), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
+        "profile": toc_profile(), "sections": sections_config(), "view": default_view(locations), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,

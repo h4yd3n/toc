@@ -28,7 +28,7 @@ from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_ac
 from . import areas as toc_areas
 from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -878,6 +878,78 @@ async def set_shift(person_id: str, body: ShiftUpdate, session: AsyncSession = D
                                     old_state=old, new_state="on" if body.on_shift else "off",
                                     reason=f"{p.name} {'on shift as ' + (body.shift_role or 'unassigned') if body.on_shift else 'off shift'}")
     return {"id": p.id, "on_shift": p.on_shift, "shift_role": p.shift_role}
+
+
+# ---------------------------------------------------------------- Sites (§3.1): the ground the wall is drawn on
+
+SITE_OWNERS = {"battle_captain", "security"}   # S3 owns where the force sits; the Battle Captain owns the board
+VALID_SITE_TYPES = {"hq", "office", "datacenter", "residence", "venue", "airfield", "cp", "fob", "farp", "range"}
+
+
+def _check_site(name: str, type_: str, lat: float, lon: float, sensitivity: str) -> None:
+    if not name.strip():
+        raise HTTPException(422, "a site needs a name")
+    if type_ not in VALID_SITE_TYPES:
+        raise HTTPException(422, f"unknown site type {type_!r}; one of {sorted(VALID_SITE_TYPES)}")
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise HTTPException(422, "latitude must be within ±90 and longitude within ±180")
+    if sensitivity not in {"standard", "restricted"}:
+        raise HTTPException(422, "sensitivity is standard or restricted")
+
+
+async def _clear_toc(session: AsyncSession) -> None:
+    """At most one site is the CP the TOC is running from."""
+    for row in (await session.execute(select(LocationRow).where(LocationRow.is_toc == True))).scalars().all():  # noqa: E712
+        row.is_toc = False
+
+
+@router.post("/locations", status_code=201)
+async def create_location(body: LocationCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """A new site. A unit that jumps its TOC adds the CP it jumped to and flags it; home station stays in the list."""
+    require_role(x_toc_role, SITE_OWNERS, "Adding a site", section="S3")
+    _check_site(body.name, body.type, body.lat, body.lon, body.sensitivity)
+    if body.is_toc:
+        await _clear_toc(session)
+    row = LocationRow(id=f"loc_{uuid.uuid4().hex[:8]}", name=body.name.strip(), type=body.type, lat=body.lat, lon=body.lon,
+                      city=body.city.strip(), country=body.country.strip(), posture=body.posture, sensitivity=body.sensitivity, is_toc=body.is_toc)
+    session.add(row); await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.location.created", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state=row.type, reason=f"{row.name} added at {row.lat:.4f}, {row.lon:.4f}")
+    await sync_standing_requirements(session)
+    return {"id": row.id, "status": "created"}
+
+
+@router.patch("/locations/{location_id}")
+async def update_location(location_id: str, body: LocationUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Correct a site, or move one that actually moved. Posture has its own endpoint; the TOC flag has its own too."""
+    require_role(x_toc_role, SITE_OWNERS, "Editing a site", section="S3")
+    row = await one_or_404(session, LocationRow, location_id, "location")
+    fields = body.model_dump(exclude_unset=True)
+    _check_site(fields.get("name", row.name), fields.get("type", row.type),
+                fields.get("lat", row.lat), fields.get("lon", row.lon), fields.get("sensitivity", row.sensitivity))
+    changed = [k for k, v in fields.items() if getattr(row, k) != v]
+    for k, v in fields.items():
+        setattr(row, k, v.strip() if isinstance(v, str) else v)
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.location.updated", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state=",".join(changed) or "no change", reason=f"{row.name} updated: {', '.join(changed) or 'nothing'}")
+    await sync_standing_requirements(session)
+    return {"id": row.id, "status": "updated", "changed": changed}
+
+
+@router.post("/locations/{location_id}/toc")
+async def set_command_post(location_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """The TOC jumped. The board follows the flag; home station stays whatever site is typed "hq"."""
+    require_role(x_toc_role, SITE_OWNERS, "Moving the TOC", section="S3")
+    row = await one_or_404(session, LocationRow, location_id, "location")
+    was = (await session.execute(select(LocationRow).where(LocationRow.is_toc == True))).scalars().first()  # noqa: E712
+    await _clear_toc(session)
+    row.is_toc = True
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.location.toc", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    old_state=was.name if was else None, new_state=row.name,
+                                    reason=f"TOC now at {row.name}" + (f", jumped from {was.name}" if was and was.id != row.id else ""))
+    return {"id": row.id, "is_toc": True}
 
 
 @router.patch("/locations/{location_id}/posture")
