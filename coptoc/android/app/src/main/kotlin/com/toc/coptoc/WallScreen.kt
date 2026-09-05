@@ -14,6 +14,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -669,12 +671,23 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(with(density) { hPx.toDp() })
             .background(Palette.bg.copy(alpha = .96f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))) {
             Column(Modifier.fillMaxWidth()
-                .pointerInput(avail) { detectVerticalDragGestures(onDragEnd = { val target = (avail * rest - drag) / avail; rest = if (target < .32f) .12f else if (target < .75f) .55f else .92f; drag = 0f },
-                    onDragCancel = { drag = 0f }) { _, dy -> drag += dy } }
-                .pointerInput(Unit) { detectTapGestures { rest = if (rest <= .15f) .55f else if (rest < .75f) .92f else .12f } }
-                .padding(top = 8.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                .pointerInput(Unit) {  // own the pointer from the first touch: the map view underneath would otherwise take the gesture once it moves
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false); down.consume()
+                        var acc = 0f; var moved = false
+                        while (true) {
+                            val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!ch.pressed) { ch.consume(); break }
+                            acc += ch.position.y - ch.previousPosition.y; if (kotlin.math.abs(acc) > 8f) moved = true; ch.consume()
+                        }
+                        if (moved) { val target = (avail * rest - acc) / avail; rest = if (target < .32f) .12f else if (target < .75f) .55f else .92f }
+                        else rest = if (rest <= .15f) .55f else if (rest < .75f) .92f else .12f
+                        drag = 0f
+                    }
+                }
+                .padding(top = 10.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(36.dp, 4.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
-                Text(if (rest <= .15f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+                Text(if (rest <= .15f) "$section · tap to open" else if (rest < .75f) "$section · tap for full" else "$section · tap to hide", color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
             }
             content()
         }
