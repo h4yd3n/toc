@@ -702,7 +702,7 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
                 }
                 .padding(top = 10.dp, bottom = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(36.dp, 4.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
-                Text(if (rest <= .15f) "$section · tap to open" else if (rest < .75f) "$section · tap for full" else "$section · tap to hide", color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+                Text(if (rest <= .15f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
             }
             content()
         }
