@@ -41,7 +41,12 @@ struct ContentView: View {
 
 struct PostureBar: View {
     @Environment(COPStore.self) private var store
-    var body: some View {
+    @State private var pendingProfile: String? = nil
+    var body: some View { bar.alert("Switch profile?", isPresented: Binding(get: { pendingProfile != nil }, set: { if !$0 { pendingProfile = nil } })) {
+        Button("Switch", role: .destructive) { if let p = pendingProfile { store.act("switching to \(p)") { try await store.client.setProfile(p) }; pendingProfile = nil } }
+        Button("Cancel", role: .cancel) { pendingProfile = nil }
+    } message: { Text(pendingProfile == "military" ? "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." : "S1–S3 and the executive-protection sample. This reloads the sample data.") } }
+    @ViewBuilder var bar: some View {
         let s = store.snapshot?.summary
         let posture = s?.posture ?? "normal"
         VStack(spacing: 6) {
@@ -63,9 +68,19 @@ struct PostureBar: View {
                 }
                 Spacer()
                 Menu {
-                    Toggle("Lean labels", isOn: Binding(get: { store.leanLabels }, set: { store.leanLabels = $0 }))
-                    Toggle("Posture header", isOn: Binding(get: { store.postureHeader }, set: { store.postureHeader = $0 }))
-                } label: { Text("DISPLAY ▾").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim).padding(.horizontal, 6).padding(.vertical, 4).overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.line, lineWidth: 1)) }
+                    if store.client.role == "battle_captain" {
+                        Picker("Profile", selection: Binding(get: { store.snapshot?.profile ?? "military" }, set: { pendingProfile = $0 })) {
+                            Text("Military · S1–S6, the brigade").tag("military"); Text("Corporate · S1–S3").tag("corporate")
+                        }
+                    }
+                    Picker("Role", selection: Binding(get: { store.client.role }, set: { store.client.role = $0; Task { await store.load() } })) {
+                        ForEach(["battle_captain", "ep", "security", "analyst", "ea", "logistics", "signal"], id: \.self) { Text($0.replacingOccurrences(of: "_", with: " ").capitalized).tag($0) }
+                    }
+                    Section("Display") {
+                        Toggle("Lean labels", isOn: Binding(get: { store.leanLabels }, set: { store.leanLabels = $0 }))
+                        Toggle("Posture header", isOn: Binding(get: { store.postureHeader }, set: { store.postureHeader = $0 }))
+                    }
+                } label: { Text("⚙ SETTINGS ▾").font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim).padding(.horizontal, 6).padding(.vertical, 4).overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.line, lineWidth: 1)) }
                 Text(clock(store.now)).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.dim)
             }
             if let w = store.snapshot?.watch {

@@ -380,8 +380,19 @@ fun PhoneHeader(st: WallState, store: Store) {
                 else Chip("DEFCON ${it.defcon}", Palette.posture(it.posture), onClick = { defconMenu = true })
                 DropdownMenu(defconMenu, { defconMenu = false }) { it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}", color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) } } } }
             Spacer(Modifier.weight(1f))
-            Box { Text("DISPLAY ▾", Modifier.clickable { dispMenu = true }.border(1.dp, Palette.line, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 4.dp), color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+            var pendingProfile by remember { mutableStateOf<String?>(null) }
+            pendingProfile?.let { prof -> AlertDialog(onDismissRequest = { pendingProfile = null }, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
+                title = { Text("Switch to ${prof.uppercase()}?", fontSize = 14.sp) },
+                text = { Text(if (prof == "military") "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." else "S1–S3 and the executive-protection sample. This reloads the sample data.", fontSize = 12.sp) },
+                confirmButton = { TextButton({ store.act("switching to $prof") { setProfile(prof) }; pendingProfile = null }) { Text("SWITCH", color = Palette.blue2) } },
+                dismissButton = { TextButton({ pendingProfile = null }) { Text("CANCEL", color = Palette.dim) } }) }
+            Box { Text("⚙ SETTINGS ▾", Modifier.clickable { dispMenu = true }.border(1.dp, Palette.line, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 4.dp), color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
                 DropdownMenu(dispMenu, { dispMenu = false }) {
+                    if (st.role == "battle_captain") {
+                        listOf("military" to "Military · S1–S6, the brigade", "corporate" to "Corporate · S1–S3").forEach { (k, label) ->
+                            DropdownMenuItem({ Text((if ((st.snap?.profile ?: "military") == k) "✓ " else "   ") + label, fontSize = 12.sp) }, { dispMenu = false; if ((st.snap?.profile ?: "military") != k) pendingProfile = k }) }
+                        HorizontalDivider()
+                    }
                     DropdownMenuItem({ Text((if (Ui.lean) "✓ " else "   ") + "Lean labels", fontSize = 12.sp) }, { Ui.lean = !Ui.lean; Ui.save(ctx) })
                     DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) })
                     HorizontalDivider()

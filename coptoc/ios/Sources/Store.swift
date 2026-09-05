@@ -20,7 +20,7 @@ final class COPStore {
     var leanLabels: Bool = UserDefaults.standard.object(forKey: "toc.leanLabels") as? Bool ?? true { didSet { UserDefaults.standard.set(leanLabels, forKey: "toc.leanLabels") } }
     var postureHeader: Bool = UserDefaults.standard.object(forKey: "toc.postureHeader") as? Bool ?? true { didSet { UserDefaults.standard.set(postureHeader, forKey: "toc.postureHeader") } }
 
-    let client = COPClient()
+    var client = COPClient()
     private var polling = false
 
     func start() async {

@@ -42,6 +42,8 @@ class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "b
     suspend fun updateRoster(incidentId: String, personId: String, status: String) = send("PATCH", "/v1/cop/incidents/$incidentId/roster/$personId", buildJsonObject { put("status", status); put("method", "call") })
     suspend fun requestCheckins(incidentId: String) = send("POST", "/v1/cop/incidents/$incidentId/request-checkins", buildJsonObject { })
     suspend fun closeIncident(id: String) = send("PATCH", "/v1/cop/incidents/$id/close", buildJsonObject { })
+    // §11.2 the profile: military or corporate; reloads the sample data
+    suspend fun setProfile(profile: String) = send("PUT", "/v1/cop/profile", buildJsonObject { put("profile", profile) })
     // §7 / §8 — the background boards
     suspend fun updateSupply(id: String, onHand: Double, note: String?) = send("PATCH", "/v1/cop/supply/$id", buildJsonObject { put("on_hand", onHand); if (!note.isNullOrBlank()) put("note", note) })
     suspend fun updateShipment(id: String, status: String) = send("PATCH", "/v1/cop/shipments/$id", buildJsonObject { put("status", status) })
