@@ -70,8 +70,6 @@ export default function App() {
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code   // what the rail says: "S1" or "PEOPLE"
-  const enabledSections = (['S1', 'S2', 'S3', 'S4', 'S6'] as const).filter(c => sectionOn(c))
-  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} />
   const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''  // a corporate desk drops the staff codes
   const switchProfile = (profile: 'military' | 'corporate') => {
     if (!window.confirm(`Switch to the ${profile.toUpperCase()} profile? This reloads the sample data — ${profile === 'military' ? 'the Combat Aviation Brigade with S4 and S6' : 'the executive-protection sample, S1–S3 only'}.`)) return
@@ -87,6 +85,8 @@ export default function App() {
   const [userId, setUserId] = useState<string>(api.session.userId)
   const me = snap?.me
   const can = (section: string, level: 'view' | 'edit' = 'view') => !me || me.user_id === null || me.battle_captain ? true : level === 'view' ? me.sections_visible.includes(section) : me.perms[section as 'S1'] === 'edit'
+  const enabledSections = (['S1', 'S2', 'S3', 'S4', 'S6'] as const).filter(c => sectionOn(c))
+  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} />
   const [showBrief, setShowBrief] = useState(false)
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
