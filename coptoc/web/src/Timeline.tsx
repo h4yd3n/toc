@@ -28,11 +28,11 @@ function subjectSelection(snap: Snapshot, subject: string): Selection {
 
 export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { snap: Snapshot | null; now: number; sel: Selection; onSelect: (s: Selection) => void; onOp: (id: string) => void; scrub?: number | null; onScrub?: (t: number | null, pinned?: boolean) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  if (!snap) return <div className="tl" />
+
   const t0 = now
-  const watchStart = snap.watch ? +new Date(snap.watch.started_at) : t0 - 8 * HOUR
+  const watchStart = snap?.watch ? +new Date(snap.watch.started_at) : t0 - 8 * HOUR
   const tBack = Math.min(watchStart, t0 - HOUR)   // never a zero-width left half at the top of a watch
-  const lastEnd = Math.max(...snap.events.map(e => +new Date(e.end_at)), ...snap.trips.filter(t => !t.event_id).map(t => +new Date(t.return_at)), t0 + MIN_DAYS * DAY)
+  const lastEnd = Math.max(...(snap?.events.map(e => +new Date(e.end_at)) ?? []), ...(snap?.trips.filter(t => !t.event_id).map(t => +new Date(t.return_at)) ?? []), t0 + MIN_DAYS * DAY)
   const tFar = Math.min(t0 + MAX_DAYS * DAY, lastEnd + 2 * DAY)
   const tNear = Math.min(t0 + NEAR_H * HOUR, tFar)
   const days = Math.max(1, (tFar - t0) / DAY)
@@ -58,8 +58,8 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
     return tNear + ((c - wBack - wNear) / Math.max(1, wFar)) * (tFar - tNear)
   }
 
-  const tripsOf = (e: CopEvent) => snap.trips.filter(t => t.event_id === e.id).length
-  const spans: Span[] = [
+  const tripsOf = (e: CopEvent) => snap?.trips.filter(t => t.event_id === e.id).length ?? 0
+  const spans: Span[] = !snap ? [] : [
     ...snap.events.map((e: CopEvent): Span => ({ id: e.id, kind: 'event', label: `★ ${e.name}`, sub: e.venue_name, start: +new Date(e.start_at), end: +new Date(e.end_at), sel: { type: 'event', id: e.id },
       cls: `ev ${e.status === 'active' ? 'live' : ''} ${e.coverage && e.coverage.gap > 0 ? 'gap' : ''} ${e.threat_ids_in_area.length ? 'threat' : ''}`,
       title: `${e.name} · ${e.venue_name} · ${e.attendee_count} attending · ${e.vip_count} VIP · ${tripsOf(e)} trips` + (e.coverage ? ` · cover ${e.coverage.assigned}/${e.coverage.required}` : '') + (e.operation ? ` · OP ${e.operation.tasks_done}/${e.operation.tasks_total}` : '') })),
@@ -75,7 +75,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
     for (const s of spans.filter(v => v.kind === kind)) { let i = ends.findIndex(e => e <= s.start); if (i < 0) { i = ends.length; ends.push(0) } ends[i] = s.end + DAY * 0.4; laneOf.set(s.id, lanes.length + i) }
     for (let i = 0; i < ends.length; i++) lanes.push({ kind })
   }
-  const watchEnd = snap.watch ? +new Date(snap.watch.ends_at) : null
+  const watchEnd = snap?.watch ? +new Date(snap.watch.ends_at) : null
 
   // ticks: hours on the left, hours through the near horizon, days beyond
   const ticks: { t: number; label: string; major: boolean }[] = []
@@ -97,7 +97,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
     return Math.max(0, Math.min(totalWidth, e.clientX - r.left))
   }
   const scrubX = scrub != null ? px(scrub) : null
-  const log: WatchLogEntry[] = (snap.watch_log ?? []).filter(e => +new Date(e.at) >= tBack)
+  const log: WatchLogEntry[] = (snap?.watch_log ?? []).filter(e => +new Date(e.at) >= tBack)
 
   const scrollTo = (left: number) => { scrollRef.current?.scrollTo({ left, behavior: 'smooth' }) }
   const scrollBy = (delta: number) => { scrollRef.current?.scrollBy({ left: delta, behavior: 'smooth' }) }
@@ -107,7 +107,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
   }
 
   useEffect(() => {
-    if (!sel || !scrollRef.current) return
+    if (!sel || !scrollRef.current || !snap) return
     const target = spans.find(s => (sel.type === 'event' && s.id === sel.id) || (sel.type === 'person' && s.kind === 'trip' && snap.trips.find(t => t.id === s.id)?.person_id === sel.id))
     if (target) {
       const targetX = px(target.start)
@@ -117,7 +117,9 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
         scrollRef.current.scrollTo({ left: Math.max(0, targetX - 160), behavior: 'smooth' })
       }
     }
-  }, [sel?.type, sel?.id])
+  }, [sel?.type, sel?.id, snap])
+
+  if (!snap) return <div className="tl" />
 
   return (
     <div className="tl-container">
