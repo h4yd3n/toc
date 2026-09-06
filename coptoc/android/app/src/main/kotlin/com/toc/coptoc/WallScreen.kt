@@ -729,8 +729,13 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
     var rest by remember { mutableStateOf(stops[1]) }
     var drag by remember { mutableStateOf(0f) }
     val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
+    var lastBump by remember { mutableStateOf(SheetRaise.count) }
     androidx.compose.runtime.LaunchedEffect(SheetRaise.count) {
-        if (SheetRaise.count > 0) rest = stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1).coerceAtMost(stops.size - 1)]
+        if (SheetRaise.count > lastBump) {
+            lastBump = SheetRaise.count
+            val i = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
+            rest = stops[(i + 1) % stops.size]
+        }
     }
     val visible = (restAnim - drag).coerceIn(stops[0], stops[2])
     // Laid out once at full height and slid to the rest it should sit at: resizing it on every frame of a drag

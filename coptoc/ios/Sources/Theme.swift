@@ -140,10 +140,14 @@ private struct SectionSheet<Content: View>: View {
             .offset(y: stops[2] - visible)              // frame re-measured the whole list under the finger
             .frame(maxHeight: .infinity, alignment: .bottom)
             .onAppear { if rest == 0 { rest = stops[1] } }
-            // Tapping the section's own tab again raises the sheet a step, for when it is resting out of the way.
+            // Tapping the section's own tab cycles the sheet:
+            // Tap 1: switches to that tab (starts at stops[1], medium)
+            // Tap 2: increases the size of the overlay to full (stops[2])
+            // Tap 3: reduces the size down to the minimum level (stops[0])
             .onChange(of: store.sheetRaise) {
-                guard let i = stops.firstIndex(of: rest) else { return }
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { rest = stops[min(i + 1, stops.count - 1)] }
+                let i = stops.enumerated().min(by: { abs($0.element - rest) < abs($1.element - rest) })?.offset ?? 1
+                let next = stops[(i + 1) % stops.count]
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { rest = next }
             }
         }
     }
