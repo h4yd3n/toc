@@ -361,7 +361,7 @@ The object that carries a request from one staff section to another: S2 asks S3 
 
 ### 5.10b Sigtoc as a working section — the plan
 
-The S2 overlay has requirements and threats and nothing for the other side. The plan for the red force, the threat overlay (danger areas, ambush sites, kill zones, avenues of approach), field reporting from the phones, pattern analysis, thresholds, IPB products, and the decision support matrix is in `docs/sigtoc-plan.md` (2026-09-05), sequenced in four phases; phase 1 is the actors, the sightings, the threat graphics, and SPOTREPs that land on the map. **[PLANNED]**
+The S2 overlay has requirements and threats and nothing for the other side. The cross-module plan for the red force, the threat overlay (danger areas, ambush sites, kill zones, avenues of approach), field reporting from the phones, pattern analysis, thresholds, IPB products, and the decision support matrix is in `docs/sigtoc-plan.md` (2026-09-05), sequenced in four phases. Sigtoc remains the canonical intelligence module / sub-repo; Cop Talk shows the live S2 slice on the common operating picture and submits field reports back into Sigtoc. Phase 1 is the shared object contract, actors, sightings, threat graphics, S3 movement risk flags, and SPOTREPs that land on the map. **[PLANNED]**
 
 ### 5.11 The analyst's workbench — one graph, three views
 
