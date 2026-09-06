@@ -19,6 +19,8 @@ from .graphics import GraphicRow, out as graphic_out
 from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
+from sigtoc.cases import ReportRow, report_dict as s2_report_out
+from sigtoc.picture import S2ActorRow, S2SightingRow, actor_dict as s2_actor_out, sighting_dict as s2_sighting_out
 
 SEVERITY_RANK = {"low": 0, "moderate": 1, "elevated": 2, "critical": 3}
 # Five levels, read on the wall as DEFCON 5 → 1. The rule (Decision 3) forces normal / elevated / critical from confirmed
@@ -197,6 +199,9 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     incidents = (await session.execute(select(IncidentRow))).scalars().all()
     roster_rows = (await session.execute(select(AccountabilityRow))).scalars().all()
     delivery_rows = (await session.execute(select(DeliveryRow).order_by(DeliveryRow.id))).scalars().all()
+    s2_actor_rows = (await session.execute(select(S2ActorRow).order_by(S2ActorRow.updated_at.desc()))).scalars().all()
+    s2_sighting_rows = (await session.execute(select(S2SightingRow).order_by(S2SightingRow.at.desc()).limit(100))).scalars().all()
+    s2_report_rows = (await session.execute(select(ReportRow).where(ReportRow.status != "dismissed").order_by(ReportRow.at.desc()).limit(50))).scalars().all()
 
     # Decision 1: restricted sites leave the payload entirely unless the caller is cleared.
     if not include_restricted:
@@ -478,6 +483,17 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     nais_out = overlays.nais([s2req.to_dict(r, s2req.plan_for(r, cat)) for r in req_rows], pirs_out)
     events_by_id = {e["id"]: e for e in events_out}
     movements_out = overlays.movements(trips_out, person_by_id, team_by_id, events_by_id, s4["shipments"], loc_by_id, prof, now)
+    graphics_out = [graphic_out(g, now, prof) for g in graphic_rows]
+    movement_risks_out = overlays.movement_risks(movements_out, graphics_out, now)
+    s2_sightings_by_actor: Dict[str, List[S2SightingRow]] = {}
+    for row in s2_sighting_rows:
+        s2_sightings_by_actor.setdefault(row.actor_id, []).append(row)
+    s2_actors_out = [s2_actor_out(a, s2_sightings_by_actor.get(a.id, [])) for a in s2_actor_rows]
+    s2_sightings_out = [s2_sighting_out(s) for s in s2_sighting_rows]
+    s2_reports_out = [s2_report_out(r) for r in s2_report_rows]
+    summary["s2_actors"] = len(s2_actors_out)
+    summary["s2_reports_pending"] = sum(1 for r in s2_reports_out if r["status"] == "filed")
+    summary["movement_risks"] = len(movement_risks_out)
     cfg = await get_config(session)
     wrow = await current_watch(session, now)
     # §3.3 this watch so far: every ledger event since the watch began, bucketed the way the brief buckets them, so the
@@ -493,7 +509,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
-        "graphics": [graphic_out(g, now, prof) for g in graphic_rows],
+        "graphics": graphics_out, "s2_actors": s2_actors_out, "s2_sightings": s2_sightings_out, "s2_reports": s2_reports_out, "movement_risks": movement_risks_out,
     }
 
 

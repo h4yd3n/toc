@@ -11,10 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shared.database import async_session_factory, create_engine, init_db
 from shared.ledger import AsyncDatabaseEventLedger
+from coptoc import graphics as toc_graphics
+from coptoc.graphics import GraphicRow
 from . import requirements as R
 from .requirements import CADENCES, CATALOG, INDICATORS, RequirementRow, SourceStateRow
 from . import cases as C
 from .cases import CaseEventRow, CaseRow, EntityRow, RelationshipRow, ReportRow
+from . import picture as P
+from .picture import S2ActorRow, S2SightingRow
 from . import area as A
 from .area import AreaAssessmentRow
 from . import intsum as I
@@ -214,6 +218,65 @@ class ReportCreate(BaseModel):
     case_id: Optional[str] = None
     credibility: int = Field(2, ge=1, le=6)
 
+class ActorCreate(BaseModel):
+    kind: Literal["unit", "individual", "group", "organization"] = "group"
+    name: str
+    aliases: List[str] = []
+    echelon: str = ""
+    strength: str = ""
+    equipment: List[str] = []
+    ttps: List[str] = []
+    assessed_intent: str = ""
+    status: Literal["active", "dormant", "neutralized"] = "active"
+    case_id: Optional[str] = None
+    owner: str = "S2"
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    place: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+
+class ActorUpdate(BaseModel):
+    kind: Optional[Literal["unit", "individual", "group", "organization"]] = None
+    name: Optional[str] = None
+    aliases: Optional[List[str]] = None
+    echelon: Optional[str] = None
+    strength: Optional[str] = None
+    equipment: Optional[List[str]] = None
+    ttps: Optional[List[str]] = None
+    assessed_intent: Optional[str] = None
+    status: Optional[Literal["active", "dormant", "neutralized"]] = None
+    case_id: Optional[str] = None
+    owner: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    place: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+
+class SightingCreate(BaseModel):
+    at: Optional[datetime] = None
+    lat: float
+    lon: float
+    place: Optional[str] = None
+    nai_id: Optional[str] = None
+    source_type: Literal["report", "threat", "feed", "liaison", "analyst", "seed"] = "analyst"
+    source_id: Optional[str] = None
+    reliability: Literal["A", "B", "C", "D", "E", "F"] = "B"
+    credibility: int = Field(3, ge=1, le=6)
+    what: str
+    confidence: Literal["confirmed", "probable", "possible"] = "probable"
+
+class ReportDisposition(BaseModel):
+    action: Literal["corroborate", "link", "promote", "dismiss"]
+    target_type: Optional[Literal["actor", "threat", "case", "nai", "graphic"]] = None
+    target_id: Optional[str] = None
+    confidence: Literal["confirmed", "probable", "possible", "template"] = "probable"
+    graphic_type: Optional[str] = None
+    kind: Optional[Literal["point", "line", "polygon"]] = None
+    name: Optional[str] = None
+    geometry: Optional[Any] = None
+    note: str = ""
+    basis: str = ""
+
 class CaseCreate(BaseModel):
     title: str
     kind: Literal["general", "person", "site", "actor"] = "general"
@@ -229,6 +292,14 @@ class Decision(BaseModel):
 
 class Merge(BaseModel):
     into: str
+
+
+PICTURE_EDITORS = {"battle_captain", "analyst"}
+
+
+def _picture_role(role: Optional[str], what: str) -> None:
+    if (role or "").lower() not in PICTURE_EDITORS:
+        raise HTTPException(403, f"{what} needs the analyst's or the Battle Captain's role")
 
 
 async def _read_logged(case: CaseRow, role: Optional[str], actor: Optional[str]) -> None:
@@ -265,6 +336,196 @@ async def list_reports(case_id: Optional[str] = None, limit: int = 50, session: 
     q = select(ReportRow).order_by(ReportRow.at.desc()).limit(limit)
     if case_id: q = q.where(ReportRow.case_id == case_id)
     return [C.report_dict(r) for r in (await session.execute(q)).scalars()]
+
+
+@router.get("/actors")
+async def list_actors(status: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(S2ActorRow).order_by(S2ActorRow.updated_at.desc()))).scalars().all()
+    sightings = (await session.execute(select(S2SightingRow).order_by(S2SightingRow.at.desc()))).scalars().all()
+    by_actor: Dict[str, List[S2SightingRow]] = {}
+    for s in sightings:
+        by_actor.setdefault(s.actor_id, []).append(s)
+    return [P.actor_dict(a, by_actor.get(a.id, [])) for a in rows if status is None or a.status == status]
+
+
+@router.post("/actors", status_code=201)
+async def create_actor(body: ActorCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    _picture_role(x_toc_role, "Creating an S2 actor")
+    if not body.name.strip():
+        raise HTTPException(422, "an actor needs a name")
+    if (body.lat is None) != (body.lon is None):
+        raise HTTPException(422, "actor position needs both lat and lon")
+    now = R.now_utc()
+    row = S2ActorRow(id=f"act_{uuid.uuid4().hex[:8]}", kind=body.kind, name=body.name.strip(), aliases_json=json.dumps(body.aliases),
+                     echelon=body.echelon, strength=body.strength, equipment_json=json.dumps(body.equipment), ttps_json=json.dumps(body.ttps),
+                     assessed_intent=body.assessed_intent, status=body.status, case_id=body.case_id, owner=body.owner, lat=body.lat, lon=body.lon,
+                     place=body.place, last_seen_at=naive(body.last_seen_at), created_at=now, updated_at=now)
+    session.add(row); await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.actor.created", actor_type="human", actor_id=x_toc_actor or x_toc_role or "analyst",
+                                new_state=row.status, reason=f"{row.kind} actor: {row.name}", metadata={"kind": row.kind, "case_id": row.case_id})
+    return P.actor_dict(row)
+
+
+@router.get("/actors/{actor_id}")
+async def get_actor(actor_id: str, session: AsyncSession = Depends(get_session)):
+    row = await session.get(S2ActorRow, actor_id)
+    if not row: raise HTTPException(404, "actor not found")
+    sightings = (await session.execute(select(S2SightingRow).where(S2SightingRow.actor_id == actor_id).order_by(S2SightingRow.at.desc()))).scalars().all()
+    return {**P.actor_dict(row, sightings), "sightings": [P.sighting_dict(s) for s in sightings]}
+
+
+@router.patch("/actors/{actor_id}")
+async def update_actor(actor_id: str, body: ActorUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    _picture_role(x_toc_role, "Changing an S2 actor")
+    row = await session.get(S2ActorRow, actor_id)
+    if not row: raise HTTPException(404, "actor not found")
+    changes = body.model_dump(exclude_unset=True)
+    if ("lat" in changes) != ("lon" in changes) and (changes.get("lat", row.lat) is None or changes.get("lon", row.lon) is None):
+        raise HTTPException(422, "actor position needs both lat and lon")
+    for k, v in changes.items():
+        if k == "aliases":
+            row.aliases_json = json.dumps(v)
+        elif k == "equipment":
+            row.equipment_json = json.dumps(v)
+        elif k == "ttps":
+            row.ttps_json = json.dumps(v)
+        elif k == "last_seen_at":
+            row.last_seen_at = naive(v)
+        elif k == "name":
+            row.name = v.strip()
+        else:
+            setattr(row, k, v)
+    row.updated_at = R.now_utc()
+    await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.actor.updated", actor_type="human", actor_id=x_toc_actor or x_toc_role or "analyst",
+                                new_state=row.status, reason=f"{row.name}: actor updated", metadata={"changed": sorted(changes)})
+    return P.actor_dict(row)
+
+
+@router.get("/sightings")
+async def list_sightings(actor_id: Optional[str] = None, limit: int = 100, session: AsyncSession = Depends(get_session)):
+    q = select(S2SightingRow).order_by(S2SightingRow.at.desc()).limit(limit)
+    if actor_id:
+        q = q.where(S2SightingRow.actor_id == actor_id)
+    return [P.sighting_dict(s) for s in (await session.execute(q)).scalars()]
+
+
+@router.post("/actors/{actor_id}/sightings", status_code=201)
+async def create_sighting(actor_id: str, body: SightingCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    _picture_role(x_toc_role, "Creating an S2 sighting")
+    actor = await session.get(S2ActorRow, actor_id)
+    if not actor: raise HTTPException(404, "actor not found")
+    at = naive(body.at) or R.now_utc()
+    nai_id = body.nai_id or await P.nai_for(session, body.lat, body.lon)
+    row = S2SightingRow(id=f"sgt_{uuid.uuid4().hex[:8]}", actor_id=actor_id, at=at, lat=body.lat, lon=body.lon, place=body.place, nai_id=nai_id,
+                        source_type=body.source_type, source_id=body.source_id, reliability=body.reliability, credibility=body.credibility,
+                        what=body.what.strip(), confidence=body.confidence, created_by=x_toc_actor or x_toc_role or "analyst", created_at=R.now_utc())
+    session.add(row)
+    P.touch_actor_from_sighting(actor, row)
+    await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.sighting.created", actor_type="human", actor_id=x_toc_actor or x_toc_role or "analyst",
+                                new_state=row.confidence, reason=f"{actor.name}: {row.what[:120]}", metadata={"actor_id": actor_id, "grade": f"{row.reliability}{row.credibility}", "nai_id": nai_id})
+    return P.sighting_dict(row)
+
+
+@router.post("/reports/{report_id}/dispose")
+async def dispose_report(report_id: str, body: ReportDisposition, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    _picture_role(x_toc_role, "Disposing an S2 report")
+    report = await session.get(ReportRow, report_id)
+    if not report: raise HTTPException(404, "report not found")
+    now = R.now_utc()
+    old = report.status
+    actor_id = x_toc_actor or x_toc_role or "analyst"
+    created: Optional[Dict[str, Any]] = None
+
+    if body.action == "corroborate":
+        report.credibility = max(1, report.credibility - 1)
+        report.status = "corroborated"
+        report.disposition = "corroborate"
+    elif body.action == "dismiss":
+        if not body.note.strip():
+            raise HTTPException(422, "dismissal needs a reason")
+        report.status = "dismissed"
+        report.disposition = "dismiss"
+    elif body.action == "link":
+        if not body.target_type or not body.target_id:
+            raise HTTPException(422, "link needs target_type and target_id")
+        if body.target_type == "actor":
+            actor = await session.get(S2ActorRow, body.target_id)
+            if not actor: raise HTTPException(404, "actor not found")
+            if body.confidence == "template":
+                raise HTTPException(422, "a sighting cannot have template confidence")
+            try:
+                nai_id = await P.nai_for(session, report.lat, report.lon) if report.lat is not None and report.lon is not None else None
+                sighting = P.sighting_from_report(body.target_id, report, created_by=actor_id, confidence=body.confidence, nai_id=nai_id)
+            except ValueError as e:
+                raise HTTPException(422, str(e))
+            session.add(sighting)
+            P.touch_actor_from_sighting(actor, sighting)
+            report.status = "linked"
+            report.disposition = "link"
+            report.disposition_target_type = "sighting"
+            report.disposition_target_id = sighting.id
+            created = {"object_type": "sighting", **P.sighting_dict(sighting)}
+            await ledger().append_event(content_id=sighting.id, event_type="s2.sighting.created", actor_type="human", actor_id=actor_id,
+                                        new_state=sighting.confidence, reason=f"{actor.name}: sighting from report {report.id}", metadata={"actor_id": actor.id, "report_id": report.id})
+        elif body.target_type == "case":
+            case = await session.get(CaseRow, body.target_id)
+            if not case: raise HTTPException(404, "case not found")
+            report.case_id = case.id
+            known = [e.name for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == case.id, EntityRow.status == "confirmed"))).scalars()]
+            extracted = await C.file_report_into_case(session, report, case, known)
+            report.status = "linked"
+            report.disposition = "link"
+            report.disposition_target_type = "case"
+            report.disposition_target_id = case.id
+            created = {"object_type": "case_extraction", **extracted}
+        elif body.target_type in ("threat", "nai", "graphic"):
+            report.status = "linked"
+            report.disposition = "link"
+            report.disposition_target_type = body.target_type
+            report.disposition_target_id = body.target_id
+        else:
+            raise HTTPException(422, "unknown link target")
+    elif body.action == "promote":
+        if not body.graphic_type or not body.name:
+            raise HTTPException(422, "promote needs graphic_type and name")
+        c = toc_graphics.CATALOG.get(body.graphic_type)
+        if not c or body.graphic_type not in toc_graphics.THREAT_GRAPHIC_TYPES:
+            raise HTTPException(422, "promote creates an S2 threat graphic type")
+        kind = body.kind or ("point" if report.lat is not None and report.lon is not None else None)
+        geometry = body.geometry
+        if geometry is None and kind == "point" and report.lat is not None and report.lon is not None:
+            geometry = [report.lon, report.lat]
+        if not kind or geometry is None:
+            raise HTTPException(422, "promote needs geometry, or a report point")
+        why = toc_graphics.validate(body.graphic_type, kind, geometry)
+        if why: raise HTTPException(422, why)
+        graphic = GraphicRow(id=f"gfx_{uuid.uuid4().hex[:8]}", type=body.graphic_type, kind=kind, section=c["section"], name=body.name.strip(), geometry_json=json.dumps(geometry),
+                             window_from=None, window_to=None, status="active", note=body.note or report.text[:180], confidence=body.confidence, basis=body.basis or f"report {report.id}",
+                             subject_type="report", subject_id=report.id, created_by=actor_id, created_at=now, updated_at=now)
+        session.add(graphic)
+        report.status = "promoted"
+        report.disposition = "promote"
+        report.disposition_target_type = "graphic"
+        report.disposition_target_id = graphic.id
+        from coptoc.sections import profile as toc_profile
+        created = {"object_type": "graphic", **toc_graphics.out(graphic, now, toc_profile())}
+        await ledger().append_event(content_id=graphic.id, event_type="s2.graphic.promoted", actor_type="human", actor_id=actor_id,
+                                    new_state=graphic.confidence, reason=f"{graphic.name} from report {report.id}", metadata={"type": graphic.type, "report_id": report.id})
+
+    report.disposed_by = actor_id
+    report.disposed_at = now
+    report.disposition_note = body.note or report.disposition_note
+    if body.action != "link" or body.target_type != "actor":
+        if body.action != "promote":
+            report.disposition_target_type = report.disposition_target_type or body.target_type
+            report.disposition_target_id = report.disposition_target_id or body.target_id
+    await session.commit()
+    await ledger().append_event(content_id=report.id, event_type="s2.report.disposed", actor_type="human", actor_id=actor_id,
+                                old_state=old, new_state=report.status, reason=f"{report.kind.upper()} {report.id}: {body.action}" + (f" - {body.note}" if body.note else ""),
+                                metadata={"action": body.action, "target_type": report.disposition_target_type, "target_id": report.disposition_target_id, **({"created": created} if created else {})})
+    return {**C.report_dict(report), **({"created": created} if created else {})}
 
 
 @router.get("/cases")

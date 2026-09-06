@@ -680,6 +680,12 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .mk-head { display: flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 6px; background: rgba(13,18,25,.94); border: 1.5px solid #c084fc; color: #fff; font: 600 11px var(--sans); box-shadow: 0 0 14px rgba(192,132,252,.45); white-space: nowrap; }
 .mk-head .glyph { color: #c084fc; font-size: 11px; } .mk-head.planned { border-style: dashed; opacity: .85; } .mk-head.vip { border-color: var(--gold); box-shadow: 0 0 16px rgba(251,191,36,.5); } .mk-head.vip .glyph { color: var(--gold); }
 .mk-head.shipment { border-color: var(--orange); box-shadow: 0 0 14px rgba(249,115,22,.45); font-family: var(--mono); font-size: 10px; } .mk-head.shipment .glyph { color: var(--orange); } .mk-head.shipment.red { border-color: var(--red); } .mk-head.shipment.amber { border-color: var(--amber); }
+.mk-head.risk { border-color: var(--red); box-shadow: 0 0 18px rgba(239,68,68,.55); } .mk-head.risk .glyph { color: var(--red); }
+.mk-s2actor, .mk-report { display: flex; align-items: center; gap: 5px; max-width: 180px; padding: 3px 7px 3px 5px; border-radius: 4px; background: rgba(13,18,25,.94); border: 1.5px solid var(--red); color: var(--text); font: 700 10px var(--sans); box-shadow: 0 0 16px rgba(239,68,68,.45); white-space: nowrap; }
+.mk-s2actor .glyph, .mk-report .glyph { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--red); color: #fff; font: 900 9px var(--mono); flex: 0 0 auto; }
+.mk-s2actor .label, .mk-report .label { overflow: hidden; text-overflow: ellipsis; }
+.mk-report { border-color: var(--amber); box-shadow: 0 0 14px rgba(245,158,11,.42); }
+.mk-report .glyph { background: var(--amber); color: #000; }
 .tl-scrub { position: absolute; top: 0; bottom: -100px; border-left: 1px solid var(--amber); z-index: 4; pointer-events: none; } .tl-scrub span { position: absolute; top: -1px; left: 3px; font: 800 8.5px var(--mono); letter-spacing: .1em; color: var(--amber); background: var(--panel); padding-right: 3px; white-space: nowrap; }
 .tl { cursor: crosshair; }
 

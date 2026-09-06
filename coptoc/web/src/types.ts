@@ -78,6 +78,7 @@ export interface Assessment {
 }
 export interface LogEntry { id: string; at: string; type: string; actor: string; actor_type: string; subject: string; old: string | null; new: string | null; summary: string | null }
 export interface Summary { s4_status?: Health; s6_status?: Health; taskings_open?: number; taskings_overdue?: number;
+  s2_actors?: number; s2_reports_pending?: number; movement_risks?: number
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
@@ -89,7 +90,7 @@ export interface Watch {
   next_watch: string; next_starts_at: string; pattern: string; nstr: boolean; outgoing_notes: string | null
   handed_over_at: string | null; acknowledged_by: string | null; acknowledged_at: string | null
 }
-export interface Estimate { section: 'S1' | 'S2' | 'S3' | 'S6'; assessment: string; recommendation: string; updated_by: string | null; updated_at: string | null }
+export interface Estimate { section: 'S1' | 'S2' | 'S3' | 'S4' | 'S6'; assessment: string; recommendation: string; updated_by: string | null; updated_at: string | null }
 export interface BriefEvent { id: string; at: string; type: string; actor: string; subject: string; summary: string | null; old: string | null; new: string | null; during_handover: boolean }
 export interface Brief {
   watch: Watch; window: { from: string; to: string; overlap_from: string }
@@ -119,21 +120,27 @@ export type Overlay = 'COP' | 'S1' | 'S2' | 'S3' | 'S4' | 'S6'
 export interface NAI { id: string; nai: number; name: string; subject_name: string; subject_type: string; subject_id: string | null; kind: 'standing' | 'directed'; lat: number; lon: number; radius_km: number; priority: number
   window_from: string | null; window_to: string | null; question: string; coverage_pct: number; gaps: number; pir_ids: string[]; health: Health }
 export interface MovementLeg { kind: 'flight' | 'ground' | 'lodging' | 'route'; label: string; from_lat: number | null; from_lon: number | null; to_lat: number; to_lon: number; start_at: string | null; end_at: string | null; status: 'done' | 'current' | 'planned' }
+export type S2GraphicConfidence = 'confirmed' | 'probable' | 'possible' | 'template'
+export interface MovementRisk { id: string; movement_id: string; movement_name: string; leg_label: string; graphic_id: string; graphic_name: string; graphic_type: string; confidence: S2GraphicConfidence; basis: string; severity: Severity; reason: string }
 /** §3.4 everything that moves: a serial, a delegation, one named person, or a shipment (Decision Z). */
 export interface Movement { id: string; kind: 'serial' | 'delegation' | 'individual' | 'shipment'; owner: 'S3' | 'S4'; name: string; unit: string | null; pax: number; person_ids: string[]; trip_ids: string[]; shipment_id?: string
   is_vip: boolean; event_id: string | null; purpose: string; origin_name: string; origin_lat: number | null; origin_lon: number | null; dest_name: string; dest_lat: number; dest_lon: number
-  depart_at: string | null; return_at: string; eta?: string; hours_to_eta?: number; status: 'active' | 'planned'; mode: 'air' | 'ground' | 'unknown'; head_lat: number | null; head_lon: number | null; current_leg: string | null; legs: MovementLeg[]; health: Health; priority?: string }
+  depart_at: string | null; return_at: string; eta?: string; hours_to_eta?: number; status: 'active' | 'planned'; mode: 'air' | 'ground' | 'unknown'; head_lat: number | null; head_lon: number | null; current_leg: string | null; legs: MovementLeg[]; health: Health; priority?: string; risk_flags?: MovementRisk[] }
 /** §3.4 a control measure a section drew by hand: a point, a line, or a polygon, typed from the catalog. */
 export interface Graphic { id: string; type: string; kind: 'point' | 'line' | 'polygon'; section: 'S2' | 'S3' | 'S4' | 'S6'; name: string; label: string; geometry: number[] | [number, number][]; center: [number, number]
   window_from: string | null; window_to: string | null; in_window: boolean; status: 'planned' | 'active' | 'retired'; note: string; subject_type: string | null; subject_id: string | null; created_by: string; created_at: string; updated_at: string
-  color: string; dash: boolean; glyph: string }
-export interface GraphicType { type: string; section: 'S2' | 'S3' | 'S4' | 'S6'; kinds: ('point' | 'line' | 'polygon')[]; label: string; color: string; dash: boolean; glyph: string }
+  confidence: S2GraphicConfidence; basis: string; threat_graphic: boolean; color: string; dash: boolean; glyph: string }
+export interface GraphicType { type: string; section: 'S2' | 'S3' | 'S4' | 'S6'; kinds: ('point' | 'line' | 'polygon')[]; label: string; color: string; dash: boolean; glyph: string; threat_graphic: boolean }
 /** What the wall is drawing right now: a type, the kind of shape, and the points so far. */
 export interface Draw { type: GraphicType; kind: 'point' | 'line' | 'polygon'; points: [number, number][] }
 export interface WatchLogEntry { id: string; at: string; type: string; bucket: string; actor: string; subject: string; summary: string | null }
+export interface S2Actor { id: string; kind: 'unit' | 'individual' | 'group' | 'organization'; name: string; aliases: string[]; echelon: string; strength: string; equipment: string[]; ttps: string[]; assessed_intent: string; status: 'active' | 'dormant' | 'neutralized'; case_id: string | null; owner: string; lat: number | null; lon: number | null; place: string | null; last_seen_at: string | null; created_at: string; updated_at: string; sighting_ids: string[] }
+export interface S2Sighting { id: string; actor_id: string; at: string; lat: number; lon: number; place: string | null; nai_id: string | null; source_type: string; source_id: string | null; reliability: string; credibility: number; grade: string; what: string; confidence: 'confirmed' | 'probable' | 'possible'; created_by: string; created_at: string }
+export interface S2Report { id: string; kind: string; reported_by: string; reporter_role: string; at: string; lat: number | null; lon: number | null; place: string | null; text: string; case_id: string | null; reliability: string; credibility: number; grade: string; source: string; status: 'filed' | 'corroborated' | 'linked' | 'promoted' | 'dismissed'; disposition: string | null; disposition_target_type: string | null; disposition_target_id: string | null; disposed_by: string | null; disposed_at: string | null; disposition_note: string | null; filed_at: string }
 export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
+  s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]
 }
 export type Selection =
   | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | { type: 'graphic'; id: string } | null

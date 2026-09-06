@@ -14,6 +14,7 @@ group. A group needs at least three travelers. A shipment is a movement too — 
 owns the moving — with its origin only when the wall knows where it left from."""
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -130,3 +131,97 @@ def movements(trips: List[Dict[str, Any]], person_by_id: Dict[str, Dict[str, Any
     rank = {"active": 0, "planned": 1}
     out.sort(key=lambda m: (rank.get(m["status"], 2), not m["is_vip"], m["return_at"] or ""))
     return out
+
+
+THREAT_SEVERITY = {
+    "kill_zone": "critical",
+    "ambush_site": "critical",
+    "danger_area": "elevated",
+    "attack_hotspot": "elevated",
+    "hostile_checkpoint": "elevated",
+    "hostile_op": "elevated",
+    "no_go": "elevated",
+}
+
+
+def _xy(lon: float, lat: float, origin_lat: float) -> tuple[float, float]:
+    return (lon * 111.32 * math.cos(math.radians(origin_lat)), lat * 110.57)
+
+
+def _dist_point_segment_km(p: List[float], a: List[float], b: List[float]) -> float:
+    origin = p[1]
+    px, py = _xy(p[0], p[1], origin)
+    ax, ay = _xy(a[0], a[1], origin)
+    bx, by = _xy(b[0], b[1], origin)
+    dx, dy = bx - ax, by - ay
+    if dx == 0 and dy == 0:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def _ccw(a: List[float], b: List[float], c: List[float]) -> bool:
+    return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _segments_intersect(a: List[float], b: List[float], c: List[float], d: List[float]) -> bool:
+    return _ccw(a, c, d) != _ccw(b, c, d) and _ccw(a, b, c) != _ccw(a, b, d)
+
+
+def _point_in_poly(p: List[float], poly: List[List[float]]) -> bool:
+    inside = False
+    j = len(poly) - 1
+    for i in range(len(poly)):
+        pi, pj = poly[i], poly[j]
+        if ((pi[1] > p[1]) != (pj[1] > p[1])) and p[0] < (pj[0] - pi[0]) * (p[1] - pi[1]) / ((pj[1] - pi[1]) or 1e-9) + pi[0]:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _segment_hits_graphic(a: List[float], b: List[float], graphic: Dict[str, Any]) -> bool:
+    kind, geom = graphic["kind"], graphic["geometry"]
+    if kind == "point":
+        return _dist_point_segment_km(geom, a, b) <= 1.0
+    pts = geom
+    if kind == "line":
+        return any(_segments_intersect(a, b, pts[i], pts[i + 1]) or _dist_point_segment_km(pts[i], a, b) <= 0.5 for i in range(len(pts) - 1))
+    if kind == "polygon":
+        poly = pts
+        edges = list(zip(poly, poly[1:] + [poly[0]]))
+        return _point_in_poly(a, poly) or _point_in_poly(b, poly) or any(_segments_intersect(a, b, x, y) for x, y in edges)
+    return False
+
+
+def movement_risks(movements: List[Dict[str, Any]], graphics: List[Dict[str, Any]], now: datetime) -> List[Dict[str, Any]]:
+    """Flag movement legs that cross live S2 threat graphics. The flags are derived snapshot data, never stored."""
+    threats = [g for g in graphics if g.get("threat_graphic") and g.get("status") == "active" and g.get("in_window", True)]
+    flags: List[Dict[str, Any]] = []
+    for mv in movements:
+        mv_flags = []
+        for leg in mv.get("legs", []):
+            if leg.get("kind") == "lodging" or leg.get("from_lat") is None or leg.get("from_lon") is None:
+                continue
+            a = [leg["from_lon"], leg["from_lat"]]
+            b = [leg["to_lon"], leg["to_lat"]]
+            for g in threats:
+                if not _segment_hits_graphic(a, b, g):
+                    continue
+                severity = THREAT_SEVERITY.get(g["type"], "moderate")
+                flag = {
+                    "id": f"risk_{mv['id']}_{g['id']}_{len(flags) + 1}",
+                    "movement_id": mv["id"],
+                    "movement_name": mv["name"],
+                    "leg_label": leg["label"],
+                    "graphic_id": g["id"],
+                    "graphic_name": g["name"],
+                    "graphic_type": g["type"],
+                    "confidence": g.get("confidence", "confirmed"),
+                    "basis": g.get("basis", ""),
+                    "severity": severity,
+                    "reason": f"{leg['label']} crosses {g['name']} ({g.get('confidence', 'confirmed')})",
+                }
+                flags.append(flag)
+                mv_flags.append(flag)
+        mv["risk_flags"] = sorted(mv_flags, key=lambda f: {"critical": 0, "elevated": 1, "moderate": 2}.get(f["severity"], 3))
+    return sorted(flags, key=lambda f: ({"critical": 0, "elevated": 1, "moderate": 2}.get(f["severity"], 3), f["movement_name"]))

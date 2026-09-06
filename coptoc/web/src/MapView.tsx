@@ -24,6 +24,7 @@ function savedBoard(): { center: [number, number]; zoom: number } | null {
 
 const SEV_COLOR: Record<string, string> = { low: '#f59e0b', moderate: '#f97316', elevated: '#ef4444', critical: '#dc2626' }
 const TYPE_GLYPH: Record<string, string> = { hq: '◆', office: '■', datacenter: '▣', residence: '⌂', venue: '★', airfield: '✈', cp: '▲', fob: '⬢', farp: '⛽', range: '◎' }
+const ACTOR_GLYPH: Record<string, string> = { unit: 'U', individual: 'I', group: 'G', organization: 'O' }
 
 interface Point { kind: 'location' | 'person' | 'event'; id: string; lat: number; lon: number; loc?: Location; person?: Person; event?: CopEvent }
 interface Cluster { x: number; y: number; lat: number; lon: number; members: Point[] }
@@ -195,9 +196,11 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     const activeAt = (mv: Movement, t: number) => (mv.depart_at ? +new Date(mv.depart_at) <= t : true) && +new Date(mv.return_at) >= t
     routes.setData({ type: 'FeatureCollection', features: layers.routes ? (snapshot.movements ?? []).flatMap(mv => {
       const w = (overlay === 'S4' ? (mv.kind === 'shipment' ? 1 : DIM) : mWeight) * (scrub != null && !activeAt(mv, scrub) ? 0.15 : 1)
-      const color = mv.kind === 'shipment' ? (mv.health === 'red' ? '#ef4444' : '#f97316') : mv.is_vip ? '#fbbf24' : mv.status === 'active' ? '#60a5fa' : '#64748b'
+      const risk = (mv.risk_flags?.length ?? 0) > 0
+      const critical = mv.risk_flags?.some(f => f.severity === 'critical') ?? false
+      const color = risk ? (critical ? '#dc2626' : '#f97316') : mv.kind === 'shipment' ? (mv.health === 'red' ? '#ef4444' : '#f97316') : mv.is_vip ? '#fbbf24' : mv.status === 'active' ? '#60a5fa' : '#64748b'
       return mv.legs.filter(lg => lg.from_lat != null && lg.kind !== 'lodging').map(lg => ({
-        type: 'Feature' as const, properties: { id: mv.id, color, lw: lg.status === 'current' ? (mv.pax >= 3 ? 3 : 2.2) : 1.4, lo: (lg.status === 'done' ? 0.35 : lg.status === 'current' ? 0.95 : 0.7) * w, dash: mv.kind === 'shipment' ? 2 : lg.status === 'planned' ? 1 : 0 },
+        type: 'Feature' as const, properties: { id: mv.id, color, lw: risk ? 3.4 : lg.status === 'current' ? (mv.pax >= 3 ? 3 : 2.2) : 1.4, lo: (lg.status === 'done' ? 0.35 : lg.status === 'current' ? 0.95 : 0.7) * w, dash: risk ? 2 : mv.kind === 'shipment' ? 2 : lg.status === 'planned' ? 1 : 0 },
         geometry: { type: 'LineString' as const, coordinates: lg.kind === 'flight' || lg.kind === 'route' ? arc(lg.from_lat!, lg.from_lon!, lg.to_lat, lg.to_lon) : [[lg.from_lon!, lg.from_lat!], [lg.to_lon, lg.to_lat]] },
       }))
     }) : [] })
@@ -299,6 +302,22 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       const top = circle(n.lat, n.lon, n.radius_km, 4)[0]   // the northern point of the ring
       add(div, top[0], top[1], 'bottom', [0, -2])
     }
+    // Sigtoc-owned red picture: last known actors and open report pins, shown here as live context only.
+    if ((s2 || cop) && layers.threats) for (const a of snapshot.s2_actors ?? []) {
+      if (a.lat == null || a.lon == null || a.status !== 'active') continue
+      const div = document.createElement('div')
+      div.className = `mk mk-s2actor ${a.kind}${s2 ? '' : ' dim'}`
+      div.innerHTML = `<span class="glyph">${ACTOR_GLYPH[a.kind] ?? 'A'}</span><span class="label">${a.name}</span>`
+      div.title = `${a.name}${a.strength ? ` · ${a.strength}` : ''}${a.place ? `\n${a.place}` : ''}${a.assessed_intent ? `\n${a.assessed_intent}` : ''}`
+      add(div, a.lon, a.lat, 'bottom', [0, -8])
+    }
+    if ((s2 || cop) && layers.threats) for (const r of (snapshot.s2_reports ?? []).filter(r => r.lat != null && r.lon != null && r.status === 'filed')) {
+      const div = document.createElement('div')
+      div.className = `mk mk-report${s2 ? '' : ' dim'}`
+      div.innerHTML = `<span class="glyph">R</span><span class="label">${r.kind.toUpperCase()}</span>`
+      div.title = `${r.kind.toUpperCase()} ${r.grade} · ${r.reported_by}${r.place ? `\n${r.place}` : ''}\n${r.text}`
+      add(div, r.lon!, r.lat!, 'top', [0, 8])
+    }
     // §3.4 S3: the head of every group movement — the unit or the delegation, its count, where it is on its route
     if (s3 || cop) for (const mv of movements) {
       if (mv.kind === 'individual') continue
@@ -307,15 +326,15 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       if (mv.kind === 'shipment') {
         if (!mv.legs.length) continue   // no origin on the wall: the site wears the inbound chip instead
         const lg = mv.legs[0]; const mid = arc(lg.from_lat!, lg.from_lon!, lg.to_lat, lg.to_lon, 2)[1]
-        div.className = `mk mk-head shipment ${mv.health}${dim ? ' dim' : ''}`
-        div.innerHTML = `<span class="glyph">⛽</span><span class="label">${mv.name.split(' → ')[0]} · ${eta(mv.hours_to_eta ?? 0)}</span>`
-        div.title = `${mv.name} · ${mv.purpose} · ${mv.current_leg}`
+        div.className = `mk mk-head shipment ${mv.health}${mv.risk_flags?.length ? ' risk' : ''}${dim ? ' dim' : ''}`
+        div.innerHTML = `<span class="glyph">⛽</span><span class="label">${mv.name.split(' → ')[0]} · ${eta(mv.hours_to_eta ?? 0)}${mv.risk_flags?.length ? ` · RISK ${mv.risk_flags.length}` : ''}</span>`
+        div.title = `${mv.name} · ${mv.purpose} · ${mv.current_leg}${mv.risk_flags?.length ? `\n${mv.risk_flags.map(f => f.reason).join('\n')}` : ''}`
         add(div, mid[0], mid[1])
       } else {
         if (mv.head_lat == null) continue
-        div.className = `mk mk-head ${mv.kind} ${mv.status}${mv.is_vip ? ' vip' : ''}${dim ? ' dim' : ''}`
-        div.innerHTML = `<span class="glyph">${mv.mode === 'air' ? '✈' : '▶'}</span><span class="label">${mv.unit ?? mv.name.split(' · ')[0]} · ${mv.pax} pax</span>`
-        div.title = `${mv.name}\n${mv.purpose}${mv.current_leg ? `\nnow: ${mv.current_leg}` : ''}\n${mv.depart_at?.slice(0, 16).replace('T', ' ')}Z → ${mv.return_at.slice(0, 16).replace('T', ' ')}Z`
+        div.className = `mk mk-head ${mv.kind} ${mv.status}${mv.is_vip ? ' vip' : ''}${mv.risk_flags?.length ? ' risk' : ''}${dim ? ' dim' : ''}`
+        div.innerHTML = `<span class="glyph">${mv.risk_flags?.length ? '!' : mv.mode === 'air' ? '✈' : '▶'}</span><span class="label">${mv.unit ?? mv.name.split(' · ')[0]} · ${mv.pax} pax${mv.risk_flags?.length ? ` · RISK ${mv.risk_flags.length}` : ''}</span>`
+        div.title = `${mv.name}\n${mv.purpose}${mv.current_leg ? `\nnow: ${mv.current_leg}` : ''}\n${mv.depart_at?.slice(0, 16).replace('T', ' ')}Z → ${mv.return_at.slice(0, 16).replace('T', ' ')}Z${mv.risk_flags?.length ? `\n${mv.risk_flags.map(f => f.reason).join('\n')}` : ''}`
         div.onclick = e => { e.stopPropagation(); onSelect({ type: 'person', id: mv.person_ids[0] }) }
         add(div, mv.head_lon!, mv.head_lat, 'top', [0, 12])
       }

@@ -267,11 +267,11 @@ async def draw_graphic(body: GraphicCreate, session: AsyncSession = Depends(get_
     if not body.name.strip(): raise HTTPException(422, "a graphic needs a name")
     now = now_utc(); actor = actor_from(x_toc_actor)
     g = GraphicRow(id=f"gfx_{uuid.uuid4().hex[:8]}", type=body.type, kind=body.kind, section=c["section"], name=body.name.strip(), geometry_json=json.dumps(body.geometry), window_from=naive(body.window_from), window_to=naive(body.window_to),
-                   status=body.status, note=body.note, subject_type=body.subject_type, subject_id=body.subject_id, created_by=actor, created_at=now, updated_at=now)
+                   status=body.status, note=body.note, confidence=body.confidence, basis=body.basis, subject_type=body.subject_type, subject_id=body.subject_id, created_by=actor, created_at=now, updated_at=now)
     session.add(g); await session.commit()
     o = toc_graphics.out(g, now, profile())
     await get_ledger().append_event(content_id=g.id, event_type="cop.graphic.drawn", actor_type="human", actor_id=actor, new_state=g.status,
-                                    reason=f"{c['section']} drew {o['label'].split(' · ')[0]} {g.name}" + (f" for {body.subject_type} {body.subject_id}" if body.subject_id else ""), metadata={"type": g.type, "kind": g.kind, "section": g.section})
+                                    reason=f"{c['section']} drew {o['label'].split(' · ')[0]} {g.name}" + (f" for {body.subject_type} {body.subject_id}" if body.subject_id else ""), metadata={"type": g.type, "kind": g.kind, "section": g.section, "confidence": g.confidence})
     return o
 
 

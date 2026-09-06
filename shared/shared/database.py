@@ -24,6 +24,15 @@ async def init_db(engine: AsyncEngine):
 # the first release are listed here and added if absent. SQLite only, which is what every deployment runs today.
 ADDED_COLUMNS = [
     ("cop_locations", "is_toc", "BOOLEAN DEFAULT 0"),   # §3.1 the CP the TOC is running from
+    ("cop_graphics", "confidence", "TEXT DEFAULT 'confirmed'"),
+    ("cop_graphics", "basis", "TEXT DEFAULT ''"),
+    ("s2_reports", "status", "TEXT DEFAULT 'filed'"),
+    ("s2_reports", "disposition", "TEXT"),
+    ("s2_reports", "disposition_target_type", "TEXT"),
+    ("s2_reports", "disposition_target_id", "TEXT"),
+    ("s2_reports", "disposed_by", "TEXT"),
+    ("s2_reports", "disposed_at", "DATETIME"),
+    ("s2_reports", "disposition_note", "TEXT"),
 ]
 
 

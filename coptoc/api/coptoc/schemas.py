@@ -3,6 +3,7 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 Posture = Literal["normal", "guarded", "elevated", "high", "critical"]
+GraphicConfidence = Literal["confirmed", "probable", "possible", "template"]
 
 class TripCreate(BaseModel):
     person_id: str
@@ -112,7 +113,9 @@ class GraphicCreate(BaseModel):
     window_to: Optional[datetime] = None
     status: Literal["planned", "active"] = "active"
     note: str = ""
-    subject_type: Optional[Literal["event", "location", "operation", "trip"]] = None
+    confidence: GraphicConfidence = "confirmed"
+    basis: str = ""
+    subject_type: Optional[Literal["event", "location", "operation", "trip", "case", "report", "actor", "threat", "nai"]] = None
     subject_id: Optional[str] = None
 
 class GraphicUpdate(BaseModel):
@@ -122,6 +125,8 @@ class GraphicUpdate(BaseModel):
     window_to: Optional[datetime] = None
     status: Optional[Literal["planned", "active", "retired"]] = None
     note: Optional[str] = None
+    confidence: Optional[GraphicConfidence] = None
+    basis: Optional[str] = None
 
 class AreaUpdate(BaseModel):
     ratings: Optional[List[AreaRatingIn]] = None

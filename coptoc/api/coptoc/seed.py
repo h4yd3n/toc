@@ -18,6 +18,8 @@ from .areas import AreaRatingRow
 from . import graphics as toc_graphics
 from .graphics import GraphicRow
 from .users import UserRow
+from sigtoc import picture as s2_picture
+from sigtoc.picture import S2ActorRow, S2SightingRow
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 
@@ -369,7 +371,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await _seed_case(session, now_utc())
         await _seed_directed(session, now_utc())
         await _seed_operation(session, now_utc())
-    for model in (GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    for model in (S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
@@ -388,6 +390,8 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     if dataset == "cab":
         from . import seed_cab
         await seed_cab.populate(session, now)
+        session.add_all(s2_picture.seed(dataset, now))
+        await session.commit()
         return
     # the corporate desk follows the sun (§3.1); undo a brigade's day/night watch if that is what was loaded before
     import json as _json
@@ -425,6 +429,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     session.add_all(_threats(now))
     session.add_all(_pirs(now))
     session.add_all(_assessments(now))
+    session.add_all(s2_picture.seed(dataset, now))
     await session.flush()
     # Analyst-confirmed links: proximity suggested these, a human confirmed them.
     session.add_all([

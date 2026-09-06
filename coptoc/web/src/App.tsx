@@ -29,6 +29,7 @@ const LOG_LABEL: Record<string, string> = {
   'cop.event.attendees_added': 'EVENT', 'cop.event.attendee_removed': 'EVENT', 'cop.event.cancelled': 'EVENT', 'cop.person.checkin': 'CHECK-IN',
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
+  's2.actor.created': 'ACTOR', 's2.actor.updated': 'ACTOR', 's2.sighting.created': 'SIGHTING', 's2.report.filed': 'SPOTREP', 's2.report.disposed': 'REPORT', 's2.graphic.promoted': 'S2 GRAPHIC',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
   'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗', 'cop.area.assessed': 'AREA', 'cop.area.updated': 'AREA',
   'cop.graphic.drawn': 'GRAPHIC', 'cop.graphic.updated': 'GRAPHIC', 'cop.graphic.retired': 'GRAPHIC ✗',
@@ -343,12 +344,42 @@ export default function App() {
         {s && <Tiles items={[
           { v: s.warnings_pending, l: 'TO RELEASE', tone: 'red', hide: s.warnings_pending === 0, title: 'warnings awaiting the Battle Captain' }, { v: s.flash, l: 'FLASH LIVE', tone: 'red', hide: s.flash === 0 },
           { v: s.confirmed_links, l: 'CONFIRMED', tone: s.confirmed_links ? 'red' : 'neutral', title: 'confirmed threat links' }, { v: s.real_threats, l: 'LIVE', title: 'threats from a live source, not the sample' },
+          { v: s.s2_actors ?? 0, l: 'ACTORS', tone: (s.s2_actors ?? 0) ? 'red' : 'neutral' }, { v: s.s2_reports_pending ?? 0, l: 'REPORTS', tone: (s.s2_reports_pending ?? 0) ? 'amber' : 'neutral', hide: (s.s2_reports_pending ?? 0) === 0 },
+          { v: s.movement_risks ?? 0, l: 'ROUTE RISK', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
           { v: s.open_pirs, l: 'OPEN PIRs', tone: 'amber' }, { v: snap?.assessments.filter(a => a.status === 'review').length ?? 0, l: 'IN REVIEW', hide: !snap?.assessments.some(a => a.status === 'review') },
           { v: inbox('S2'), l: 'OWED', tone: 'amber', hide: inbox('S2') === 0, title: 'taskings S2 owes' },
         ]} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
         {taskingsFor('S2')}
         <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
+        <Question q="Who is out there" count={snap?.s2_actors?.length ?? 0} />
+        <ul className="list cards">
+          {snap?.s2_actors.map(a => (
+            <li key={a.id} className="card actor">
+              <div className="card-head"><span className="id">{a.kind.toUpperCase()}</span><span className="name">{a.name}</span><span className={`chip ${a.status}`}>{a.status.toUpperCase()}</span></div>
+              <div className="est"><b>{a.strength || 'unknown strength'}</b>{a.place ? <span className="dim"> · {a.place}</span> : null}</div>
+              {a.assessed_intent && <div className="bluf">{a.assessed_intent}</div>}
+              <div className="card-foot dim">{a.sighting_ids.length} sighting{a.sighting_ids.length === 1 ? '' : 's'}{a.last_seen_at ? ` · last ${rel(a.last_seen_at, now)}` : ''}</div>
+            </li>))}
+        </ul>
+        <Question q="Field reports" count={`${snap?.s2_reports?.filter(r => r.status === 'filed').length ?? 0} open`} />
+        <ul className="list">
+          {snap?.s2_reports.filter(r => r.status === 'filed').slice(0, 6).map(r => (
+            <li key={r.id} className="row">
+              <span className="sev moderate">{r.grade}</span>
+              <span className="name">{r.place ?? r.reported_by}</span>
+              <span className="meta dim">{rel(r.at, now)}</span>
+            </li>))}
+        </ul>
+        <Question q="Movement risk" count={snap?.movement_risks?.length ?? 0} />
+        <ul className="list">
+          {snap?.movement_risks.slice(0, 6).map(r => (
+            <li key={r.id} className="row">
+              <span className={`sev ${r.severity}`}>{r.severity.slice(0, 3).toUpperCase()}</span>
+              <span className="name">{r.movement_name}</span>
+              <span className="meta dim">{r.graphic_name}</span>
+            </li>))}
+        </ul>
         <Question q="What is threatening us" count={`${snap?.threats.length ?? 0} · ${s?.real_threats ?? 0} live`} />
         <ul className="list">
           {snap?.threats.map(t => (
@@ -391,6 +422,7 @@ export default function App() {
             {s && <Tiles inline items={[
               { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
               { v: snap?.trips.filter(t => t.status === 'active').length ?? 0, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
+              { v: s.movement_risks ?? 0, l: 'RISK FLAGS', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
               { v: nextEvent ? `${nextEvent.name.split(' — ')[0]} · ${nextEvent.days_until}d` : '—', l: 'NEXT', hide: !nextEvent, onClick: () => nextEvent && setSel({ type: 'event', id: nextEvent.id }) },
               { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
             ]} />}</PanelHead>

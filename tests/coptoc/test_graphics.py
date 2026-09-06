@@ -23,11 +23,14 @@ def client():
 def test_the_brigade_has_its_control_measures_on_the_board(client):
     snap = client.get("/v1/cop/snapshot").json()
     g = snap["graphics"]
-    assert len(g) == 9 and {x["section"] for x in g} == {"S2", "S3", "S4", "S6"}
+    assert len(g) == 13 and {x["section"] for x in g} == {"S2", "S3", "S4", "S6"}
     msr = next(x for x in g if x["type"] == "msr")
     assert msr["kind"] == "line" and msr["label"].startswith("MSR") and msr["color"] and len(msr["geometry"]) == 5 and msr["subject_id"] == "evt_ftx"
     rng = next(x for x in g if x["type"] == "range")
     assert rng["kind"] == "polygon" and rng["in_window"] is False and rng["window_from"]   # hot only during the gunnery
+    threat = [x for x in g if x["threat_graphic"]]
+    assert {"danger_area", "ambush_site", "avenue_approach", "hostile_op"} == {x["type"] for x in threat}
+    assert all(x["confidence"] and x["basis"] for x in threat)
     assert all(len(x["center"]) == 2 for x in g)
     cat = client.get("/v1/cop/graphics/catalog").json()
     assert cat["profile"] == "military" and any(t["type"] == "acp" and t["label"].startswith("ACP") for t in cat["types"])

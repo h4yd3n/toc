@@ -4,6 +4,11 @@
 in this document is built unless it says so. The PRD stays the authority; the sections here are drafted so they can be
 lifted into PRD §5 as each phase lands.
 
+**Implementation pause, 2026-09-05:** Phase 1 implementation was paused at the user's request before code edits landed.
+Resume with a narrow Phase 1 pass only: shared Sigtoc object contract, actors, sightings, S2 threat graphics,
+SPOTREP/report disposition, S3 movement-risk flags, seed data, and read-only Cop Talk display. Do not start Phase 2/3
+collection-manager or IPB product work in the same pass unless explicitly asked.
+
 **Scope:** this is a cross-module plan, not a request to bury all of Sigtoc inside Cop Talk. Sigtoc is a separate
 module / sub-repo and remains the canonical home for intelligence objects and analyst workflow. Cop Talk gets the live
 S2 slice that belongs on the common operating picture: red actors, sightings, report pins, threat graphics, warning
@@ -166,6 +171,21 @@ ledger, one render path on all three clients) or a separate object.
 | **4** | LOE 4's graphic INTSUM; LOE 5 | Widening, not deepening |
 
 Phase 1 is roughly the size of the overlays work just finished. Phases 2 and 3 are each smaller than phase 1.
+
+### Resume checklist for Phase 1
+
+Keep the next implementation turn scoped to these files and behaviors unless the codebase forces a smaller detour:
+
+- Add `sigtoc.picture` models/helpers for `s2_actors` and `s2_sightings`, plus dataset seed rows.
+- Extend `s2_reports` with disposition fields and add Sigtoc endpoints for actor CRUD, sightings, and report
+  disposition: corroborate, link, promote, dismiss.
+- Extend the shared graphics contract with S2 threat graphic types plus `confidence` and `basis`.
+- Add snapshot fields for `s2_actors`, `s2_sightings`, `s2_reports`, and `movement_risks`.
+- Derive S3 movement risk from active movement legs crossing active S2 threat graphics; do not store this as a second
+  source of truth.
+- Show actors, report pins, threat graphics, and flagged routes in Cop Talk as a live slice only. Analyst editing and
+  disposition remain in Sigtoc.
+- Update focused backend tests first, then run the smallest relevant frontend build/typecheck.
 
 ## 6. Rules that hold throughout
 

@@ -34,6 +34,7 @@ contract — same endpoints, same shapes — so every client shares one backend 
   "summary": { "total_people": 97, "present": 92, "traveling": 5, "vips_traveling": 4, "security_on_shift": 7,
                "active_threats": 18, "real_threats": 12, "confirmed_links": 2, "checked_in_fresh": 1,
                "open_pirs": 4, "upcoming_events": 3, "open_incidents": 0, "unaccounted": 0, "posture": "elevated",
+               "s2_actors": 2, "s2_reports_pending": 1, "movement_risks": 3,
                "defcon": 3, "defcon_levels": [{"defcon": 5, "posture": "normal", "meaning": "…", "sites": 6}, ...] },
   "locations":   [ { "id", "name", "type",                       // hq | office | datacenter | residence | venue
                      "lat", "lon", "city", "country",
@@ -64,6 +65,16 @@ contract — same endpoints, same shapes — so every client shares one backend 
                      "synthetic",                                            // false = came from a live collector
                      "suggested_targets": [ { "target_type", "target_id", "target_name" } ],
                      "confirmed_links":   [ { "link_id", "target_type", "target_id", "target_name", "confirmed_by", "confirmed_at", "note" } ] } ],
+  "s2_actors":   [ { "id", "kind", "name", "aliases": [], "echelon", "strength", "equipment": [], "ttps": [],
+                     "assessed_intent", "status", "case_id", "owner", "lat", "lon", "place", "last_seen_at",
+                     "sighting_ids": [] } ],
+  "s2_sightings":[ { "id", "actor_id", "at", "lat", "lon", "place", "nai_id", "source_type", "source_id",
+                     "reliability", "credibility", "grade", "what", "confidence" } ],
+  "s2_reports":  [ { "id", "kind", "reported_by", "reporter_role", "at", "lat", "lon", "place", "text",
+                     "case_id", "grade", "source", "status", "disposition", "disposition_target_type",
+                     "disposition_target_id", "disposed_by", "disposed_at", "disposition_note" } ],
+  "movement_risks": [ { "id", "movement_id", "movement_name", "leg_label", "graphic_id", "graphic_name",
+                        "graphic_type", "confidence", "basis", "severity", "reason" } ],
   "pirs":        [ { "id", "question", "status", "owner", "priority", "subject_type", "subject_id", "created_at", "expires_at" } ],
   "assessments": [ { "id", "title", "subject_type", "subject_id",
                      "likelihood", "band",                                   // one of seven ICD 203 terms + its fixed band; "—" when refused
@@ -169,6 +180,11 @@ Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `re
 | :--- | :--- | :--- | :--- |
 | `POST` | `/s2/reports` | `text, kind (spot/sitrep/note), reported_by, reporter_role?, at?, lat?, lon?, place?, case_id?, credibility?` — roles security / ep / ea / analyst / battle_captain | a SPOTREP from our own people: `source: ops`, reliability A, credibility 2 by default. With `case_id`, extraction runs and the response carries `extracted {entities, relationships, events, evidence_added}`. Ledger `s2.report.filed` |
 | `GET` | `/s2/reports?case_id=` | | reports, newest first |
+| `POST` | `/s2/reports/{id}/dispose` | `action (corroborate/link/promote/dismiss), target_type?, target_id?, confidence?, graphic_type?, kind?, geometry?, name?, note?, basis?` — battle_captain / analyst | disposition is owned by Sigtoc. `link actor` creates a sighting; `link case` runs extraction; `promote` creates an S2 threat graphic; `dismiss` needs a reason. Ledger `s2.report.disposed` plus any created-object event |
+| `GET` / `POST` | `/s2/actors` | actor card fields: `kind, name, aliases[], echelon, strength, equipment[], ttps[], assessed_intent, status, case_id?, owner, lat?, lon?, place?, last_seen_at?` | Sigtoc source of truth for the red side; ledger `s2.actor.created` |
+| `GET` / `PATCH` | `/s2/actors/{id}` | same fields, partial on patch | detail includes `sightings[]`; ledger `s2.actor.updated` |
+| `GET` | `/s2/sightings?actor_id=` | | newest first |
+| `POST` | `/s2/actors/{id}/sightings` | `at?, lat, lon, place?, nai_id?, source_type, source_id?, reliability, credibility, what, confidence` | creates an observation and updates the actor's last known position when confirmed/probable. Ledger `s2.sighting.created` |
 | `GET` | `/s2/cases` | | only the cases the caller's role may read, with counts and `pending_review` |
 | `POST` | `/s2/cases` | `title, kind (general/person/site/actor), subject_type?, subject_id?, summary?` — roles battle_captain / analyst (Decision Q) | ledger `s2.case.opened` with `on_person` |
 | `GET` | `/s2/cases/{id}` | | the case, its graph (suggested + confirmed), its reports, and `analysis {links[], pattern}`. **Every read is on the ledger** (`s2.case.read`) |
@@ -178,7 +194,7 @@ Standing requirements write themselves: `req_loc_<site>`, `req_trip_<trip>`, `re
 | `GET` | `/s2/cases/{id}/views?entity_id=&confirmed_only=` | | data for the three views: `link_chart {nodes, edges[grade, status, dashed]}`, `timeline[]`, `time_wheel {grid 7×24, peak, pattern}` |
 | `PATCH` | `/s2/cases/{id}/close` | | ledger `s2.case.closed` |
 
-Extraction (Decision P) only suggests. Without `ANTHROPIC_API_KEY` it is a cited heuristic: capitalized names and initials, `@handles`, phone numbers, emails, plates after "plate"/"reg", and an `associate` link when two people share a sentence with an association word. With the key, the model (`TOC_MODEL`, default `claude-opus-5`) returns the same shape with an exact quote per item; anything without a quote is dropped. Every item's evidence carries the report's grade, so a relationship's `grade` is the best reliability and credibility among its citations.
+Extraction (Decision P) only suggests. Without `ANTHROPIC_API_KEY` it is a cited heuristic: capitalized names and initials, `@handles`, phone numbers, emails, plates after "plate"/"reg", and an `associate` link when two people share a sentence with an association word. With the key, the model (`TOC_MODEL`, default `claude-opus-5`) returns the same shape with an exact quote per item; anything without a quote is dropped. Every item's evidence carries the report's grade, so a relationship's `grade` is the best reliability and credibility among its citations. Reports now carry disposition fields; the wall may show pins/backlog, but only Sigtoc changes disposition.
 
 ## 3.4 Sigtoc — Area Assessment (`/v1/s2/area-assessments`, PRD §5.6, Decision I)
 

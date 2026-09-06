@@ -103,7 +103,7 @@ export const setProfile = (profile: 'military' | 'corporate') => req<{ profile: 
 export const me = () => req<Me>('GET', '/v1/cop/me')
 export const listUsers = () => req<{ users: UserInfo[]; presets: Record<string, { label: string; perms: Record<string, string>; battle_captain: boolean }>; sections: string[] }>('GET', '/v1/cop/users')
 export const createUser = (body: Partial<UserInfo>) => req<UserInfo>('POST', '/v1/cop/users', body)
-export const updateUser = (id: string, body: Partial<UserInfo> & { perms?: Record<string, string | null> }) => req<UserInfo>('PATCH', `/v1/cop/users/${id}`, body)
+export const updateUser = (id: string, body: Omit<Partial<UserInfo>, 'perms'> & { perms?: Record<string, string | null> }) => req<UserInfo>('PATCH', `/v1/cop/users/${id}`, body)
 export const deleteUser = (id: string) => req<{ id: string }>('DELETE', `/v1/cop/users/${id}`)
 export const signIn = (userId: string) => { session.userId = userId; try { localStorage.setItem('toc.user', userId) } catch { /* private mode */ } }
 
