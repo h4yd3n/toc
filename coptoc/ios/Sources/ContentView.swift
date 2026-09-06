@@ -17,7 +17,16 @@ struct ContentView: View {
                     default: SectionTab(section: "S6") { SignalScreen() }
                     }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }  // the map runs under the header; lists start below it
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    VStack(spacing: 0) {
+                        PostureTopBar()
+                        TacticalRuler(widthMiles: store.viewportWidthMiles, widthKm: store.viewportWidthKm)
+                        FlashStrip()
+                        if store.tab == "COP" {
+                            StatusOverlayCard()
+                        }
+                    }
+                }  // the map runs under the header; lists start below it
                 TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
             }
         }
@@ -38,18 +47,13 @@ struct ContentView: View {
     }
 }
 
-struct PostureBar: View {
+struct PostureTopBar: View {
     @Environment(COPStore.self) private var store
     @State private var pendingProfile: String? = nil
-    var body: some View { bar.alert("Switch profile?", isPresented: Binding(get: { pendingProfile != nil }, set: { if !$0 { pendingProfile = nil } })) {
-        Button("Switch", role: .destructive) { if let p = pendingProfile { store.act("switching to \(p)") { try await store.client.setProfile(p) }; pendingProfile = nil } }
-        Button("Cancel", role: .cancel) { pendingProfile = nil }
-    } message: { Text(pendingProfile == "military" ? "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." : "S1–S3 and the executive-protection sample. This reloads the sample data.") } }
-    @ViewBuilder var bar: some View {
+    var body: some View {
         let s = store.snapshot?.summary
         let posture = s?.posture ?? "normal"
-        VStack(spacing: 0) {
-            ZStack {
+        ZStack {
             Menu {
                 ForEach((s?.defconLevels ?? []).sorted { $0.defcon > $1.defcon }) { l in
                     Button { } label: { Label("DEFCON \(l.defcon) · \(l.posture.uppercased())" + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
@@ -87,14 +91,23 @@ struct PostureBar: View {
                     }
                 } label: { Image(systemName: "gearshape.fill").font(.system(size: 17)).foregroundStyle(Theme.dim).padding(6) }
             }
-            }
-            .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
-            .background(Theme.panel.opacity(0.88))   // the header: darker, less translucent
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
-            // §3 — the watch and the counters belong to the COP, where the picture has room for them. A section's
-            // sheet needs the height more than it needs a summary it is one tap away from.
-            if store.tab == "COP" {
-            VStack(spacing: 6) {
+        }
+        .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
+        .background(Theme.panel.opacity(0.88))   // the header: darker, less translucent
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
+        .alert("Switch profile?", isPresented: Binding(get: { pendingProfile != nil }, set: { if !$0 { pendingProfile = nil } })) {
+            Button("Switch", role: .destructive) { if let p = pendingProfile { store.act("switching to \(p)") { try await store.client.setProfile(p) }; pendingProfile = nil } }
+            Button("Cancel", role: .cancel) { pendingProfile = nil }
+        } message: { Text(pendingProfile == "military" ? "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." : "S1–S3 and the executive-protection sample. This reloads the sample data.") }
+    }
+    func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
+}
+
+struct StatusOverlayCard: View {
+    @Environment(COPStore.self) private var store
+    var body: some View {
+        let s = store.snapshot?.summary
+        VStack(spacing: 6) {
             if let w = store.snapshot?.watch {
                 HStack(spacing: 8) {
                     Text("\(w.name.uppercased()) WATCH").font(.system(size: 10, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.blue)
@@ -117,18 +130,13 @@ struct PostureBar: View {
                     }
                 }
             }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
-            .padding(.horizontal, 10).padding(.top, 8)
-            }
         }
-        .padding(.bottom, 6)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
+        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 4)
     }
     func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
-    func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
 }
 
 /// §5.6 — released warnings, red, under the header, with the reader's acknowledgement.

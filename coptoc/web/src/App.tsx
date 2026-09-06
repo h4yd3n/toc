@@ -116,6 +116,9 @@ export default function App() {
   const [overlay, setOverlay] = useState<Overlay>('COP')
   const [timeBack, setTimeBack] = useState<number | null>(null)
   const [scrub, setScrub] = useState<{ t: number; pinned: boolean } | null>(null)
+  const [overlayMenuOpen, setOverlayMenuOpen] = useState(false)
+  const [outlineOnly, setOutlineOnly] = useState<boolean>(() => { try { return localStorage.getItem('toc.map.outlineOnly') === 'true' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('toc.map.outlineOnly', String(outlineOnly)) } catch {} }, [outlineOnly])
   // §3.4 drawing a control measure: pick a type from the catalog, click points, double-click (or FINISH) to name it
   const [catalog, setCatalog] = useState<GraphicType[]>([])
   const [draw, setDraw] = useState<Draw | null>(null)
@@ -139,7 +142,7 @@ export default function App() {
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
   useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}); api.getCoverage().then(setCov).catch(() => {}) }, [briefReload])
-  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } if (e.key === 'Escape') { setDraw(null); setDrawMenu(false) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } if (e.key === 'Escape') { setDraw(null); setDrawMenu(false); setOverlayMenuOpen(false) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
@@ -238,13 +241,6 @@ export default function App() {
         ]} />}
         <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         {taskingsFor('S1')}
-        <div className="layer-toggles">
-          {(['locations', 'travelers', 'routes', 'threats', 'events'] as (keyof Layers)[]).map(k => (
-            <button key={k} className={`tog ${layers[k] ? 'on' : ''}`} onClick={() => toggle(k)}>{k}</button>))}
-          {sectionOn('S4') && <button className={`tog sec4 ${layers.s4 ? 'on' : ''}`} onClick={() => toggle('s4')} title="S4 health on every site">S4</button>}
-          {sectionOn('S6') && <button className={`tog sec6 ${layers.s6 ? 'on' : ''}`} onClick={() => toggle('s6')} title="S6 health on every site">S6</button>}
-          <button className={`tog restricted ${layers.residences ? (snap?.restricted_denied ? 'denied' : 'on') : ''}`} onClick={() => toggle('residences')} title={snap?.restricted_denied ? 'Restricted layer — your role is not cleared (Battle Captain / EP only)' : 'Restricted layer — off by default'}>⚿ residences{layers.residences && snap?.restricted_denied ? ' · DENIED' : ''}</button>
-        </div>
         {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
           <Question q="Who is not accounted for" count={snap.incidents.filter(i => i.status === 'open').length + ' open'} />
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
@@ -287,8 +283,8 @@ export default function App() {
         {travelers.length === 0 && <div className="dim small" style={{ padding: '2px 14px 8px' }}>Nobody is away.</div>}
       </aside>
 
-      <main className="center" onClick={() => setShowSettings(false)}>
-        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} />
+      <main className="center" onClick={() => { setShowSettings(false); setOverlayMenuOpen(false) }}>
+        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
         <div className="ovbar" onClick={e => e.stopPropagation()}>
           {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
           {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
@@ -299,6 +295,62 @@ export default function App() {
           </div>}
           {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
           {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
+          <span className="ovsep" />
+          <button className={`ov ov-layers-btn ${overlayMenuOpen ? 'on' : ''}`} title="Toggle map layers and display style" onClick={e => { e.stopPropagation(); setOverlayMenuOpen(v => !v); setDrawMenu(false) }}>
+            OVERLAYS ▾
+          </button>
+          {overlayMenuOpen && (
+            <div className="overlay-dropdown" onClick={e => e.stopPropagation()}>
+              <div className="ov-dd-head">
+                <span>MAP OVERLAYS</span>
+                <div className="ov-dd-quick">
+                  <button className="ov-dd-btn" onClick={() => setLayers({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: true, s6: true })}>ALL ON</button>
+                  <button className="ov-dd-btn" onClick={() => setLayers({ locations: false, travelers: false, threats: false, routes: false, events: false, residences: false, s4: false, s6: false })}>ALL OFF</button>
+                </div>
+              </div>
+              <div className="ov-dd-style">
+                <span className="ov-dd-style-label">THREAT RADII</span>
+                <div className="ov-dd-style-btns">
+                  <button className={`ov-dd-btn ${!outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(false)}>FILL + OUTLINE</button>
+                  <button className={`ov-dd-btn ${outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(true)}>OUTLINE ONLY</button>
+                </div>
+              </div>
+              <div className="ov-dd-list">
+                {([
+                  { key: 'locations', label: 'Sites & Units', icon: '◆', desc: 'HQ, CPs, FOBs, Airfields' },
+                  { key: 'travelers', label: 'Moving Personnel', icon: '●', desc: 'Personnel in transit & VIPs' },
+                  { key: 'routes', label: 'Routes & Convoys', icon: '↗', desc: 'Active & planned movement arcs' },
+                  { key: 'threats', label: 'Threats & Hazards', icon: '⚠', desc: 'Observed threats & danger radii' },
+                  { key: 'events', label: 'Operations & Events', icon: '★', desc: 'Key exercises, gunnery, meetings' },
+                  { key: 's4', label: 'S4 Logistics Status', icon: '▦', desc: 'Supply health chips on sites' },
+                  { key: 's6', label: 'S6 Signal & Comms', icon: '⚡', desc: 'PACE net & system health chips' },
+                  { key: 'residences', label: 'Restricted Residences', icon: '⚿', desc: 'Personal residences (gated)' },
+                ] as const).map(item => {
+                  if (item.key === 's4' && !sectionOn('S4')) return null
+                  if (item.key === 's6' && !sectionOn('S6')) return null
+                  const on = layers[item.key]
+                  const denied = item.key === 'residences' && snap?.restricted_denied
+                  return (
+                    <div
+                      key={item.key}
+                      className={`ov-dd-item ${on ? 'on' : 'off'} ${denied ? 'denied' : ''}`}
+                      onClick={() => {
+                        if (denied) return
+                        toggle(item.key)
+                      }}
+                    >
+                      <span className={`ov-dd-check ${on ? 'checked' : ''}`}>{on ? '✓' : ''}</span>
+                      <span className="ov-dd-icon">{item.icon}</span>
+                      <div className="ov-dd-info">
+                        <span className="ov-dd-name">{item.label}{denied ? ' · DENIED' : ''}</span>
+                        <span className="ov-dd-desc">{item.desc}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
         {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
         {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}

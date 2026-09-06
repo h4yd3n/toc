@@ -31,6 +31,18 @@ final class COPStore {
         guard let r, r.span.latitudeDelta > 0, r.span.latitudeDelta <= 180 else { return }
         UserDefaults.standard.set([r.center.latitude, r.center.longitude, r.span.latitudeDelta, r.span.longitudeDelta], forKey: boardKey)
     }
+
+    var viewportWidthKm: Double {
+        guard let b = board else { return 0 }
+        let lat = b.center.latitude
+        let metersPerDegLon = 111_319.5 * cos(lat * Double.pi / 180.0)
+        let meters = max(1.0, b.span.longitudeDelta * metersPerDegLon)
+        return meters / 1000.0
+    }
+
+    var viewportWidthMiles: Double {
+        viewportWidthKm * 0.621371
+    }
     var requirements: [Requirement] = []
     var intsums: [IntsumHead] = []
     var warnings: [Warning] = []
@@ -40,6 +52,13 @@ final class COPStore {
     var selection: Selection?
     /// Decision 1: the restricted layer (residences) is off by default.
     var showRestricted = false { didSet { Task { await load() } } }
+    // §3.4 Overlay toggles
+    var showSites: Bool = true
+    var showTravelers: Bool = true
+    var showRoutes: Bool = true
+    var showThreats: Bool = true
+    var showEvents: Bool = true
+    var outlineOnlyThreats: Bool = false
     var now = Date()
     /// DISPLAY toggles, the same two as the wall. Lean labels drop hints and empty estimate lines; the posture header
     /// leads with posture and keeps five counters. Both default on; persisted per device.

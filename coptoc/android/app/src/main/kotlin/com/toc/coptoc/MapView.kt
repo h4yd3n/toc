@@ -75,20 +75,39 @@ private object Board {
 
 /** The map at the center of the wall: sites by posture, travelers, events, threat rings by severity. Tap selects. */
 @Composable
-fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null) {
+fun WallMap(
+    st: WallState,
+    onSelect: (Selection) -> Unit,
+    modifier: Modifier = Modifier,
+    layer: String? = null,
+    onViewportChanged: ((Double, Double) -> Unit)? = null
+) {
     val latestLayer = remember { arrayOfNulls<String>(1) }; latestLayer[0] = layer
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context) }
     val mapHolder = remember { arrayOfNulls<MapLibreMap>(1) }
-    val latest = remember { arrayOfNulls<Snapshot>(1) }
-    val latestRestricted = remember { booleanArrayOf(restricted) }
+    val latestState = remember { arrayOf(st) }
     DisposableEffect(lifecycle) {
         val obs = LifecycleEventObserver { _, e -> when (e) {
             Lifecycle.Event.ON_CREATE -> mapView.onCreate(null); Lifecycle.Event.ON_START -> mapView.onStart(); Lifecycle.Event.ON_RESUME -> mapView.onResume()
             Lifecycle.Event.ON_PAUSE -> mapView.onPause(); Lifecycle.Event.ON_STOP -> mapView.onStop(); Lifecycle.Event.ON_DESTROY -> mapView.onDestroy(); else -> {} } }
         lifecycle.addObserver(obs)
         onDispose { lifecycle.removeObserver(obs) }
+    }
+    fun updateScale(map: MapLibreMap) {
+        val h = mapView.height.toFloat()
+        val w = mapView.width.toFloat()
+        if (w > 0 && h > 0) {
+            val pLeft = map.projection.fromScreenLocation(android.graphics.PointF(0f, h / 2f))
+            val pRight = map.projection.fromScreenLocation(android.graphics.PointF(w, h / 2f))
+            if (pLeft != null && pRight != null) {
+                val meters = pLeft.distanceTo(pRight)
+                val miles = meters / 1609.344
+                val km = meters / 1000.0
+                onViewportChanged?.invoke(miles, km)
+            }
+        }
     }
     AndroidView(factory = {
         mapView.onCreate(null)
@@ -101,6 +120,10 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
             map.addOnCameraIdleListener {
                 Board.position = map.cameraPosition
                 if (Board.framed) Board.save(context, map.cameraPosition)
+                updateScale(map)
+            }
+            map.addOnCameraMoveListener {
+                updateScale(map)
             }
             map.uiSettings.isAttributionEnabled = true; map.uiSettings.isLogoEnabled = false
             map.setStyle(Style.Builder().fromUri(STYLE_URL)) { style ->
@@ -120,14 +143,15 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
                 style.addLayer(LineLayer("move-lines-dashed", "moves").withFilter(eq(get("dashed"), literal(true))).withProperties(lineColor(get("color")), lineWidth(get("lw")), lineOpacity(get("lo")), lineDasharray(arrayOf(3f, 3f))))
                 style.addLayer(CircleLayer("threat-rings", "threats").withProperties(
                     circleRadius(interpolate(exponential(2f), zoom(), stop(0, 2f), stop(6, 12f), stop(10, 40f))),
-                    circleColor(get("color")), circleOpacity(product(literal(0.12f), get("alpha"))), circleStrokeColor(get("color")), circleStrokeWidth(1.2f), circleStrokeOpacity(product(literal(0.8f), get("alpha")))))
+                    circleColor(get("color")), circleOpacity(get("fillAlpha")), circleStrokeColor(get("color")), circleStrokeWidth(1.2f), circleStrokeOpacity(product(literal(0.8f), get("alpha")))))
                 style.addLayer(CircleLayer("blue-dots", "blue").withProperties(
                     circleRadius(switchCase(eq(get("kind"), literal("site")), literal(7f), eq(get("kind"), literal("head")), literal(6f), eq(get("kind"), literal("graphic")), literal(3.5f), literal(5f))),
                     circleColor(get("color")), circleOpacity(get("alpha")), circleStrokeColor(literal("#0b0f14")), circleStrokeWidth(1.5f), circleStrokeOpacity(get("alpha"))))
                 style.addLayer(SymbolLayer("blue-labels", "blue").withProperties(
                     textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textOpacity(get("alpha")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
                     textOffset(arrayOf(0f, 1.3f)), textAllowOverlap(false), textOptional(true)))
-                applySnapshot(style, latest[0], latestRestricted[0], latestLayer[0])  // the first snapshot usually arrives before the style does
+                applySnapshot(style, latestState[0], latestLayer[0])  // the first snapshot usually arrives before the style does
+                mapView.post { updateScale(map) }
                 map.addOnMapClickListener { p ->
                     val pt = map.projection.toScreenLocation(p)
                     val rect = android.graphics.RectF(pt.x - 24, pt.y - 24, pt.x + 24, pt.y + 24)
@@ -142,13 +166,18 @@ fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit,
         }
         mapView
     }, modifier = modifier, update = {
-        latest[0] = snap; latestRestricted[0] = restricted
+        latestState[0] = st
         mapHolder[0]?.let { map ->
-            frameOpening(map, snap)
-            map.style?.let { applySnapshot(it, snap, restricted, layer) }
+            frameOpening(map, st.snap)
+            map.style?.let { applySnapshot(it, st, layer) }
+            updateScale(map)
         }
     })
 }
+
+@Composable
+fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null, onViewportChanged: ((Double, Double) -> Unit)? = null) =
+    WallMap(WallState(snap = snap, restricted = restricted), onSelect, modifier, layer, onViewportChanged)
 
 /** Frame the AO the Battle Captain declared, or the box that holds our sites. Once per process. */
 private fun frameOpening(map: MapLibreMap, snap: Snapshot?) {
@@ -164,37 +193,57 @@ private fun frameOpening(map: MapLibreMap, snap: Snapshot?) {
     Board.position = map.cameraPosition
 }
 
-private fun applySnapshot(style: Style, s: Snapshot?, restricted: Boolean, layer: String? = null) = try {
-    applySnapshotInner(style, s, restricted, layer)
+private fun applySnapshot(style: Style, st: WallState, layer: String? = null) = try {
+    applySnapshotInner(style, st, layer)
 } catch (e: Exception) { android.util.Log.e("WallMap", "applySnapshot failed", e) }
 
-private fun applySnapshotInner(style: Style, s: Snapshot?, restricted: Boolean, layer: String? = null) {
-    s ?: return
+private fun applySnapshotInner(style: Style, st: WallState, layer: String? = null) {
+    val s = st.snap ?: return
+    val restricted = st.restricted
+    val showSitesLayer = st.showSites
+    val showTravelersLayer = st.showTravelers
+    val showRoutesLayer = st.showRoutes
+    val showThreatsLayer = st.showThreats
+    val showEventsLayer = st.showEvents
+    val outlineOnlyThreats = st.outlineOnlyThreats
+
     // §3 the map-first sections: a section's layer shows only what that section owns; S4 / S6 color every site by its health
-    val showThreats = layer == null || layer == "S2"; val showTravelers = layer == null || layer == "S1" || layer == "S3"; val showEvents = layer == null || layer == "S3"
+    val sectionShowThreats = layer == null || layer == "S2"; val sectionShowTravelers = layer == null || layer == "S1" || layer == "S3"; val sectionShowEvents = layer == null || layer == "S3"
     fun siteColor(l: Site): String { val h = when (layer) { "S4" -> l.s4Status; "S6" -> l.s6Status; else -> null }; return if (h != null) hex(healthColor(h)) else hex(Palette.posture(l.effectivePosture)) }
     fun siteLabel(l: Site): String = when (layer) { "S4" -> l.s4Status?.let { "${l.name} · S4 ${it.uppercase()}" + (if (l.s4Red > 0) " (${l.s4Red})" else "") } ?: l.name
         "S6" -> l.s6Status?.let { "${l.name} · S6 ${it.uppercase()}" + (l.s6InUse?.let { n -> " · on ${n.uppercase()}" } ?: "") } ?: l.name; else -> l.name }
     // §3.4 dim, do not hide: the section's own things at full strength, the rest at a third
-    val tA = if (showThreats) 1.0 else 0.3; val pA = if (showTravelers) 1.0 else 0.3; val eA = if (showEvents) 1.0 else 0.3
+    val tA = if (sectionShowThreats) 1.0 else 0.3; val pA = if (sectionShowTravelers) 1.0 else 0.3; val eA = if (sectionShowEvents) 1.0 else 0.3
     val mA = if (layer == null || layer == "S3") 1.0 else if (layer == "S4") 0.6 else 0.3
-    val threats = s.threats.map { t -> feature(t.lon, t.lat, "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm, "alpha" to tA) }
+
+    val threats = if (!showThreatsLayer) emptyList() else s.threats.map { t ->
+        feature(t.lon, t.lat,
+            "id" to t.id, "kind" to "threat", "color" to hex(Palette.severity(t.severity)), "radius" to t.radiusKm,
+            "alpha" to tA, "fillAlpha" to (if (outlineOnlyThreats) 0.0f else (0.12f * tA.toFloat())))
+    }
     val s2Label = { l: Site -> l.area?.let { a -> "${l.name} · rated ${a.worst.uppercase()}" } ?: l.name }
-    val blue = s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l -> feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to (if (layer == "S2") s2Label(l) else siteLabel(l)), "color" to (if (layer == "S2" && l.area != null && l.area.worst != "unknown") hex(healthColor(l.area.worst)) else siteColor(l)), "alpha" to 1.0) } +
-            s.people.filter { it.status == "traveling" }.map { p -> feature(p.lon, p.lat, "id" to p.id, "kind" to "traveler", "label" to (p.shortName ?: p.name.split(" ").first()), "color" to hex(if (p.isVip) Palette.amber else Palette.blue2), "alpha" to pA) } +
-            s.events.map { e -> feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple), "alpha" to eA) } +
-            // the head of every group movement — the unit or delegation and its count, the shipment and its ETA
-            s.movements.filter { it.kind != "individual" }.mapNotNull { mv ->
-                val c = if (mv.headLat != null && mv.headLon != null) mv.headLon to mv.headLat else mv.legs.firstOrNull()?.let { lg -> if (lg.fromLat != null && lg.fromLon != null) ((lg.fromLon + lg.toLon) / 2) to ((lg.fromLat + lg.toLat) / 2) else null }
-                c?.let { (lon, lat) -> feature(lon, lat, "id" to (mv.personIds.firstOrNull() ?: mv.id), "kind" to (if (mv.personIds.isEmpty()) "head" else "traveler"),
-                    "label" to (if (mv.kind == "shipment") "${mv.name.substringBefore(" → ")} · ETA ${Math.round(mv.hoursToEta ?: 0.0)}h" else "${mv.unit ?: mv.name.substringBefore(" · ")} · ${mv.pax} pax"),
-                    "color" to hex(if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else Palette.purple), "alpha" to mA) }
-            }
+    val sites = if (!showSitesLayer) emptyList() else s.locations.filter { restricted || it.sensitivity != "restricted" }.map { l ->
+        feature(l.lon, l.lat, "id" to l.id, "kind" to "site", "label" to (if (layer == "S2") s2Label(l) else siteLabel(l)), "color" to (if (layer == "S2" && l.area != null && l.area.worst != "unknown") hex(healthColor(l.area.worst)) else siteColor(l)), "alpha" to 1.0)
+    }
+    val travelers = if (!showTravelersLayer) emptyList() else s.people.filter { it.status == "traveling" }.map { p ->
+        feature(p.lon, p.lat, "id" to p.id, "kind" to "traveler", "label" to (p.shortName ?: p.name.split(" ").first()), "color" to hex(if (p.isVip) Palette.amber else Palette.blue2), "alpha" to pA)
+    }
+    val events = if (!showEventsLayer) emptyList() else s.events.map { e ->
+        feature(e.venueLon, e.venueLat, "id" to e.id, "kind" to "event", "label" to e.name, "color" to hex(Palette.purple), "alpha" to eA)
+    }
+    val movementHeads = if (!showRoutesLayer) emptyList() else s.movements.filter { it.kind != "individual" }.mapNotNull { mv ->
+        val c = if (mv.headLat != null && mv.headLon != null) mv.headLon to mv.headLat else mv.legs.firstOrNull()?.let { lg -> if (lg.fromLat != null && lg.fromLon != null) ((lg.fromLon + lg.toLon) / 2) to ((lg.fromLat + lg.toLat) / 2) else null }
+        c?.let { (lon, lat) -> feature(lon, lat, "id" to (mv.personIds.firstOrNull() ?: mv.id), "kind" to (if (mv.personIds.isEmpty()) "head" else "traveler"),
+            "label" to (if (mv.kind == "shipment") "${mv.name.substringBefore(" → ")} · ETA ${Math.round(mv.hoursToEta ?: 0.0)}h" else "${mv.unit ?: mv.name.substringBefore(" · ")} · ${mv.pax} pax"),
+            "color" to hex(if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else Palette.purple), "alpha" to mA) }
+    }
+    val blue = sites + travelers + events + movementHeads
+
     // §3.4 S2: every active requirement as a named area, colored by how well it is collected; only on the S2 tab
-    val nais = if (layer != "S2") emptyList() else s.nais.map { n -> Feature.fromGeometry(Polygon.fromLngLats(listOf(ring(n.lat, n.lon, n.radiusKm)))).also { f ->
+    val nais = if (layer != "S2" || !showThreatsLayer) emptyList() else s.nais.map { n -> Feature.fromGeometry(Polygon.fromLngLats(listOf(ring(n.lat, n.lon, n.radiusKm)))).also { f ->
         f.addStringProperty("id", n.id); f.addStringProperty("color", hex(healthColor(n.health))); f.addNumberProperty("fo", if (n.priority == 1) 0.10 else 0.05); f.addNumberProperty("lo", if (n.priority == 1) 0.9 else 0.55); f.addNumberProperty("lw", if (n.priority == 1) 1.8 else 1.0) } }
     // §3.4 S3: movements leg by leg — a shipment dashed orange, a planned leg dashed, the current leg bold
-    val moves = s.movements.flatMap { mv -> mv.legs.filter { it.fromLat != null && it.fromLon != null && it.kind != "lodging" }.map { lg ->
+    val moves = if (!showRoutesLayer) emptyList() else s.movements.flatMap { mv -> mv.legs.filter { it.fromLat != null && it.fromLon != null && it.kind != "lodging" }.map { lg ->
         val color = if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else if (mv.status == "active") Palette.blue2 else Palette.dim
         Feature.fromGeometry(LineString.fromLngLats(listOf(Point.fromLngLat(lg.fromLon!!, lg.fromLat!!), Point.fromLngLat(lg.toLon, lg.toLat)))).also { f ->
             f.addStringProperty("id", mv.id); f.addStringProperty("color", hex(color)); f.addNumberProperty("lw", if (lg.status == "current") (if (mv.pax >= 3) 3.0 else 2.2) else 1.4)

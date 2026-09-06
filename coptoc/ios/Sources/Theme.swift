@@ -3,6 +3,7 @@ import SwiftUI
 enum Theme {
     static let bg = Color(red: 0.03, green: 0.04, blue: 0.06)
     static let panel = Color(red: 0.05, green: 0.07, blue: 0.10)
+    static let panel2 = Color(red: 0.08, green: 0.11, blue: 0.15)
     static let line = Color(red: 0.11, green: 0.15, blue: 0.21)
     static let dim = Color(red: 0.42, green: 0.49, blue: 0.56)
     static let blue = Color(red: 0.38, green: 0.65, blue: 0.98)

@@ -44,6 +44,8 @@ interface Props {
   draw: Draw | null
   onDrawPoint: (p: [number, number]) => void
   onDrawFinish: () => void
+  /** S2/COP declutter: show threat circles as outlines only rather than filled rings. */
+  outlineOnly?: boolean
 }
 const HOUR = 36e5
 // how far the other sections' things fade under each overlay: an overlay sits on the base, the base stays
@@ -53,15 +55,15 @@ const ageFactor = (iso: string, now: number) => { const d = (now - +new Date(iso
 const HEALTH_COLOR: Record<string, string> = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' }
 const RATING_LETTER: Record<string, string> = { green: 'G', amber: 'A', red: 'R', unknown: '?' }
 
-export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish }: Props) {
+export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
   const framed = useRef(savedBoard() != null)   // applied once, and never over a board this browser remembers
   const waiting = useRef(false)                // an opening frame queued against a style that has not landed yet
-  const propsRef = useRef({ snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish })
-  propsRef.current = { snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish }
+  const propsRef = useRef({ snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly })
+  propsRef.current = { snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly }
 
   // ---- init ----
   useEffect(() => {
@@ -141,7 +143,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
 
   // ---- data layers ----
   function renderData(m: MLMap) {
-    const { snapshot, layers, overlay, timeBack, scrub } = propsRef.current
+    const { snapshot, layers, overlay, timeBack, scrub, outlineOnly } = propsRef.current
     if (!snapshot || !m.getSource('threats')) return
     const now = Date.now()
     const s2 = overlay === 'S2', s3 = overlay === 'S3', cop = overlay === 'COP'
@@ -150,7 +152,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     const threats = m.getSource('threats') as maplibregl.GeoJSONSource
     const tWeight = cop || s2 ? 1 : DIM
     threats.setData({ type: 'FeatureCollection', features: layers.threats ? snapshot.threats.filter(t => cut == null || +new Date(t.observed_at) >= cut).map(t => { const a = ageFactor(t.observed_at, now) * tWeight; return {
-      type: 'Feature', properties: { id: t.id, color: SEV_COLOR[t.severity], fo: 0.06 + 0.16 * a, lo: 0.3 + 0.65 * a, confirmed: t.confirmed_links.length > 0 },
+      type: 'Feature', properties: { id: t.id, color: SEV_COLOR[t.severity], fo: outlineOnly ? 0 : 0.06 + 0.16 * a, lo: 0.3 + 0.65 * a, confirmed: t.confirmed_links.length > 0 },
       geometry: { type: 'Polygon', coordinates: [circle(t.lat, t.lon, t.radius_km)] },
     } }) : [] })
     // confirmed and suggested links, threat → site or person, on the S2 overlay
@@ -205,7 +207,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       }))
     }) : [] })
   }
-  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers, overlay, timeBack, scrub, draw, selection])
+  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers, overlay, timeBack, scrub, draw, selection, outlineOnly])
 
   // ---- markers with screen-space clustering ----
   function renderMarkers(m: MLMap) {
