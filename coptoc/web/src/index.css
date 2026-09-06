@@ -14,8 +14,11 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .dim { color: var(--dim); }
 
 /* ---- wall grid ---- */
-.wall { height: 100vh; display: grid; grid-template-columns: 46px 1fr 46px; grid-template-rows: 54px 1fr 176px;
+.wall { height: 100vh; display: grid; grid-template-columns: 46px 1fr 46px; grid-template-rows: 54px 1fr 186px;
   grid-template-areas: "top top top" "left center right" "bottom bottom bottom"; gap: 1px; background: var(--line); }
+.wall.bottom-closed, .wall.has-flash.bottom-closed { grid-template-rows: 54px auto 1fr 0px !important; }
+.bottom.closed { display: none !important; }
+.oplog.solo { flex: 1; width: 100%; border-left: 0; }
 .top { grid-area: top; } .left { grid-area: left; } .center { grid-area: center; } .right { grid-area: right; } .bottom { grid-area: bottom; }
 .left, .right, .top, .bottom { background: var(--panel); overflow: hidden; min-width: 0; min-height: 0; }
 .left, .right { overflow-y: auto; padding-bottom: 12px; }
@@ -415,15 +418,32 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .mk-site.posture-guarded { background: #a3e635; } .mk-site.posture-high { background: var(--orange); }
 
 /* S3 as time: the strip */
-.tl { position: relative; margin: 0 14px 8px; user-select: none; }
+.tl-container { display: flex; flex-direction: column; width: 100%; min-width: 0; }
+.tl-nav { display: flex; align-items: center; justify-content: space-between; padding: 2px 14px 4px; gap: 8px; border-bottom: 1px solid var(--line); }
+.tl-nav-group { display: flex; align-items: center; gap: 4px; }
+.tl-nav-scroll { display: flex; align-items: center; gap: 6px; }
+.tl-btn { font: 800 9px var(--mono); letter-spacing: .08em; color: var(--dim); padding: 2px 6px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel-2); cursor: pointer; }
+.tl-btn:hover { color: var(--text); border-color: var(--dim); }
+.tl-btn.now { color: var(--red); border-color: rgba(239,68,68,.4); background: rgba(239,68,68,.1); }
+.tl-btn.arr { font-size: 10px; padding: 2px 8px; color: var(--blue-2); border-color: rgba(96,165,250,.35); background: rgba(59,130,246,.1); }
+.tl-btn.arr:hover { color: #fff; background: var(--blue); }
+.tl-hint { font: 8px var(--mono); letter-spacing: .12em; }
+.tl-scroll { position: relative; overflow-x: auto; overflow-y: hidden; user-select: none; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; padding: 0 14px 6px; }
+.tl-scroll::-webkit-scrollbar { height: 6px; }
+.tl-scroll::-webkit-scrollbar-track { background: transparent; }
+.tl-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+.tl-scroll::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+.tl { position: relative; user-select: none; }
 .tl-axis { position: relative; height: 18px; border-bottom: 1px solid var(--line-2); }
 .tl-tick { position: absolute; bottom: 0; height: 4px; border-left: 1px solid var(--line-2); } .tl-tick.major { height: 7px; border-left-color: var(--dim); }
 .tl-tick span { position: absolute; bottom: 8px; left: 3px; font: 9px var(--mono); letter-spacing: .06em; color: var(--dim); white-space: nowrap; }
 .tl-now { position: absolute; top: 0; bottom: -100px; border-left: 2px solid var(--red); z-index: 3; pointer-events: none; } .tl-now span { position: absolute; top: -1px; left: 4px; font: 800 8.5px var(--mono); letter-spacing: .14em; color: var(--red); }
+.tl-near { position: absolute; top: 0; bottom: -100px; border-left: 1px dashed var(--line-2); z-index: 3; pointer-events: none; } .tl-near span { position: absolute; top: -1px; left: 3px; font: 8.5px var(--mono); letter-spacing: .08em; color: var(--dim); }
 .tl-horizon { position: absolute; top: 0; right: 0; } .tl-horizon span { font: 8.5px var(--mono); letter-spacing: .08em; color: var(--dim); }
 .tl-body { position: relative; overflow-x: hidden; overflow-y: auto; max-height: 112px; }
 .tl-watch { position: absolute; top: 0; bottom: 0; background: rgba(59,130,246,.07); border-right: 1px dashed rgba(96,165,250,.4); }
 .tl-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid rgba(38,52,69,.5); }
+.tl-grid.major { border-left-color: rgba(96,165,250,.25); }
 .tl-sep { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line-2); }
 .tl-span { position: absolute; height: 16px; border-radius: 3px; display: flex; align-items: center; gap: 6px; padding: 0 6px; overflow: hidden; white-space: nowrap; cursor: pointer; font-size: 10.5px; border: 1px solid transparent; box-sizing: border-box; }
 .tl-span.started { border-top-left-radius: 0; border-bottom-left-radius: 0; }

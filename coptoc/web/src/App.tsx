@@ -68,7 +68,9 @@ export default function App() {
   const [addSite, setAddSite] = useState(false)
   const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
-  useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
+  const [s3Open, setS3Open] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.s3') !== 'closed' } catch { return true } })
+  const [logOpen, setLogOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.log') !== 'closed' } catch { return true } })
+  useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? ''); localStorage.setItem('toc.panel.s3', s3Open ? 'open' : 'closed'); localStorage.setItem('toc.panel.log', logOpen ? 'open' : 'closed') } catch { /* private mode */ } }, [leftOpen, rightPanel, s3Open, logOpen])
   const toggleRight = (p: Exclude<RightPanel, null>) => { const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true }))
     setOverlay(next === 'right' ? 'S2' : next === 's4' ? 'S4' : next === 's6' ? 'S6' : 'COP') }
   const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
@@ -76,7 +78,7 @@ export default function App() {
   const jump = (section: 'S1' | 'S2' | 'S3') => {  // a header counter opens its section
     if (section === 'S1') setLeftOpen(true)
     else if (section === 'S2') setRightPanel('right')
-    else { setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
+    else { setS3Open(true); setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
   }
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
@@ -167,7 +169,7 @@ export default function App() {
   const nextEvent = snap?.events.find(e => e.status === 'upcoming')
 
   return (
-    <div className={`wall ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${!s3Open && !logOpen ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
@@ -215,12 +217,14 @@ export default function App() {
 
       <nav className="rail rail-left">
         {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
+        {sectionOn('S3') && <button className={`rail-btn ${s3Open ? 'on' : ''}`} onClick={() => { setS3Open(v => !v); if (!s3Open) setOverlay('S3') }} title={`${sectionCode('S3')} ${sectionTitle('S3', 'OPERATIONS')}`}>{sectionLabel('S3')}{s && ((s.movement_risks ?? 0) > 0 ? badge(s.movement_risks, 'red', 'movement risks') : inbox('S3') ? badge(inbox('S3'), 'amber', 'taskings S3 owes') : badge(s.upcoming_events, 'dim', 'upcoming events'))}</button>}
         {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
         {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
         {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
         {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
+        <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => setLogOpen(v => !v)} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
       </nav>
       <aside className={`left ${leftOpen ? 'open' : ''}`}>
         <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>{can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
@@ -416,32 +420,36 @@ export default function App() {
         <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
       </aside>
 
-      <footer className="bottom">
-        <div className="s3">
-          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button>
-            {s && <Tiles inline items={[
-              { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
-              { v: snap?.trips.filter(t => t.status === 'active').length ?? 0, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
-              { v: s.movement_risks ?? 0, l: 'RISK FLAGS', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
-              { v: nextEvent ? `${nextEvent.name.split(' — ')[0]} · ${nextEvent.days_until}d` : '—', l: 'NEXT', hide: !nextEvent, onClick: () => nextEvent && setSel({ type: 'event', id: nextEvent.id }) },
-              { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
-            ]} />}</PanelHead>
-          {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-          {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
-          <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
-          <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
-        </div>
-        <div className="oplog">
-          <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />
-          <ul className="logs">
-            {snap?.log.map(e => (
-              <li key={e.id} className={`log ${e.actor_type}`}>
-                <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
-                <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
-              </li>))}
-            {snap && snap.log.length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
-          </ul>
-        </div>
+      <footer className={`bottom ${!s3Open && !logOpen ? 'closed' : ''}`}>
+        {s3Open && (
+          <div className="s3">
+            <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button>
+              {s && <Tiles inline items={[
+                { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
+                { v: snap?.trips.filter(t => t.status === 'active').length ?? 0, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
+                { v: s.movement_risks ?? 0, l: 'RISK FLAGS', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
+                { v: nextEvent ? `${nextEvent.name.split(' — ')[0]} · ${nextEvent.days_until}d` : '—', l: 'NEXT', hide: !nextEvent, onClick: () => nextEvent && setSel({ type: 'event', id: nextEvent.id }) },
+                { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
+              ]} />}</PanelHead>
+            {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+            {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
+            <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
+            <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
+          </div>
+        )}
+        {logOpen && (
+          <div className={`oplog ${!s3Open ? 'solo' : ''}`}>
+            <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />
+            <ul className="logs">
+              {snap?.log.map(e => (
+                <li key={e.id} className={`log ${e.actor_type}`}>
+                  <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
+                  <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
+                </li>))}
+              {snap && snap.log.length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
+            </ul>
+          </div>
+        )}
       </footer>
     </div>
   )
