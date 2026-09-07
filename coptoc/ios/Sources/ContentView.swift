@@ -60,12 +60,11 @@ struct ContentView: View {
                         .padding(.top, rulerBottom + 6)
                         .padding(.trailing, 12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .ignoresSafeArea(edges: .top)
                 }
             }
             .coordinateSpace(name: "contentRoot")
-            .ignoresSafeArea(edges: .top)
         }
-        .ignoresSafeArea(edges: .top)
         .onPreferenceChange(RulerBottomPreferenceKey.self) { rulerBottom = $0 }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
