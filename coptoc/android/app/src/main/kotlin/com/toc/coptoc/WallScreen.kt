@@ -69,10 +69,10 @@ fun TabletWall(st: WallState, store: Store) {
             Panel(Modifier.width(if (wide) 260.dp else 210.dp).fillMaxHeight()) { S1Panel(st, store) }
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
-                st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
-                st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
                 TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopCenter))
                 TacticalRulerVertical(miles = st.viewportHeightMiles, km = st.viewportHeightKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopEnd).padding(top = 20.dp))
+                st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+                st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
                 var overlayOpen by remember { mutableStateOf(false) }
                 if (overlayOpen) {
                     Box(Modifier.fillMaxSize().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { overlayOpen = false })
@@ -372,6 +372,14 @@ fun PhoneScreen(st: WallState, store: Store) {
                 when (tab) {
                     Tab.COP -> {
                         WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
+                        TacticalRulerVertical(
+                            miles = st.viewportHeightMiles,
+                            km = st.viewportHeightKm,
+                            unit = st.distanceUnit,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
+                        )
                         if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
                     Tab.S1 -> SectionTab(st, store, "S1", headerPx) { S1Panel(st, store) }
@@ -399,15 +407,6 @@ fun PhoneScreen(st: WallState, store: Store) {
                 StatusOverlayCard(st, store, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
             }
         }
-        // Vertical Tactical Edge Ruler on right side of screen
-        TacticalRulerVertical(
-            miles = st.viewportHeightMiles,
-            km = st.viewportHeightKm,
-            unit = st.distanceUnit,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
-        )
         if (overlayOpen) {
             Box(
                 Modifier
@@ -781,9 +780,18 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
 @Composable
 fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, content: @Composable ColumnScope.() -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
         // The map is composed here and not again while the sheet moves. It used to share a scope with the drag
         // state, so every frame of a drag re-ran the map's update block and rebuilt every feature on it.
         WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section, onViewportChanged = store::setViewportDimensions)
+        TacticalRulerVertical(
+            miles = st.viewportHeightMiles,
+            km = st.viewportHeightKm,
+            unit = st.distanceUnit,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
+        )
         SectionSheet(headerPx, section, content)
     }
 }

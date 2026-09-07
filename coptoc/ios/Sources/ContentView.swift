@@ -10,12 +10,21 @@ struct ContentView: View {
             ZStack(alignment: .bottom) {
                 Group {
                     switch store.tab {
-                    case "COP": MapScreen()
-                    case "S1": SectionTab(section: "S1") { PersonnelScreen() }
-                    case "S2": SectionTab(section: "S2") { IntelScreen() }
-                    case "S3": SectionTab(section: "S3") { OpsScreen() }
-                    case "S4": SectionTab(section: "S4") { LogisticsScreen() }
-                    default: SectionTab(section: "S6") { SignalScreen() }
+                    case "COP":
+                        ZStack(alignment: .topTrailing) {
+                            MapScreen()
+                            if rulerBottom > 0 {
+                                TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
+                                    .padding(.top, rulerBottom)
+                                    .padding(.bottom, 80)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    case "S1": SectionTab(section: "S1", rulerBottom: rulerBottom) { PersonnelScreen() }
+                    case "S2": SectionTab(section: "S2", rulerBottom: rulerBottom) { IntelScreen() }
+                    case "S3": SectionTab(section: "S3", rulerBottom: rulerBottom) { OpsScreen() }
+                    case "S4": SectionTab(section: "S4", rulerBottom: rulerBottom) { LogisticsScreen() }
+                    default: SectionTab(section: "S6", rulerBottom: rulerBottom) { SignalScreen() }
                     }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 .safeAreaInset(edge: .top, spacing: 0) {
@@ -34,13 +43,6 @@ struct ContentView: View {
                 TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
             }
             .coordinateSpace(name: "contentRoot")
-            .overlay(alignment: .topTrailing) {
-                if rulerBottom > 0 {
-                    TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
-                        .padding(.top, rulerBottom)
-                        .padding(.bottom, 80)
-                }
-            }
         }
         .onPreferenceChange(RulerBottomPreferenceKey.self) { rulerBottom = $0 }
         .sheet(item: $store.selection) { sel in

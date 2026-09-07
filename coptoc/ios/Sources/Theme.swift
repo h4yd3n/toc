@@ -79,7 +79,9 @@ extension View {
 
 /// §3 the map-first sections: the picture behind, the section's list on a sheet with three rests — peek, half, full.
 struct SectionTab<Content: View>: View {
+    @Environment(COPStore.self) private var store
     var section: String
+    var rulerBottom: CGFloat = 0
     @ViewBuilder var content: () -> Content
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -87,6 +89,13 @@ struct SectionTab<Content: View>: View {
             // drag state, so every frame of a drag rebuilt a MapKit view carrying every site, traveller, route and
             // threat ring — which is what made a slow drag crawl.
             MapScreen(layer: section)
+            if rulerBottom > 0 {
+                TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, rulerBottom)
+                    .padding(.bottom, 80)
+                    .allowsHitTesting(false)
+            }
             SectionSheet(section: section, content: content())
         }
     }
