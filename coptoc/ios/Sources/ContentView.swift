@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(COPStore.self) private var store
     @State private var rulerBottom: CGFloat = 0
+    @State private var showOverlayMenu = false
 
     var body: some View {
         @Bindable var store = store
@@ -43,6 +44,23 @@ struct ContentView: View {
                     }
                 }  // the map runs under the header; lists start below it
                 TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
+
+                // Tap background to dismiss overlay menu when open
+                if showOverlayMenu {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.snappy(duration: 0.18)) { showOverlayMenu = false }
+                        }
+                }
+
+                // Floating layers icon button & dropdown menu on ALL tabs
+                if rulerBottom > 0 {
+                    OverlayMenu(open: $showOverlayMenu)
+                        .padding(.top, rulerBottom + 6)
+                        .padding(.trailing, 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
             }
             .coordinateSpace(name: "contentRoot")
         }
@@ -160,7 +178,7 @@ struct StatusOverlayCard: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
-        .padding(.leading, 10).padding(.trailing, 28).padding(.top, 6).padding(.bottom, 4)
+        .padding(.leading, 24).padding(.trailing, 56).padding(.top, 6).padding(.bottom, 4)
     }
     func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
 }

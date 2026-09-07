@@ -23,22 +23,6 @@ struct MapScreen: View {
         center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000))
     @State private var currentRegion: MKCoordinateRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000)
-    @State private var showOverlayMenu = false
-
-    var viewportWidthMiles: Double {
-        let lat = currentRegion.center.latitude
-        let metersPerDegLon = 111_319.5 * cos(lat * Double.pi / 180.0)
-        let meters = max(1.0, currentRegion.span.longitudeDelta * metersPerDegLon)
-        return meters / 1609.344
-    }
-
-    var viewportWidthKm: Double {
-        let lat = currentRegion.center.latitude
-        let metersPerDegLon = 111_319.5 * cos(lat * Double.pi / 180.0)
-        let meters = max(1.0, currentRegion.span.longitudeDelta * metersPerDegLon)
-        return meters / 1000.0
-    }
-
     var body: some View {
         @Bindable var store = store
         ZStack(alignment: .topLeading) {
@@ -52,176 +36,6 @@ struct MapScreen: View {
             }
             .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
             .mapControls { MapCompass() }
-
-            // Tap background to dismiss overlay menu when open
-            if showOverlayMenu {
-                Color.black.opacity(0.001)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.snappy(duration: 0.18)) { showOverlayMenu = false }
-                    }
-            }
-
-            // Floating layers icon button & dropdown menu
-            VStack(alignment: .trailing, spacing: 6) {
-                Button {
-                    withAnimation(.snappy(duration: 0.2)) {
-                        showOverlayMenu.toggle()
-                    }
-                } label: {
-                    Image(systemName: "square.3.layers.3d")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(showOverlayMenu ? .white : Color.white)
-                        .frame(width: 38, height: 38)
-                        .background(showOverlayMenu ? Theme.blue : Theme.panel.opacity(0.94), in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(showOverlayMenu ? Theme.blue : Theme.line, lineWidth: 1))
-                        .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
-                }
-                .buttonStyle(.plain)
-
-                if showOverlayMenu {
-                    let allOn = store.showSites && store.showTravelers && store.showRoutes && store.showThreats && store.showEvents && store.showGraphics
-                    let threatMode: String = {
-                        if !store.showThreats { return "OFF" }
-                        return store.outlineOnlyThreats ? "OUTLINE" : "FILL"
-                    }()
-                    VStack(alignment: .leading, spacing: 8) {
-                        // Single line: 2-stage LAYERS toggle and multi-stage THREAT toggle
-                        HStack(spacing: 6) {
-                            // 2-stage Layers toggle
-                            Button {
-                                withAnimation(.snappy(duration: 0.15)) {
-                                    let target = !allOn
-                                    store.showSites = target
-                                    store.showTravelers = target
-                                    store.showRoutes = target
-                                    store.showThreats = target
-                                    store.showEvents = target
-                                    store.showGraphics = target
-                                }
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Circle()
-                                        .fill(allOn ? Theme.blue : Theme.dim.opacity(0.4))
-                                        .frame(width: 5, height: 5)
-                                    Text(allOn ? "LAYERS · ON" : "LAYERS · OFF")
-                                        .font(.system(size: 8, weight: allOn ? .bold : .medium, design: .monospaced))
-                                        .foregroundStyle(allOn ? Color.white : Theme.dim)
-                                        .lineLimit(1)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 2)
-                                .background(allOn ? Theme.blue.opacity(0.2) : Theme.panel2, in: RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(allOn ? Theme.blue : Theme.line, lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-
-                            // Multi-stage Threat toggle (FILL -> OUTLINE -> OFF)
-                            Button {
-                                withAnimation(.snappy(duration: 0.15)) {
-                                    switch threatMode {
-                                    case "FILL":
-                                        store.outlineOnlyThreats = true
-                                    case "OUTLINE":
-                                        store.showThreats = false
-                                    default: // OFF
-                                        store.showThreats = true
-                                        store.outlineOnlyThreats = false
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Text(threatMode == "FILL" ? "●" : threatMode == "OUTLINE" ? "○" : "✕")
-                                        .font(.system(size: 8.5, weight: .bold))
-                                        .foregroundStyle(threatMode == "FILL" ? Theme.amber : threatMode == "OUTLINE" ? Theme.blue : Theme.dim.opacity(0.4))
-                                    Text("THREAT · \(threatMode)")
-                                        .font(.system(size: 8, weight: threatMode != "OFF" ? .bold : .medium, design: .monospaced))
-                                        .foregroundStyle(threatMode != "OFF" ? Color.white : Theme.dim)
-                                        .lineLimit(1)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                                .padding(.horizontal, 2)
-                                .background(
-                                    threatMode == "FILL" ? Theme.amber.opacity(0.2) :
-                                    threatMode == "OUTLINE" ? Theme.blue.opacity(0.12) : Theme.panel2,
-                                    in: RoundedRectangle(cornerRadius: 6)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(
-                                            threatMode == "FILL" ? Theme.amber :
-                                            threatMode == "OUTLINE" ? Theme.blue : Theme.line,
-                                            lineWidth: 1
-                                        )
-                                )
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        // Miles or Kilometers toggle
-                        HStack(spacing: 2) {
-                            let isMi = store.distanceUnit == "mi"
-                            Button {
-                                withAnimation(.snappy(duration: 0.15)) {
-                                    store.distanceUnit = "mi"
-                                }
-                            } label: {
-                                Text("MILES")
-                                    .font(.system(size: 8, weight: isMi ? .bold : .medium, design: .monospaced))
-                                    .foregroundStyle(isMi ? Color.white : Theme.dim)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 5)
-                                    .background(isMi ? Theme.blue : Color.clear, in: RoundedRectangle(cornerRadius: 4))
-                            }
-                            .buttonStyle(.plain)
-
-                            Button {
-                                withAnimation(.snappy(duration: 0.15)) {
-                                    store.distanceUnit = "km"
-                                }
-                            } label: {
-                                Text("KILOMETERS")
-                                    .font(.system(size: 8, weight: !isMi ? .bold : .medium, design: .monospaced))
-                                    .foregroundStyle(!isMi ? Color.white : Theme.dim)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 5)
-                                    .background(!isMi ? Theme.blue : Color.clear, in: RoundedRectangle(cornerRadius: 4))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(2)
-                        .background(Theme.panel2, in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line, lineWidth: 1))
-
-                        Divider().overlay(Theme.line)
-
-                        // Selectable layer pills
-                        VStack(alignment: .leading, spacing: 6) {
-                            LayerPill(label: "Sites & Facilities", icon: "◆", isOn: Binding(get: { store.showSites }, set: { store.showSites = $0 }))
-                            LayerPill(label: "Moving Personnel", icon: "●", isOn: Binding(get: { store.showTravelers }, set: { store.showTravelers = $0 }))
-                            LayerPill(label: "Routes & Convoys", icon: "↗", isOn: Binding(get: { store.showRoutes }, set: { store.showRoutes = $0 }))
-                            LayerPill(label: "Threats & Hazards", icon: "⚠", isOn: Binding(get: { store.showThreats }, set: { store.showThreats = $0 }))
-                            LayerPill(label: "Operations & Events", icon: "★", isOn: Binding(get: { store.showEvents }, set: { store.showEvents = $0 }))
-                            LayerPill(label: "Control Measures", icon: "⚑", isOn: Binding(get: { store.showGraphics }, set: { store.showGraphics = $0 }))
-                            LayerPill(label: store.snapshot?.restrictedDenied == true ? "Residences · DENIED" : "Residences",
-                                      icon: "⚿",
-                                      isOn: Binding(get: { store.showRestricted }, set: { store.showRestricted = $0 }),
-                                      disabled: store.snapshot?.restrictedDenied == true)
-                        }
-                    }
-                    .padding(10)
-                    .frame(width: 220)
-                    .background(Theme.panel.opacity(0.96), in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
-                    .shadow(color: .black.opacity(0.6), radius: 16, y: 6)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing)))
-                }
-            }
-            .padding(.top, 8)
-            .padding(.trailing, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         }
         .onAppear { if let r = store.board { camera = .region(r); currentRegion = r } }         // this section inherits the board as it stands
         .onChange(of: store.framedAt) { if let r = store.board { camera = .region(r); currentRegion = r } }
@@ -460,7 +274,7 @@ struct EventMarker: View {
 }
 
 
-private struct LayerPill: View {
+struct LayerPill: View {
     let label: String
     let icon: String
     @Binding var isOn: Bool
@@ -502,6 +316,169 @@ private struct LayerPill: View {
     }
 }
 
+struct OverlayMenu: View {
+    @Binding var open: Bool
+    @Environment(COPStore.self) private var store
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    open.toggle()
+                }
+            } label: {
+                Image(systemName: "square.3.layers.3d")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(open ? .white : Color.white)
+                    .frame(width: 38, height: 38)
+                    .background(open ? Theme.blue : Theme.panel.opacity(0.94), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(open ? Theme.blue : Theme.line, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+            }
+            .buttonStyle(.plain)
+
+            if open {
+                let allOn = store.showSites && store.showTravelers && store.showRoutes && store.showThreats && store.showEvents && store.showGraphics
+                let threatMode: String = {
+                    if !store.showThreats { return "OFF" }
+                    return store.outlineOnlyThreats ? "OUTLINE" : "FILL"
+                }()
+                VStack(alignment: .leading, spacing: 8) {
+                    // Single line: 2-stage LAYERS toggle and multi-stage THREAT toggle
+                    HStack(spacing: 6) {
+                        // 2-stage Layers toggle
+                        Button {
+                            withAnimation(.snappy(duration: 0.15)) {
+                                let target = !allOn
+                                store.showSites = target
+                                store.showTravelers = target
+                                store.showRoutes = target
+                                store.showThreats = target
+                                store.showEvents = target
+                                store.showGraphics = target
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(allOn ? Theme.blue : Theme.dim.opacity(0.4))
+                                    .frame(width: 5, height: 5)
+                                Text(allOn ? "LAYERS · ON" : "LAYERS · OFF")
+                                    .font(.system(size: 8, weight: allOn ? .bold : .medium, design: .monospaced))
+                                    .foregroundStyle(allOn ? Color.white : Theme.dim)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 2)
+                            .background(allOn ? Theme.blue.opacity(0.2) : Theme.panel2, in: RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(allOn ? Theme.blue : Theme.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+
+                        // Multi-stage Threat toggle (FILL -> OUTLINE -> OFF)
+                        Button {
+                            withAnimation(.snappy(duration: 0.15)) {
+                                switch threatMode {
+                                case "FILL":
+                                    store.outlineOnlyThreats = true
+                                case "OUTLINE":
+                                    store.showThreats = false
+                                default: // OFF
+                                    store.showThreats = true
+                                    store.outlineOnlyThreats = false
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(threatMode == "FILL" ? "●" : threatMode == "OUTLINE" ? "○" : "✕")
+                                    .font(.system(size: 8.5, weight: .bold))
+                                    .foregroundStyle(threatMode == "FILL" ? Theme.amber : threatMode == "OUTLINE" ? Theme.blue : Theme.dim.opacity(0.4))
+                                Text("THREAT · \(threatMode)")
+                                    .font(.system(size: 8, weight: threatMode != "OFF" ? .bold : .medium, design: .monospaced))
+                                    .foregroundStyle(threatMode != "OFF" ? Color.white : Theme.dim)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 2)
+                            .background(
+                                threatMode == "FILL" ? Theme.amber.opacity(0.2) :
+                                threatMode == "OUTLINE" ? Theme.blue.opacity(0.12) : Theme.panel2,
+                                in: RoundedRectangle(cornerRadius: 6)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(
+                                        threatMode == "FILL" ? Theme.amber :
+                                        threatMode == "OUTLINE" ? Theme.blue : Theme.line,
+                                        lineWidth: 1
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Miles or Kilometers toggle
+                    HStack(spacing: 2) {
+                        let isMi = store.distanceUnit == "mi"
+                        Button {
+                            withAnimation(.snappy(duration: 0.15)) {
+                                store.distanceUnit = "mi"
+                            }
+                        } label: {
+                            Text("MILES")
+                                .font(.system(size: 8, weight: isMi ? .bold : .medium, design: .monospaced))
+                                .foregroundStyle(isMi ? Color.white : Theme.dim)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                                .background(isMi ? Theme.blue : Color.clear, in: RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            withAnimation(.snappy(duration: 0.15)) {
+                                store.distanceUnit = "km"
+                            }
+                        } label: {
+                            Text("KILOMETERS")
+                                .font(.system(size: 8, weight: !isMi ? .bold : .medium, design: .monospaced))
+                                .foregroundStyle(!isMi ? Color.white : Theme.dim)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                                .background(!isMi ? Theme.blue : Color.clear, in: RoundedRectangle(cornerRadius: 4))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(2)
+                    .background(Theme.panel2, in: RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line, lineWidth: 1))
+
+                    Divider().overlay(Theme.line)
+
+                    // Selectable layer pills
+                    VStack(alignment: .leading, spacing: 6) {
+                        LayerPill(label: "Sites & Facilities", icon: "◆", isOn: Binding(get: { store.showSites }, set: { store.showSites = $0 }))
+                        LayerPill(label: "Moving Personnel", icon: "●", isOn: Binding(get: { store.showTravelers }, set: { store.showTravelers = $0 }))
+                        LayerPill(label: "Routes & Convoys", icon: "↗", isOn: Binding(get: { store.showRoutes }, set: { store.showRoutes = $0 }))
+                        LayerPill(label: "Threats & Hazards", icon: "⚠", isOn: Binding(get: { store.showThreats }, set: { store.showThreats = $0 }))
+                        LayerPill(label: "Operations & Events", icon: "★", isOn: Binding(get: { store.showEvents }, set: { store.showEvents = $0 }))
+                        LayerPill(label: "Control Measures", icon: "⚑", isOn: Binding(get: { store.showGraphics }, set: { store.showGraphics = $0 }))
+                        LayerPill(label: store.snapshot?.restrictedDenied == true ? "Residences · DENIED" : "Residences",
+                                  icon: "⚿",
+                                  isOn: Binding(get: { store.showRestricted }, set: { store.showRestricted = $0 }),
+                                  disabled: store.snapshot?.restrictedDenied == true)
+                    }
+                }
+                .padding(10)
+                .frame(width: 220)
+                .background(Theme.panel.opacity(0.96), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
+                .shadow(color: .black.opacity(0.6), radius: 16, y: 6)
+                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing)))
+            }
+        }
+    }
+}
 
 struct TacticalRuler: View {
     let widthMiles: Double
@@ -519,11 +496,11 @@ struct TacticalRuler: View {
     private var stepSize: Double {
         for step in candidateSteps {
             let count = activeDist / step
-            if count <= 7.0 && count >= 2.5 {
+            if count <= 9.0 && count >= 3.0 {
                 return step
             }
         }
-        return candidateSteps.first(where: { activeDist / $0 < 3.0 }) ?? 10.0
+        return candidateSteps.first(where: { activeDist / $0 < 4.0 }) ?? 10.0
     }
 
     private func formatDistance(_ d: Double) -> String {
@@ -571,17 +548,17 @@ struct TacticalRuler: View {
                     let h = size.height
                     guard maxDist > 0 else { return }
 
-                    let originX: CGFloat = 24
+                    let originX: CGFloat = 18
                     let availableW = max(1.0, w - originX)
 
-                    // Zero tick and label at start (meeting left vertical ruler at x = 24)
+                    // Zero tick and label at start (meeting left vertical ruler at x = 18)
                     var zeroPath = Path()
-                    zeroPath.move(to: CGPoint(x: originX, y: h - 7))
+                    zeroPath.move(to: CGPoint(x: originX, y: h - 6))
                     zeroPath.addLine(to: CGPoint(x: originX, y: h))
                     context.stroke(zeroPath, with: .color(Color.white.opacity(0.6)), lineWidth: 1)
 
                     let zeroText = Text("0")
-                        .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                        .font(.system(size: 7, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.6))
                     context.draw(context.resolve(zeroText), at: CGPoint(x: originX, y: 1), anchor: .top)
 
@@ -593,7 +570,7 @@ struct TacticalRuler: View {
 
                         // Major tick
                         var majorPath = Path()
-                        majorPath.move(to: CGPoint(x: x, y: h - 7))
+                        majorPath.move(to: CGPoint(x: x, y: h - 6))
                         majorPath.addLine(to: CGPoint(x: x, y: h))
                         context.stroke(majorPath, with: .color(Color.white.opacity(0.7)), lineWidth: 1)
 
@@ -603,7 +580,7 @@ struct TacticalRuler: View {
                             let midX = originX + CGFloat(midD / maxDist) * availableW
                             if midX < w - 70 {
                                 var minorPath = Path()
-                                minorPath.move(to: CGPoint(x: midX, y: h - 4))
+                                minorPath.move(to: CGPoint(x: midX, y: h - 3.5))
                                 minorPath.addLine(to: CGPoint(x: midX, y: h))
                                 context.stroke(minorPath, with: .color(Color.white.opacity(0.35)), lineWidth: 0.75)
                             }
@@ -612,7 +589,7 @@ struct TacticalRuler: View {
                         // Text label for major tick
                         let labelText = formatDistance(d)
                         let text = Text(labelText)
-                            .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                            .font(.system(size: 7, weight: .medium, design: .monospaced))
                             .foregroundStyle(Color.white.opacity(0.7))
                         context.draw(context.resolve(text), at: CGPoint(x: x, y: 1), anchor: .top)
 
@@ -698,7 +675,6 @@ struct TacticalRulerVertical: View {
             let totalH = proxy.size.height
             let step = stepSize
             let maxDist = max(0.001, activeDist)
-            let cutoffY = totalH - 40
 
             ZStack(alignment: .topTrailing) {
                 // Background HUD strip
@@ -720,34 +696,26 @@ struct TacticalRulerVertical: View {
                     guard maxDist > 0 else { return }
 
                     // Calculate badge dimensions and tick cutoff
-                    let vText = Text("V ").font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundStyle(Theme.blue)
-                    let distText = Text(formatBadge(activeDist) + " ").font(.system(size: 7.5, weight: .bold, design: .monospaced)).foregroundStyle(Color.white)
-                    let unitText = Text(unit).font(.system(size: 6.5, design: .monospaced)).foregroundStyle(Theme.dim)
+                    let vText = Text("V ").font(.system(size: 6.5, weight: .bold, design: .monospaced)).foregroundStyle(Theme.blue)
+                    let distText = Text(formatBadge(activeDist) + " ").font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundStyle(Color.white)
+                    let unitText = Text(unit).font(.system(size: 6, design: .monospaced)).foregroundStyle(Theme.dim)
                     let badgeContent = vText + distText + unitText
                     let resolved = context.resolve(badgeContent)
                     let measured = resolved.measure(in: CGSize(width: 200, height: 50))
 
-                    let padH: CGFloat = 4
-                    let padV: CGFloat = 2.5
+                    let padH: CGFloat = 3
+                    let padV: CGFloat = 2
                     let badgeW = measured.width + padH * 2
                     let badgeH = measured.height + padV * 2
 
-                    let badgeCenterY = h - 8 - (badgeW / 2)
-                    let tickCutoff = badgeCenterY - (badgeW / 2) - 6
+                    let badgeCenterY = h - 6 - (badgeW / 2)
+                    let tickCutoff = badgeCenterY - (badgeW / 2) - 4
 
-                    // Zero tick and label at start (top edge)
+                    // Zero tick at top edge (meeting top ruler at (w, 0))
                     var zeroPath = Path()
                     zeroPath.move(to: CGPoint(x: w, y: 0))
-                    zeroPath.addLine(to: CGPoint(x: w - 4.5, y: 0))
+                    zeroPath.addLine(to: CGPoint(x: w - 3.5, y: 0))
                     context.stroke(zeroPath, with: .color(Color.white.opacity(0.6)), lineWidth: 1)
-
-                    var zeroCtx = context
-                    zeroCtx.translateBy(x: 10, y: 6)
-                    zeroCtx.rotate(by: .degrees(90))
-                    let zeroText = Text("0")
-                        .font(.system(size: 7.5, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.75))
-                    zeroCtx.draw(context.resolve(zeroText), at: .zero, anchor: .center)
 
                     // Draw ticks down the height
                     var d = step
@@ -758,7 +726,7 @@ struct TacticalRulerVertical: View {
                         // Major tick
                         var majorPath = Path()
                         majorPath.move(to: CGPoint(x: w, y: y))
-                        majorPath.addLine(to: CGPoint(x: w - 4.5, y: y))
+                        majorPath.addLine(to: CGPoint(x: w - 3.5, y: y))
                         context.stroke(majorPath, with: .color(Color.white.opacity(0.7)), lineWidth: 1)
 
                         // Minor tick (midpoint)
@@ -768,7 +736,7 @@ struct TacticalRulerVertical: View {
                             if midY < tickCutoff {
                                 var minorPath = Path()
                                 minorPath.move(to: CGPoint(x: w, y: midY))
-                                minorPath.addLine(to: CGPoint(x: w - 2.5, y: midY))
+                                minorPath.addLine(to: CGPoint(x: w - 2.0, y: midY))
                                 context.stroke(minorPath, with: .color(Color.white.opacity(0.35)), lineWidth: 0.75)
                             }
                         }
@@ -776,10 +744,10 @@ struct TacticalRulerVertical: View {
                         // Text label aligned vertically with screen edge
                         let labelText = formatDistance(d)
                         let text = Text(labelText)
-                            .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                            .font(.system(size: 7, weight: .medium, design: .monospaced))
                             .foregroundStyle(Color.white.opacity(0.75))
                         var tickCtx = context
-                        tickCtx.translateBy(x: 10, y: y)
+                        tickCtx.translateBy(x: 7.5, y: y)
                         tickCtx.rotate(by: .degrees(90))
                         tickCtx.draw(context.resolve(text), at: .zero, anchor: .center)
 
@@ -788,7 +756,7 @@ struct TacticalRulerVertical: View {
 
                     // Draw bottom badge aligned vertically with screen edge
                     var badgeCtx = context
-                    badgeCtx.translateBy(x: 10, y: badgeCenterY)
+                    badgeCtx.translateBy(x: 7.5, y: badgeCenterY)
                     badgeCtx.rotate(by: .degrees(90))
 
                     let badgeRect = CGRect(x: -badgeW / 2, y: -badgeH / 2, width: badgeW, height: badgeH)
@@ -798,7 +766,6 @@ struct TacticalRulerVertical: View {
                 }
             }
         }
-        .frame(width: 24)
+        .frame(width: 18)
     }
 }
-

@@ -420,7 +420,7 @@ fun PhoneScreen(st: WallState, store: Store) {
         Box(
             Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = with(density) { topOverlayPx.toDp() } + 6.dp, end = 12.dp)
+                .padding(top = with(density) { headerPx.toDp() } + 6.dp, end = 12.dp)
         ) {
             OverlayMenu(st = st, store = store, open = overlayOpen, onToggle = { overlayOpen = !overlayOpen })
         }
@@ -516,7 +516,7 @@ fun StatusOverlayCard(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
     val w = st.snap?.watch
     Column(
         Modifier
-            .padding(start = 10.dp, end = 28.dp)
+            .padding(start = 24.dp, end = 56.dp)
             .padding(top = 6.dp, bottom = 4.dp)
             .fillMaxWidth()
             .background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp))
@@ -1215,7 +1215,7 @@ fun TacticalRuler(
         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            val originX = with(density) { 24.dp.toPx() }
+            val originX = with(density) { 18.dp.toPx() }
             val availableW = (w - originX).coerceAtLeast(1f)
 
             // Bottom hairline
@@ -1229,7 +1229,7 @@ fun TacticalRuler(
             // Zero tick and label at start (meeting left vertical ruler at originX)
             drawLine(
                 color = Color.White.copy(alpha = 0.6f),
-                start = androidx.compose.ui.geometry.Offset(originX, h - 7.dp.toPx()),
+                start = androidx.compose.ui.geometry.Offset(originX, h - 6.dp.toPx()),
                 end = androidx.compose.ui.geometry.Offset(originX, h),
                 strokeWidth = 1.dp.toPx()
             )
@@ -1245,7 +1245,7 @@ fun TacticalRuler(
                 // Major tick
                 drawLine(
                     color = Color.White.copy(alpha = 0.7f),
-                    start = androidx.compose.ui.geometry.Offset(x, h - 7.dp.toPx()),
+                    start = androidx.compose.ui.geometry.Offset(x, h - 6.dp.toPx()),
                     end = androidx.compose.ui.geometry.Offset(x, h),
                     strokeWidth = 1.dp.toPx()
                 )
@@ -1257,7 +1257,7 @@ fun TacticalRuler(
                     if (midX < cutoffPx) {
                         drawLine(
                             color = Color.White.copy(alpha = 0.35f),
-                            start = androidx.compose.ui.geometry.Offset(midX, h - 4.dp.toPx()),
+                            start = androidx.compose.ui.geometry.Offset(midX, h - 3.5.dp.toPx()),
                             end = androidx.compose.ui.geometry.Offset(midX, h),
                             strokeWidth = 0.75.dp.toPx()
                         )
@@ -1327,7 +1327,7 @@ fun TacticalRulerVertical(
 
     androidx.compose.foundation.layout.BoxWithConstraints(
         modifier
-            .width(24.dp)
+            .width(18.dp)
             .fillMaxHeight()
             .background(Color(0xE00A0E14))
     ) {
@@ -1335,7 +1335,7 @@ fun TacticalRulerVertical(
         val textPaint = remember(density) {
             android.graphics.Paint().apply {
                 color = android.graphics.Color.argb(180, 255, 255, 255)
-                textSize = with(density) { 7.sp.toPx() }
+                textSize = with(density) { 6.8.sp.toPx() }
                 isAntiAlias = true
                 typeface = android.graphics.Typeface.MONOSPACE
                 textAlign = android.graphics.Paint.Align.CENTER
@@ -1344,7 +1344,7 @@ fun TacticalRulerVertical(
         val badgeBluePaint = remember(density) {
             android.graphics.Paint().apply {
                 color = android.graphics.Color.parseColor("#58A6FF")
-                textSize = with(density) { 7.sp.toPx() }
+                textSize = with(density) { 6.5.sp.toPx() }
                 isAntiAlias = true
                 typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
             }
@@ -1352,7 +1352,7 @@ fun TacticalRulerVertical(
         val badgeWhitePaint = remember(density) {
             android.graphics.Paint().apply {
                 color = android.graphics.Color.WHITE
-                textSize = with(density) { 7.5.sp.toPx() }
+                textSize = with(density) { 7.sp.toPx() }
                 isAntiAlias = true
                 typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
             }
@@ -1360,7 +1360,7 @@ fun TacticalRulerVertical(
         val badgeDimPaint = remember(density) {
             android.graphics.Paint().apply {
                 color = android.graphics.Color.argb(180, 139, 148, 158)
-                textSize = with(density) { 6.5.sp.toPx() }
+                textSize = with(density) { 6.sp.toPx() }
                 isAntiAlias = true
                 typeface = android.graphics.Typeface.MONOSPACE
             }
@@ -1382,7 +1382,7 @@ fun TacticalRulerVertical(
         }
 
         val maxDist = activeDist.coerceAtLeast(0.001)
-        val textX = with(density) { 10.dp.toPx() }
+        val textX = with(density) { 7.5.dp.toPx() }
         val vOffset = (textPaint.descent() + textPaint.ascent()) / 2f
 
         // Badge dimensions
@@ -1394,16 +1394,16 @@ fun TacticalRulerVertical(
         val distW = badgeWhitePaint.measureText(distText)
         val unitW = badgeDimPaint.measureText(unitText)
         val totalTextW = vW + spaceW + distW + spaceW + unitW
-        val padX = with(density) { 4.dp.toPx() }
+        val padX = with(density) { 3.dp.toPx() }
         val badgeW = totalTextW + padX * 2f
-        val badgeH = with(density) { 14.dp.toPx() }
-        val cornerRadius = with(density) { 3.dp.toPx() }
+        val badgeH = with(density) { 13.dp.toPx() }
+        val cornerRadius = with(density) { 2.5.dp.toPx() }
 
         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            val badgeCenterY = h - with(density) { 8.dp.toPx() } - (badgeW / 2f)
-            val cutoffPx = badgeCenterY - (badgeW / 2f) - with(density) { 6.dp.toPx() }
+            val badgeCenterY = h - with(density) { 6.dp.toPx() } - (badgeW / 2f)
+            val cutoffPx = badgeCenterY - (badgeW / 2f) - with(density) { 4.dp.toPx() }
 
             // Right hairline (facing map)
             drawLine(
@@ -1413,21 +1413,13 @@ fun TacticalRulerVertical(
                 strokeWidth = 1f
             )
 
-            // Zero tick and label at top edge (meeting top ruler at (w, 0))
+            // Zero tick at top edge (meeting top ruler at (w, 0))
             drawLine(
                 color = Color.White.copy(alpha = 0.6f),
                 start = androidx.compose.ui.geometry.Offset(w, 0f),
-                end = androidx.compose.ui.geometry.Offset(w - 4.5.dp.toPx(), 0f),
+                end = androidx.compose.ui.geometry.Offset(w - 3.5.dp.toPx(), 0f),
                 strokeWidth = 1.dp.toPx()
             )
-            drawIntoCanvas { canvas ->
-                val native = canvas.nativeCanvas
-                val zeroY = 6.dp.toPx()
-                native.save()
-                native.rotate(90f, textX, zeroY)
-                native.drawText("0", textX, zeroY - vOffset, textPaint)
-                native.restore()
-            }
 
             var d = step
             while (d < maxDist) {
@@ -1438,7 +1430,7 @@ fun TacticalRulerVertical(
                 drawLine(
                     color = Color.White.copy(alpha = 0.7f),
                     start = androidx.compose.ui.geometry.Offset(w, y),
-                    end = androidx.compose.ui.geometry.Offset(w - 4.5.dp.toPx(), y),
+                    end = androidx.compose.ui.geometry.Offset(w - 3.5.dp.toPx(), y),
                     strokeWidth = 1.dp.toPx()
                 )
 
@@ -1450,7 +1442,7 @@ fun TacticalRulerVertical(
                         drawLine(
                             color = Color.White.copy(alpha = 0.35f),
                             start = androidx.compose.ui.geometry.Offset(w, midY),
-                            end = androidx.compose.ui.geometry.Offset(w - 2.5.dp.toPx(), midY),
+                            end = androidx.compose.ui.geometry.Offset(w - 2.0.dp.toPx(), midY),
                             strokeWidth = 0.75.dp.toPx()
                         )
                     }
