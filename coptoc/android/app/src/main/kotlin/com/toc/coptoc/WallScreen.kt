@@ -68,10 +68,11 @@ fun TabletWall(st: WallState, store: Store) {
             val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 1100
             Panel(Modifier.width(if (wide) 260.dp else 210.dp).fillMaxHeight()) { S1Panel(st, store) }
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportWidth)
+                WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
                 st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
-                TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, modifier = Modifier.align(Alignment.TopCenter))
+                TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopCenter))
+                TacticalRulerVertical(miles = st.viewportHeightMiles, km = st.viewportHeightKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopEnd).padding(top = 20.dp))
                 var overlayOpen by remember { mutableStateOf(false) }
                 if (overlayOpen) {
                     Box(Modifier.fillMaxSize().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { overlayOpen = false })
@@ -370,7 +371,7 @@ fun PhoneScreen(st: WallState, store: Store) {
             Box(Modifier.weight(1f).fillMaxWidth()) {  // the picture runs under the header on every tab; each section's sheet stops below it
                 when (tab) {
                     Tab.COP -> {
-                        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportWidth)
+                        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
                         if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
                     Tab.S1 -> SectionTab(st, store, "S1", headerPx) { S1Panel(st, store) }
@@ -391,13 +392,22 @@ fun PhoneScreen(st: WallState, store: Store) {
         ) {  // the header, scale, and status overlay floating over the picture
             Column(Modifier.fillMaxWidth().onSizeChanged { headerPx = it.height }) {
                 PhoneTopBar(st, store)
-                TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm)
+                TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit)
                 FlashStrip(st, store)
             }
             if (tab == Tab.COP) {
                 StatusOverlayCard(st, store, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
             }
         }
+        // Vertical Tactical Edge Ruler on right side of screen
+        TacticalRulerVertical(
+            miles = st.viewportHeightMiles,
+            km = st.viewportHeightKm,
+            unit = st.distanceUnit,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
+        )
         if (overlayOpen) {
             Box(
                 Modifier
@@ -507,7 +517,7 @@ fun StatusOverlayCard(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
     val w = st.snap?.watch
     Column(
         Modifier
-            .padding(horizontal = 10.dp)
+            .padding(start = 10.dp, end = 28.dp)
             .padding(top = 6.dp, bottom = 4.dp)
             .fillMaxWidth()
             .background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp))
@@ -773,7 +783,7 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         // The map is composed here and not again while the sheet moves. It used to share a scope with the drag
         // state, so every frame of a drag re-ran the map's update block and rebuilt every feature on it.
-        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section, onViewportChanged = store::setViewportWidth)
+        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section, onViewportChanged = store::setViewportDimensions)
         SectionSheet(headerPx, section, content)
     }
 }
@@ -1038,6 +1048,53 @@ fun OverlayMenu(
                     }
                 }
 
+                // Miles or Kilometers toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Palette.panel2)
+                        .border(1.dp, Palette.line, RoundedCornerShape(6.dp))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    val isMi = st.distanceUnit == "mi"
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isMi) Palette.blue2 else Color.Transparent)
+                            .clickable { store.setDistanceUnit("mi") }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "MILES",
+                            color = if (isMi) Color.White else Palette.dim,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = if (isMi) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (!isMi) Palette.blue2 else Color.Transparent)
+                            .clickable { store.setDistanceUnit("km") }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "KILOMETERS",
+                            color = if (!isMi) Color.White else Palette.dim,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = if (!isMi) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+
                 Box(Modifier.fillMaxWidth().height(0.5.dp).background(Palette.line))
 
                 // Selectable layer pills
@@ -1100,14 +1157,16 @@ fun LayerPill(
 fun TacticalRuler(
     miles: Double,
     km: Double,
+    unit: String = "mi",
     modifier: Modifier = Modifier
 ) {
     val candidateSteps = remember {
         listOf(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0)
     }
-    val step = remember(miles) {
-        candidateSteps.firstOrNull { (miles / it) in 2.5..7.0 }
-            ?: candidateSteps.firstOrNull { miles / it < 3.0 }
+    val activeDist = if (unit == "km") km else miles
+    val step = remember(activeDist) {
+        candidateSteps.firstOrNull { (activeDist / it) in 2.5..7.0 }
+            ?: candidateSteps.firstOrNull { activeDist / it < 3.0 }
             ?: 10.0
     }
 
@@ -1141,8 +1200,8 @@ fun TacticalRuler(
             }
         }
 
-        val maxDist = miles.coerceAtLeast(0.001)
-        val cutoffPx = with(density) { (maxWidth - 125.dp).toPx() }
+        val maxDist = activeDist.coerceAtLeast(0.001)
+        val cutoffPx = with(density) { (maxWidth - 70.dp).toPx() }
 
         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
             val w = size.width
@@ -1215,7 +1274,210 @@ fun TacticalRuler(
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text("AO:", color = Palette.blue2, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-            Text("${formatBadge(miles)} mi · ${formatBadge(km)} km", color = Color.White, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+            Text(
+                if (unit == "km") "${formatBadge(km)} km"
+                else "${formatBadge(miles)} mi",
+                color = Color.White, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/** Edge-to-edge Vertical Tactical Edge Ruler running down the right side of the screen. */
+@Composable
+fun TacticalRulerVertical(
+    miles: Double,
+    km: Double,
+    unit: String = "mi",
+    modifier: Modifier = Modifier
+) {
+    val candidateSteps = remember {
+        listOf(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0)
+    }
+    val activeDist = if (unit == "km") km else miles
+    val step = remember(activeDist) {
+        candidateSteps.firstOrNull { (activeDist / it) in 3.0..9.0 }
+            ?: candidateSteps.firstOrNull { activeDist / it < 4.0 }
+            ?: 10.0
+    }
+
+    fun formatDist(d: Double): String {
+        return if (d >= 10) String.format(java.util.Locale.US, "%.0f", d)
+        else if (d >= 1) {
+            if (d % 1.0 == 0.0) String.format(java.util.Locale.US, "%.0f", d)
+            else String.format(java.util.Locale.US, "%.1f", d)
+        } else String.format(java.util.Locale.US, "%.2f", d)
+    }
+
+    fun formatBadge(v: Double): String {
+        return if (v >= 100) String.format(java.util.Locale.US, "%.0f", v)
+        else String.format(java.util.Locale.US, "%.1f", v)
+    }
+
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier
+            .width(24.dp)
+            .fillMaxHeight()
+            .background(Color(0xE00A0E14))
+    ) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val textPaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(180, 255, 255, 255)
+                textSize = with(density) { 7.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.MONOSPACE
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+        }
+        val badgeBluePaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#58A6FF")
+                textSize = with(density) { 7.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            }
+        }
+        val badgeWhitePaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = with(density) { 7.5.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            }
+        }
+        val badgeDimPaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(180, 139, 148, 158)
+                textSize = with(density) { 6.5.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.MONOSPACE
+            }
+        }
+        val badgeBgPaint = remember {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb((0.88f * 255).toInt(), 22, 27, 34)
+                style = android.graphics.Paint.Style.FILL
+                isAntiAlias = true
+            }
+        }
+        val badgeBorderPaint = remember {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(120, 48, 54, 61)
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = 1f
+                isAntiAlias = true
+            }
+        }
+
+        val maxDist = activeDist.coerceAtLeast(0.001)
+        val textX = with(density) { 12.dp.toPx() }
+        val vOffset = (textPaint.descent() + textPaint.ascent()) / 2f
+
+        // Badge dimensions
+        val vText = "V"
+        val distText = formatBadge(activeDist)
+        val unitText = if (unit == "km") "km" else "mi"
+        val spaceW = badgeWhitePaint.measureText(" ")
+        val vW = badgeBluePaint.measureText(vText)
+        val distW = badgeWhitePaint.measureText(distText)
+        val unitW = badgeDimPaint.measureText(unitText)
+        val totalTextW = vW + spaceW + distW + spaceW + unitW
+        val padX = with(density) { 4.dp.toPx() }
+        val badgeW = totalTextW + padX * 2f
+        val badgeH = with(density) { 14.dp.toPx() }
+        val cornerRadius = with(density) { 3.dp.toPx() }
+
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val badgeCenterY = h - with(density) { 8.dp.toPx() } - (badgeW / 2f)
+            val cutoffPx = badgeCenterY - (badgeW / 2f) - with(density) { 6.dp.toPx() }
+
+            // Left hairline
+            drawLine(
+                color = Color.White.copy(alpha = 0.2f),
+                start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                end = androidx.compose.ui.geometry.Offset(0f, h),
+                strokeWidth = 1f
+            )
+
+            // Zero tick and label at top
+            drawLine(
+                color = Color.White.copy(alpha = 0.6f),
+                start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                end = androidx.compose.ui.geometry.Offset(4.5.dp.toPx(), 0f),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawIntoCanvas { canvas ->
+                val native = canvas.nativeCanvas
+                val zeroY = 6.dp.toPx()
+                native.save()
+                native.rotate(90f, textX, zeroY)
+                native.drawText("0", textX, zeroY - vOffset, textPaint)
+                native.restore()
+            }
+
+            var d = step
+            while (d < maxDist) {
+                val y = (d / maxDist).toFloat() * h
+                if (y > cutoffPx) break
+
+                // Major tick
+                drawLine(
+                    color = Color.White.copy(alpha = 0.7f),
+                    start = androidx.compose.ui.geometry.Offset(0f, y),
+                    end = androidx.compose.ui.geometry.Offset(4.5.dp.toPx(), y),
+                    strokeWidth = 1.dp.toPx()
+                )
+
+                // Minor tick
+                val midD = d - step / 2.0
+                if (midD > 0) {
+                    val midY = (midD / maxDist).toFloat() * h
+                    if (midY < cutoffPx) {
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.35f),
+                            start = androidx.compose.ui.geometry.Offset(0f, midY),
+                            end = androidx.compose.ui.geometry.Offset(2.5.dp.toPx(), midY),
+                            strokeWidth = 0.75.dp.toPx()
+                        )
+                    }
+                }
+
+                // Text label aligned vertically with screen edge
+                drawIntoCanvas { canvas ->
+                    val native = canvas.nativeCanvas
+                    native.save()
+                    native.rotate(90f, textX, y)
+                    native.drawText(formatDist(d), textX, y - vOffset, textPaint)
+                    native.restore()
+                }
+
+                d += step
+            }
+
+            // Bottom distance badge aligned vertically with screen edge
+            drawIntoCanvas { canvas ->
+                val native = canvas.nativeCanvas
+                native.save()
+                native.translate(textX, badgeCenterY)
+                native.rotate(90f)
+
+                val rect = android.graphics.RectF(-badgeW / 2f, -badgeH / 2f, badgeW / 2f, badgeH / 2f)
+                native.drawRoundRect(rect, cornerRadius, cornerRadius, badgeBgPaint)
+                native.drawRoundRect(rect, cornerRadius, cornerRadius, badgeBorderPaint)
+
+                var curX = -badgeW / 2f + padX
+                val textBaseline = -(badgeWhitePaint.descent() + badgeWhitePaint.ascent()) / 2f
+                native.drawText(vText, curX, textBaseline, badgeBluePaint)
+                curX += vW + spaceW
+                native.drawText(distText, curX, textBaseline, badgeWhitePaint)
+                curX += distW + spaceW
+                native.drawText(unitText, curX, textBaseline, badgeDimPaint)
+
+                native.restore()
+            }
         }
     }
 }

@@ -158,6 +158,41 @@ struct MapScreen: View {
                             .buttonStyle(.plain)
                         }
 
+                        // Miles or Kilometers toggle
+                        HStack(spacing: 2) {
+                            let isMi = store.distanceUnit == "mi"
+                            Button {
+                                withAnimation(.snappy(duration: 0.15)) {
+                                    store.distanceUnit = "mi"
+                                }
+                            } label: {
+                                Text("MILES")
+                                    .font(.system(size: 8, weight: isMi ? .bold : .medium, design: .monospaced))
+                                    .foregroundStyle(isMi ? Color.white : Theme.dim)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 5)
+                                    .background(isMi ? Theme.blue : Color.clear, in: RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                withAnimation(.snappy(duration: 0.15)) {
+                                    store.distanceUnit = "km"
+                                }
+                            } label: {
+                                Text("KILOMETERS")
+                                    .font(.system(size: 8, weight: !isMi ? .bold : .medium, design: .monospaced))
+                                    .foregroundStyle(!isMi ? Color.white : Theme.dim)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 5)
+                                    .background(!isMi ? Theme.blue : Color.clear, in: RoundedRectangle(cornerRadius: 4))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(2)
+                        .background(Theme.panel2, in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line, lineWidth: 1))
+
                         Divider().overlay(Theme.line)
 
                         // Selectable layer pills
@@ -468,19 +503,24 @@ private struct LayerPill: View {
 struct TacticalRuler: View {
     let widthMiles: Double
     let widthKm: Double
+    var unit: String = "mi"
 
     private let candidateSteps: [Double] = [
         0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0
     ]
 
-    private var stepMiles: Double {
+    private var activeDist: Double {
+        unit == "km" ? widthKm : widthMiles
+    }
+
+    private var stepSize: Double {
         for step in candidateSteps {
-            let count = widthMiles / step
+            let count = activeDist / step
             if count <= 7.0 && count >= 2.5 {
                 return step
             }
         }
-        return candidateSteps.first(where: { widthMiles / $0 < 3.0 }) ?? 10.0
+        return candidateSteps.first(where: { activeDist / $0 < 3.0 }) ?? 10.0
     }
 
     private func formatDistance(_ d: Double) -> String {
@@ -506,8 +546,8 @@ struct TacticalRuler: View {
     var body: some View {
         GeometryReader { proxy in
             let totalW = proxy.size.width
-            let step = stepMiles
-            let maxDist = max(0.001, widthMiles)
+            let step = stepSize
+            let maxDist = max(0.001, activeDist)
 
             ZStack(alignment: .leading) {
                 // Background HUD strip
@@ -543,7 +583,7 @@ struct TacticalRuler: View {
                     var d = step
                     while d < maxDist {
                         let x = CGFloat(d / maxDist) * w
-                        if x > w - 125 { break }
+                        if x > w - 70 { break }
 
                         // Major tick
                         var majorPath = Path()
@@ -555,7 +595,7 @@ struct TacticalRuler: View {
                         let midD = d - step / 2.0
                         if midD > 0 {
                             let midX = CGFloat(midD / maxDist) * w
-                            if midX < w - 125 {
+                            if midX < w - 70 {
                                 var minorPath = Path()
                                 minorPath.move(to: CGPoint(x: midX, y: h - 4))
                                 minorPath.addLine(to: CGPoint(x: midX, y: h))
@@ -579,7 +619,10 @@ struct TacticalRuler: View {
                     Text("AO:")
                         .font(.system(size: 7.5, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Theme.blue)
-                    Text("\(formatBadge(widthMiles)) mi · \(formatBadge(widthKm)) km")
+                    let text = unit == "km"
+                        ? "\(formatBadge(widthKm)) km"
+                        : "\(formatBadge(widthMiles)) mi"
+                    Text(text)
                         .font(.system(size: 7.5, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color.white)
                 }
@@ -592,6 +635,163 @@ struct TacticalRuler: View {
             }
         }
         .frame(height: 20)
+    }
+}
+
+struct RulerBottomPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        let n = nextValue()
+        if n > 0 { value = n }
+    }
+}
+
+struct TacticalRulerVertical: View {
+    let heightMiles: Double
+    let heightKm: Double
+    var unit: String = "mi"
+
+    private let candidateSteps: [Double] = [
+        0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0
+    ]
+
+    private var activeDist: Double {
+        unit == "km" ? heightKm : heightMiles
+    }
+
+    private var stepSize: Double {
+        for step in candidateSteps {
+            let count = activeDist / step
+            if count <= 9.0 && count >= 3.0 {
+                return step
+            }
+        }
+        return candidateSteps.first(where: { activeDist / $0 < 4.0 }) ?? 10.0
+    }
+
+    private func formatDistance(_ d: Double) -> String {
+        if d >= 10 {
+            return String(format: "%.0f", d)
+        } else if d >= 1 {
+            return d.truncatingRemainder(dividingBy: 1.0) == 0 ? String(format: "%.0f", d) : String(format: "%.1f", d)
+        } else {
+            return String(format: "%.2f", d)
+        }
+    }
+
+    private func formatBadge(_ val: Double) -> String {
+        if val >= 100 {
+            return String(format: "%.0f", val)
+        } else {
+            return String(format: "%.1f", val)
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let totalH = proxy.size.height
+            let step = stepSize
+            let maxDist = max(0.001, activeDist)
+            let cutoffY = totalH - 40
+
+            ZStack(alignment: .topTrailing) {
+                // Background HUD strip
+                Rectangle()
+                    .fill(Color(red: 0.05, green: 0.07, blue: 0.11).opacity(0.88))
+
+                // Hairline left divider
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.2))
+                        .frame(width: 0.5)
+                    Spacer()
+                }
+
+                // Ticks, labels, and bottom vertical badge
+                Canvas { context, size in
+                    let h = size.height
+                    guard maxDist > 0 else { return }
+
+                    // Calculate badge dimensions and tick cutoff
+                    let vText = Text("V ").font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundStyle(Theme.blue)
+                    let distText = Text(formatBadge(activeDist) + " ").font(.system(size: 7.5, weight: .bold, design: .monospaced)).foregroundStyle(Color.white)
+                    let unitText = Text(unit).font(.system(size: 6.5, design: .monospaced)).foregroundStyle(Theme.dim)
+                    let badgeContent = vText + distText + unitText
+                    let resolved = context.resolve(badgeContent)
+                    let measured = resolved.measure(in: CGSize(width: 200, height: 50))
+
+                    let padH: CGFloat = 4
+                    let padV: CGFloat = 2.5
+                    let badgeW = measured.width + padH * 2
+                    let badgeH = measured.height + padV * 2
+
+                    let badgeCenterY = h - 8 - (badgeW / 2)
+                    let tickCutoff = badgeCenterY - (badgeW / 2) - 6
+
+                    // Zero tick and label at start (top edge)
+                    var zeroPath = Path()
+                    zeroPath.move(to: CGPoint(x: 0, y: 0))
+                    zeroPath.addLine(to: CGPoint(x: 4.5, y: 0))
+                    context.stroke(zeroPath, with: .color(Color.white.opacity(0.6)), lineWidth: 1)
+
+                    var zeroCtx = context
+                    zeroCtx.translateBy(x: 12, y: 6)
+                    zeroCtx.rotate(by: .degrees(90))
+                    let zeroText = Text("0")
+                        .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                    zeroCtx.draw(context.resolve(zeroText), at: .zero, anchor: .center)
+
+                    // Draw ticks down the height
+                    var d = step
+                    while d < maxDist {
+                        let y = CGFloat(d / maxDist) * h
+                        if y > tickCutoff { break }
+
+                        // Major tick
+                        var majorPath = Path()
+                        majorPath.move(to: CGPoint(x: 0, y: y))
+                        majorPath.addLine(to: CGPoint(x: 4.5, y: y))
+                        context.stroke(majorPath, with: .color(Color.white.opacity(0.7)), lineWidth: 1)
+
+                        // Minor tick (midpoint)
+                        let midD = d - step / 2.0
+                        if midD > 0 {
+                            let midY = CGFloat(midD / maxDist) * h
+                            if midY < tickCutoff {
+                                var minorPath = Path()
+                                minorPath.move(to: CGPoint(x: 0, y: midY))
+                                minorPath.addLine(to: CGPoint(x: 2.5, y: midY))
+                                context.stroke(minorPath, with: .color(Color.white.opacity(0.35)), lineWidth: 0.75)
+                            }
+                        }
+
+                        // Text label aligned vertically with screen edge
+                        let labelText = formatDistance(d)
+                        let text = Text(labelText)
+                            .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.75))
+                        var tickCtx = context
+                        tickCtx.translateBy(x: 12, y: y)
+                        tickCtx.rotate(by: .degrees(90))
+                        tickCtx.draw(context.resolve(text), at: .zero, anchor: .center)
+
+                        d += step
+                    }
+
+                    // Draw bottom badge aligned vertically with screen edge
+                    var badgeCtx = context
+                    badgeCtx.translateBy(x: 12, y: badgeCenterY)
+                    badgeCtx.rotate(by: .degrees(90))
+
+                    let badgeRect = CGRect(x: -badgeW / 2, y: -badgeH / 2, width: badgeW, height: badgeH)
+                    badgeCtx.fill(Path(roundedRect: badgeRect, cornerRadius: 3), with: .color(Theme.panel2.opacity(0.88)))
+                    badgeCtx.stroke(Path(roundedRect: badgeRect, cornerRadius: 3), with: .color(Theme.line), lineWidth: 0.5)
+                    badgeCtx.draw(resolved, at: .zero, anchor: .center)
+                }
+            }
+        }
+        .frame(width: 24)
     }
 }
 

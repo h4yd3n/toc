@@ -43,6 +43,16 @@ final class COPStore {
     var viewportWidthMiles: Double {
         viewportWidthKm * 0.621371
     }
+
+    var viewportHeightKm: Double {
+        guard let b = board else { return 0 }
+        let meters = max(1.0, b.span.latitudeDelta * 111_139.0)
+        return meters / 1000.0
+    }
+
+    var viewportHeightMiles: Double {
+        viewportHeightKm * 0.621371
+    }
     var requirements: [Requirement] = []
     var intsums: [IntsumHead] = []
     var warnings: [Warning] = []
@@ -64,6 +74,8 @@ final class COPStore {
     /// leads with posture and keeps five counters. Both default on; persisted per device.
     var leanLabels: Bool = UserDefaults.standard.object(forKey: "toc.leanLabels") as? Bool ?? true { didSet { UserDefaults.standard.set(leanLabels, forKey: "toc.leanLabels") } }
     var postureHeader: Bool = UserDefaults.standard.object(forKey: "toc.postureHeader") as? Bool ?? true { didSet { UserDefaults.standard.set(postureHeader, forKey: "toc.postureHeader") } }
+    /// Units toggle: "mi" for Miles (default) or "km" for Kilometers. Persisted per device.
+    var distanceUnit: String = UserDefaults.standard.string(forKey: "toc.distanceUnit") ?? "mi" { didSet { UserDefaults.standard.set(distanceUnit, forKey: "toc.distanceUnit") } }
 
     var client = COPClient()
     var users: [UserInfo] = []

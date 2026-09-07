@@ -80,7 +80,7 @@ fun WallMap(
     onSelect: (Selection) -> Unit,
     modifier: Modifier = Modifier,
     layer: String? = null,
-    onViewportChanged: ((Double, Double) -> Unit)? = null
+    onViewportChanged: ((Double, Double, Double, Double) -> Unit)? = null
 ) {
     val latestLayer = remember { arrayOfNulls<String>(1) }; latestLayer[0] = layer
     val context = LocalContext.current
@@ -101,11 +101,16 @@ fun WallMap(
         if (w > 0 && h > 0) {
             val pLeft = map.projection.fromScreenLocation(android.graphics.PointF(0f, h / 2f))
             val pRight = map.projection.fromScreenLocation(android.graphics.PointF(w, h / 2f))
-            if (pLeft != null && pRight != null) {
-                val meters = pLeft.distanceTo(pRight)
-                val miles = meters / 1609.344
-                val km = meters / 1000.0
-                onViewportChanged?.invoke(miles, km)
+            val pTop = map.projection.fromScreenLocation(android.graphics.PointF(w / 2f, 0f))
+            val pBottom = map.projection.fromScreenLocation(android.graphics.PointF(w / 2f, h))
+            if (pLeft != null && pRight != null && pTop != null && pBottom != null) {
+                val wMeters = pLeft.distanceTo(pRight)
+                val hMeters = pTop.distanceTo(pBottom)
+                val wMiles = wMeters / 1609.344
+                val wKm = wMeters / 1000.0
+                val hMiles = hMeters / 1609.344
+                val hKm = hMeters / 1000.0
+                onViewportChanged?.invoke(wMiles, wKm, hMiles, hKm)
             }
         }
     }
@@ -176,7 +181,7 @@ fun WallMap(
 }
 
 @Composable
-fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null, onViewportChanged: ((Double, Double) -> Unit)? = null) =
+fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null, onViewportChanged: ((Double, Double, Double, Double) -> Unit)? = null) =
     WallMap(WallState(snap = snap, restricted = restricted), onSelect, modifier, layer, onViewportChanged)
 
 /** Frame the AO the Battle Captain declared, or the box that holds our sites. Once per process. */

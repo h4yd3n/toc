@@ -16,6 +16,8 @@ data class WallState(
     val showSites: Boolean = true, val showTravelers: Boolean = true, val showRoutes: Boolean = true,
     val showThreats: Boolean = true, val showEvents: Boolean = true, val outlineOnlyThreats: Boolean = false,
     val viewportWidthMiles: Double = 0.0, val viewportWidthKm: Double = 0.0,
+    val viewportHeightMiles: Double = 0.0, val viewportHeightKm: Double = 0.0,
+    val distanceUnit: String = "mi",
 )
 
 /** The wall's state on the phone: one snapshot, refreshed every 15 s and after every write. */
@@ -36,6 +38,14 @@ class Store : ViewModel() {
         _state.update {
             if (it.viewportWidthMiles == miles && it.viewportWidthKm == km) it
             else it.copy(viewportWidthMiles = miles, viewportWidthKm = km)
+        }
+    }
+    fun setViewportDimensions(wMiles: Double, wKm: Double, hMiles: Double, hKm: Double) {
+        _state.update {
+            if (it.viewportWidthMiles == wMiles && it.viewportWidthKm == wKm &&
+                it.viewportHeightMiles == hMiles && it.viewportHeightKm == hKm) it
+            else it.copy(viewportWidthMiles = wMiles, viewportWidthKm = wKm,
+                         viewportHeightMiles = hMiles, viewportHeightKm = hKm)
         }
     }
     fun toggleLayer(key: String) {
@@ -68,6 +78,9 @@ class Store : ViewModel() {
                 else -> it
             }
         }
+    }
+    fun setDistanceUnit(unit: String) {
+        _state.update { it.copy(distanceUnit = unit) }
     }
 
     suspend fun refresh() {

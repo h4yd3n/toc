@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(COPStore.self) private var store
+    @State private var rulerBottom: CGFloat = 0
 
     var body: some View {
         @Bindable var store = store
@@ -20,7 +21,10 @@ struct ContentView: View {
                 .safeAreaInset(edge: .top, spacing: 0) {
                     VStack(spacing: 0) {
                         PostureTopBar()
-                        TacticalRuler(widthMiles: store.viewportWidthMiles, widthKm: store.viewportWidthKm)
+                        TacticalRuler(widthMiles: store.viewportWidthMiles, widthKm: store.viewportWidthKm, unit: store.distanceUnit)
+                            .background(GeometryReader { geo in
+                                Color.clear.preference(key: RulerBottomPreferenceKey.self, value: geo.frame(in: .named("contentRoot")).maxY)
+                            })
                         FlashStrip()
                         if store.tab == "COP" {
                             StatusOverlayCard()
@@ -29,7 +33,16 @@ struct ContentView: View {
                 }  // the map runs under the header; lists start below it
                 TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
             }
+            .coordinateSpace(name: "contentRoot")
+            .overlay(alignment: .topTrailing) {
+                if rulerBottom > 0 {
+                    TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
+                        .padding(.top, rulerBottom)
+                        .padding(.bottom, 80)
+                }
+            }
         }
+        .onPreferenceChange(RulerBottomPreferenceKey.self) { rulerBottom = $0 }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
         }
@@ -134,7 +147,7 @@ struct StatusOverlayCard: View {
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
-        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 4)
+        .padding(.leading, 10).padding(.trailing, 28).padding(.top, 6).padding(.bottom, 4)
     }
     func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
 }
