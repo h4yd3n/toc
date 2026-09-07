@@ -248,3 +248,8 @@ See `.env.example`: `TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM`, `SLACK_WEBHOOK_URL`, `
 - `synthetic: true` threats render with a SYNTHETIC tag; `synthetic: false` with LIVE and the source.
 - Show `source` (provenance) wherever a record is opened. If the wall can't say where a fact came from, it isn't a fact.
 - Roll calls: `unaccounted` and `unreachable` sort first; VIPs first within a status. `tel:` links on phones.
+
+
+## Staff workspaces (2026-09-07)
+
+The additive personnel-entry, duty-assignment, activity-pagination, reporting attachment, and `/v1/work` contracts are documented in [WORKSPACE_API.md](../../docs/WORKSPACE_API.md). Existing mobile API payloads remain compatible. Live-provider validation and native workspace parity remain separate rollout requirements.

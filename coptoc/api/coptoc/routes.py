@@ -1719,3 +1719,9 @@ async def seed(dataset: Optional[str] = None, session: AsyncSession = Depends(ge
         raise HTTPException(422, str(e))
     await sync_standing_requirements(session)
     return {"status": "reseeded", "dataset": (dataset or os.environ.get("TOC_SEED", "cab")).lower()}
+
+
+@router.get('/activity')
+async def get_activity(before: int | None = None, limit: int = Query(default=40, ge=1, le=100), include_reads: bool = False, session: AsyncSession = Depends(get_session)):
+    from .service import activity_log
+    return await activity_log(session, limit=limit, before=before, include_reads=include_reads)

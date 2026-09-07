@@ -172,6 +172,28 @@ def coverage_for(e, attendee_ids, person_by_id, rows) -> Dict[str, Any]:
     return {"required": required, "assigned": len(assigned), "gap": max(0, required - len(assigned)), "rule": "override" if e.required_security is not None else "1 lead + 1 per VIP (+1 over 20 attending)", "people": assigned}
 
 
+async def activity_log(session: AsyncSession, limit: int = 40, before: int | None = None, include_reads: bool = False) -> Dict[str, Any]:
+    from .users import current_actor
+    from sigtoc.cases import CaseRow, ReportRow
+    actor = current_actor.get()
+    cases = list((await session.execute(select(CaseRow))).scalars())
+    hidden = [c.id for c in cases if not actor.can("S2") or actor.role not in c.access_roles.split(",")]
+    if hidden:
+        hidden += list((await session.execute(select(ReportRow.id).where(ReportRow.case_id.in_(hidden)))).scalars())
+    q = select(LedgerEventRow).where(LedgerEventRow.event_type.like("cop.%") | LedgerEventRow.event_type.like("s2.%"))
+    if hidden:
+        q = q.where(LedgerEventRow.content_id.not_in(hidden))
+    if not include_reads:
+        q = q.where(~LedgerEventRow.event_type.like("%.read"))
+    if before is not None:
+        q = q.where(LedgerEventRow.id < before)
+    rows = list((await session.execute(q.order_by(LedgerEventRow.id.desc()).limit(limit + 1))).scalars()) if limit else []
+    items = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "actor": r.actor_id, "actor_type": r.actor_type,
+              "subject": r.content_id, "old": r.old_state, "new": r.new_state, "summary": r.reason,
+              "meta": json.loads(r.metadata_json or "{}")} for r in rows[:limit]]
+    return {"items": items, "next_cursor": rows[limit - 1].id if len(rows) > limit else None}
+
+
 async def build_snapshot(session: AsyncSession, include_restricted: bool = False, log_limit: int = 40) -> Dict[str, Any]:
     now = now_utc()
     locations = (await session.execute(select(LocationRow))).scalars().all()
@@ -424,11 +446,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "channels": ["sms", "chat"], "delivery_summary": dsum, "roster": roster,
         })
 
-    log_rows = (await session.execute(select(LedgerEventRow).where(LedgerEventRow.event_type.like("cop.%") | LedgerEventRow.event_type.like("s2.%"))
-                                      .order_by(LedgerEventRow.id.desc()).limit(log_limit))).scalars().all()
-    log_out = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "actor": r.actor_id, "actor_type": r.actor_type,
-                "subject": r.content_id, "old": r.old_state, "new": r.new_state, "summary": r.reason,
-                "meta": json.loads(r.metadata_json or "{}")} for r in log_rows]
+    log_out = (await activity_log(session, limit=log_limit))["items"]
 
     worst_loc = max((POSTURE_RANK[l["effective_posture"]] for l in locations_out), default=0)
     for pp in people_out:  # §4: unreachable is a state of its own — a roll call that cannot reach you, or a stale check-in while traveling

@@ -72,12 +72,13 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
   const canEdit = canEditOverride ?? S6_ROLES.includes(role)
   const [editing,setEditing]=useState<{system:SystemLine;status:SystemLine['status']}|null>(null)
   const [note,setNote]=useState('')
+  const [pace,setPace]=useState('')
   if (!board) return <div className="dim small" style={{ padding: 14 }}>No signal board yet.</div>
   const systems = (group === 'all' ? board.systems : board.systems.filter(x => x.health !== 'green')).filter(x => !site || x.location_id === site.id)
   const paceSites = Object.entries(board.pace).filter(([id]) => !site || id === site.id)
-  const set = (x: SystemLine, status: SystemLine['status']) => { setEditing({system:x,status}); setNote(status==='up'?'':x.note) }
+  const set = (x: SystemLine, status: SystemLine['status']) => { setEditing({system:x,status}); setNote(status==='up'?'':x.note); setPace(x.pace??'') }
   return (<>
-    {editing&&<form className="ws-form" onSubmit={e=>{e.preventDefault();act('updating system',async()=>{await api.updateSystem(editing.system.id,{status:editing.status,note});setEditing(null)})}}><h3>{editing.system.name} → {editing.status}</h3><label>Update note<input value={note} onChange={e=>setNote(e.target.value)} required={editing.status!=='up'}/></label><div className="ws-actions"><button disabled={!!busy}>Save system status</button><button type="button" onClick={()=>setEditing(null)}>Cancel</button></div></form>}
+    {editing&&<form className="ws-form" onSubmit={e=>{e.preventDefault();act('updating system',async()=>{await api.updateSystem(editing.system.id,{status:editing.status,note,pace:pace||null});setEditing(null)})}}><h3>{editing.system.name} → {editing.status}</h3><label>Update note<input value={note} onChange={e=>setNote(e.target.value)} required={editing.status!=='up'}/></label><label>Fallback role<select value={pace} onChange={e=>setPace(e.target.value)}><option value="">No PACE role</option>{['primary','alternate','contingency','emergency'].map(p=><option key={p}>{p}</option>)}</select></label><div className="ws-actions"><button disabled={!!busy}>Save system</button><button type="button" onClick={()=>setEditing(null)}>Cancel</button></div></form>}
 
     <div className="s4-summary">
       {statusChip(board.status, `S6 ${board.status}`)}
@@ -95,6 +96,7 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
           <span className="meta dim">{p.in_use ? `on ${p.in_use.toUpperCase()}` : 'NO NET'}</span>
         </li>))}
     </ul>
+    {canEdit&&<details><summary>Manage fallback roles</summary>{board.systems.filter(x=>!site||x.location_id===site.id).map(x=><button className="section-exception" key={x.id} onClick={()=>set(x,x.status)}><strong>{x.name}</strong><span>{x.location_name} · {x.pace||'No PACE role'}</span></button>)}</details>}
     </>}{view !== 'pace' && <><div className="section-label">SYSTEMS <span className="dim">{systems.length}{group === 'exceptions' && ` of ${board.systems.length}`}</span></div>
     <ul className="list">
       {systems.length === 0 && <li className="row dim small">No systems match this view.</li>}
@@ -103,7 +105,7 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
           <span className={`sev ${x.status === 'up' ? 'ok' : x.status === 'degraded' ? 'low' : 'critical'}`}>{x.status === 'up' ? 'UP' : x.status === 'degraded' ? 'DEG' : 'DOWN'}</span>
           <span className="name">{x.name}<span className="dim"> · {x.location_name}{x.pace ? ` · ${x.pace[0].toUpperCase()}` : ''}</span>{x.note && x.status !== 'up' && <div className="sub dim">{x.note}</div>}</span>
           <span className="meta mono dim">{x.hours < 48 ? `${Math.round(x.hours)}h` : `${Math.round(x.hours / 24)}d`}</span>
-          {canEdit && <span className="acts">
+          {canEdit && <span className="acts"><button className="mini" disabled={!!busy} onClick={()=>set(x,x.status)}>EDIT</button>
             {x.status !== 'up' && <button className="mini ok" disabled={!!busy} onClick={() => set(x, 'up')}>UP</button>}
             {x.status !== 'degraded' && <button className="mini warn" disabled={!!busy} onClick={() => set(x, 'degraded')}>DEG</button>}
             {x.status !== 'down' && <button className="mini danger" disabled={!!busy} onClick={() => set(x, 'down')}>DOWN</button>}

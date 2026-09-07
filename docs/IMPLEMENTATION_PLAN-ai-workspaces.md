@@ -2,7 +2,7 @@
 
 Date: 2026-09-06
 
-Status: Planned. This document does not mark the application features below as implemented.
+Status: Core workspace and AI workflow implementation delivered for local verification (2026-09-07). Live-provider validation and the remaining advanced automation are still open. See [the implemented contract and rollout notes](WORKSPACE_API.md) for the exact boundary; the phase exit criteria below remain the full roadmap.
 
 ## Outcome
 
@@ -25,7 +25,7 @@ Default for a continuous implementation task: Astra / High. Use Astra / Extra Hi
 
 These settings are an engineering recommendation, not a repository-specific benchmark. Official references checked during planning: [Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) and [model comparison](https://developers.openai.com/api/docs/models/compare). Verify availability when execution begins.
 
-## Current baseline
+## Starting baseline
 
 - The React wall places S1 in the left rail, S2/S4/S6 in the right rail, and S3 in the bottom timeline. Multiple data sets and editing controls share long panels.
 - S2 already exposes report entry, case creation, suggested-fact review, directed requirements, collection, area assessments, and INTSUM drafting. Its case graph is primarily displayed as text and lists.
@@ -183,6 +183,16 @@ Model: Astra / Extra High for final system review; implement fixes using Astra /
 - Update PRD and API contracts to the verified final behavior. Keep deferred features marked planned.
 
 Exit: complete user workflows pass, limitations are documented, and the COP remains readable while users perform real staff work in the workspaces.
+
+## Verified implementation slice — 2026-09-07
+
+The web app now separates COP, Workspaces, and My Work. Staff can enter/update records, save reporting drafts, attach reports to cases, inspect case visuals, assign ongoing analysis, edit cited products, and use the review/release workflow. Released products link from the COP to evidence. Scheduled work is durable, has bounded retries, respects contributor permissions, and preserves review history. My Work includes task handoffs and paginated activity.
+
+Development model allocations above are preserved as the execution plan. No separate Astra/Sol agent runs or runtime-model benchmarks are claimed by this implementation record.
+
+Automated verification covers case/report access, draft ownership, manual personnel entry, citation validation, stale writes, release authority, provider adapters using synthetic responses, permission changes, bounded retries, duplicate task prevention, scheduled unchanged evidence, and activity pagination. Browser verification covers draft restoration, report entry, case attachment, timeline navigation, provider-off failure, analyst correction, Battle Captain release, and the released-product link on the COP. The result used for browser review was explicitly labeled synthetic; live-provider validation remains required.
+
+The phase checkboxes below remain unchecked where their complete exit criteria include work beyond this implemented slice. This avoids marking live AI evaluation, advanced automation, or rollout complete on the strength of a UI or mocked test.
 
 ## Progress tracking
 

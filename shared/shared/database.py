@@ -25,6 +25,7 @@ async def init_db(engine: AsyncEngine):
 ADDED_COLUMNS = [
     ("toc_ai_assignments", "location_id", "VARCHAR"),
     ("toc_ai_runs", "instruction", "TEXT DEFAULT ''"),
+    ("toc_ai_runs", "retry_at", "DATETIME"),
     ("cop_locations", "is_toc", "BOOLEAN DEFAULT 0"),   # §3.1 the CP the TOC is running from
 ]
 

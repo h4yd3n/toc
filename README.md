@@ -59,7 +59,7 @@ with the reasoning, because a requirements document I could not defend would ser
 
 ## Layout — three modules, one repo
 
-The next development sequence is in the [staff workspaces and AI implementation plan](docs/IMPLEMENTATION_PLAN-ai-workspaces.md), including COP organization, complete analyst workflows, background AI assignments, development model settings, and acceptance checks. Its unchecked phases are planned work.
+The web app now has **COP**, **Workspaces**, and **My Work**. Open a section workspace to enter records, review cases, or assign AI analysis. The [implemented API and setup guide](docs/WORKSPACE_API.md) explains provider configuration, review/release, permissions, and current limits. AI is off until a provider, exact API model, and key are configured. The broader [implementation plan](docs/IMPLEMENTATION_PLAN-ai-workspaces.md) retains the Astra/Sol development allocations and the remaining work; live-provider validation is still open.
 
 ```
 toc/

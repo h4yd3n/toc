@@ -203,3 +203,99 @@ def test_provider_adapter_uses_validated_cited_json(monkeypatch, provider):
     assert result.findings[0].citations[0].source_id == 'r1'
     assert meta['provider'] == provider
     assert len(requests) == 1
+
+
+def test_source_permissions_apply_to_general_section_results(monkeypatch):
+    """An S2-wide assignment must not launder a BC-only report into a public S2 result."""
+    monkeypatch.setattr(work, 'model_analysis', fake_model)
+    with TestClient(standalone_app()) as c:
+        case, report = case_with_report(c)
+        async def private_case():
+            from sigtoc.api import sessions
+            async with sessions()() as session:
+                row = await session.get(work.CaseRow, case['id'])
+                row.access_roles = 'battle_captain'
+                await session.commit()
+        asyncio.run(private_case())
+        a = c.post('/v1/work/assignments', headers=BC, json={'section': 'S2', 'instruction': 'Review accessible reporting for gaps'}).json()
+        asyncio.run(work.worker_tick())
+        r = next(r for r in c.get('/v1/work', headers=BC).json()['runs'] if r['assignment_id'] == a['id'])
+        assert r['status'] == 'completed', r
+        assert report['id'] in [e['id'] for e in r['evidence']]
+        assert r['id'] not in [r['id'] for r in c.get('/v1/work', headers=AN).json()['runs']]
+        assert c.patch('/v1/work/runs/' + r['id'], headers=AN, json={'revision': 1, 'action': 'review'}).status_code == 403
+
+
+def test_transient_provider_failure_retries_are_bounded(monkeypatch):
+    import httpx
+    attempts = []
+    async def unavailable(instruction, evidence):
+        attempts.append(1)
+        raise httpx.ConnectTimeout('Synthetic timeout')
+    monkeypatch.setattr(work, 'model_analysis', unavailable)
+    with TestClient(standalone_app()) as c:
+        case, _ = case_with_report(c)
+        a = c.post('/v1/work/assignments', headers=AN, json={'section': 'S2', 'case_id': case['id'], 'instruction': 'Assess the reporting'}).json()
+        def get_run():
+            return next(r for r in c.get('/v1/work', headers=AN).json()['runs'] if r['assignment_id'] == a['id'])
+        async def make_retry_due():
+            from sigtoc.api import sessions
+            async with sessions()() as session:
+                row = await session.get(work.RunRow, get_run()['id'])
+                row.retry_at = work.now()
+                await session.commit()
+        asyncio.run(work.worker_tick())
+        assert get_run()['status'] == 'queued' and get_run()['retry_at']
+        asyncio.run(work.worker_tick())
+        assert len(attempts) == 1  # Do not spin or immediately retry.
+        for _ in range(2):
+            asyncio.run(make_retry_due())
+            asyncio.run(work.worker_tick())
+        assert len(attempts) == 3
+        assert get_run()['status'] == 'failed' and get_run()['attempts'] == 3
+        asyncio.run(work.worker_tick())
+        assert len(attempts) == 3
+
+
+def test_evidence_cannot_be_read_after_its_site_becomes_restricted():
+    from coptoc.users import Actor
+    from fastapi import HTTPException
+    with TestClient(standalone_app()):
+        async def check():
+            from sigtoc.api import sessions
+            from coptoc.db_models import LocationRow
+            from sqlalchemy import select
+            async with sessions()() as session:
+                site = (await session.execute(select(LocationRow).where(LocationRow.sensitivity != 'restricted'))).scalars().first()
+                if site is None:
+                    site = LocationRow(id='loc_scope_test', name='Scope test site', type='office', lat=0, lon=0, city='Test', country='XX')
+                    session.add(site)
+                    await session.commit()
+                evidence = [{'section': 'S2', 'location_ids': [site.id]}]
+                await work.evidence_scope_ok(session, Actor(role='battle_captain'), evidence, 'S2')
+                site.sensitivity = 'restricted'
+                await session.commit()
+                with pytest.raises(HTTPException):
+                    await work.evidence_scope_ok(session, Actor(role='battle_captain'), evidence, 'S2')
+                site.sensitivity = 'standard'
+                await session.commit()
+        asyncio.run(check())
+
+
+def test_reviewer_feedback_inherits_its_original_case_access():
+    from coptoc.users import Actor
+    from fastapi import HTTPException
+    with TestClient(standalone_app()) as c:
+        case, _ = case_with_report(c)
+        async def check():
+            from sigtoc.api import sessions
+            async with sessions()() as session:
+                row = await session.get(work.CaseRow, case['id'])
+                row.access_roles = 'battle_captain'
+                await session.commit()
+                # The current report is general; its prior reviewer context is restricted.
+                evidence = [{'id':'general', 'section':'S2', 'text':'Current general reporting', 'context_scopes':[{'section':'S2', 'case_id':case['id']}]}]
+                await work.evidence_scope_ok(session, Actor(role='battle_captain'), evidence, 'S2')
+                with pytest.raises(HTTPException):
+                    await work.evidence_scope_ok(session, Actor(role='analyst'), evidence, 'S2')
+        asyncio.run(check())

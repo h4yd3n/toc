@@ -15,7 +15,7 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import DateTime, Integer, String, Text, Index, select, update
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.exc import IntegrityError
@@ -64,6 +64,7 @@ class RunRow(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     evidence_json: Mapped[str] = mapped_column(Text, default="[]")
     result_json: Mapped[str] = mapped_column(Text, default="{}")
@@ -173,10 +174,22 @@ async def scope_ok(session, a, section, case_id=None, edit=False):
             raise HTTPException(409, "Case is closed")
 
 
+def evidence_scopes(evidence):
+    # Review feedback inherits the scopes of the evidence that informed it.
+    return evidence + [scope for e in evidence for scope in e.get("context_scopes", [])]
+
+
 async def evidence_scope_ok(session, actor, evidence, default_section):
-    scopes = {(e.get("section", default_section), e.get("case_id")) for e in evidence}
+    scoped = evidence_scopes(evidence)
+    scopes = {(e.get("section", default_section), e.get("case_id")) for e in scoped}
     for section, case_id in scopes:
         await scope_ok(session, actor, section, case_id)
+    location_ids = {lid for e in scoped for lid in e.get("location_ids", [])}
+    if location_ids:
+        from coptoc.db_models import LocationRow
+        available = set((await session.execute(select(LocationRow.id).where(LocationRow.id.in_(location_ids), LocationRow.sensitivity != "restricted"))).scalars())
+        if available != location_ids:
+            raise HTTPException(403, "An evidence site is no longer accessible")
 
 
 async def event(subject, kind, actor, reason, actor_type="human"):
@@ -190,8 +203,8 @@ def assignment_out(a):
 
 
 def run_out(r):
-    return {k: getattr(r, k) for k in ("id", "assignment_id", "instruction", "status", "review_status", "revision", "created_at", "completed_at", "provider", "model", "error", "reviewed_by")} | {
-        "result": json.loads(r.result_json), "evidence": json.loads(r.evidence_json),
+    return {k: getattr(r, k) for k in ("id", "assignment_id", "instruction", "status", "review_status", "revision", "attempts", "retry_at", "created_at", "completed_at", "provider", "model", "error", "reviewed_by")} | {
+        "result": json.loads(r.result_json), "original": json.loads(r.original_json), "evidence": json.loads(r.evidence_json),
         "history": json.loads(r.history_json), "metrics": json.loads(r.metrics_json)}
 
 
@@ -363,7 +376,7 @@ async def create_proposed_task(rid: str, body: ProposedTask, session=Depends(ses
     await evidence_scope_ok(session, actor, json.loads(r.evidence_json), a.section)
     if r.status != "completed" or r.review_status not in ("review", "released"):
         raise HTTPException(409, "Review the analysis before assigning follow-up")
-    case_scoped = bool(a.case_id or any(e.get("case_id") for e in json.loads(r.evidence_json)))
+    case_scoped = bool(a.case_id or any(e.get("case_id") for e in evidence_scopes(json.loads(r.evidence_json))))
     if case_scoped and body.to_section != "S2":
         raise HTTPException(403, "Case-derived tasks stay in S2. Prepare a separate shareable task for another section")
     from coptoc.sections import sections_config
@@ -371,13 +384,14 @@ async def create_proposed_task(rid: str, body: ProposedTask, session=Depends(ses
         raise HTTPException(422, "Target section is disabled")
     tasks = json.loads(r.result_json).get("proposed_tasks", [])
     if body.index >= len(tasks): raise HTTPException(422, "Suggestion not found")
-    task_id = f"followup_{rid}_{body.index}_{body.to_section}"
+    task_key = hashlib.sha256(tasks[body.index].encode()).hexdigest()[:12]
+    task_id = f"followup_{rid}_{task_key}_{body.to_section}"
     existing = await session.get(TaskingRow, task_id)
     if existing: return {"id": existing.id, "status": existing.status}
     row = TaskingRow(id=task_id, title=f"Review case follow-up {body.index + 1}" if case_scoped else tasks[body.index], from_section=a.section, to_section=body.to_section,
                     kind="collection" if body.to_section == "S2" else "other", subject_type="work_product", subject_id=rid,
                     subject_name="Restricted case analysis" if case_scoped else json.loads(r.result_json).get("title", "Staff analysis"),
-                    notes=f"Human-assigned follow-up from {rid}. Evidence and review remain with the source product.",
+                    notes=f"Human-assigned follow-up from {rid}, revision {r.revision}, suggestion {body.index + 1}. Evidence and review remain with the source product.",
                     requested_by=actor.name, requested_at=now(), updated_at=now())
     session.add(row)
     try:
@@ -481,7 +495,10 @@ async def evidence_for(session, a, actor):
                 # Group a large roster into auditable team facts; individual records remain in S1.
                 by_team = {}
                 for p in rows:
-                    group = by_team.setdefault(p["team_id"], {"id": p["team_id"], "name": p["team_name"], "personnel": 0, "availability": {}, "exceptions": []})
+                    group = by_team.setdefault(p["team_id"], {"id": p["team_id"], "name": p["team_name"], "personnel": 0, "availability": {}, "exceptions": [], "site_ids": []})
+                    for lid in (p.get("home_location_id"), p.get("location_id")):
+                        if lid and lid not in group["site_ids"]:
+                            group["site_ids"].append(lid)
                     group["personnel"] += 1
                     state = p["availability"]
                     group["availability"][state] = group["availability"].get(state, 0) + 1
@@ -492,7 +509,8 @@ async def evidence_for(session, a, actor):
             for r in rows:
                 # Remove contact details and derived relative-time fields from model context/fingerprint.
                 record = {k: v for k, v in r.items() if k not in ("phone", "email", "hours", "hours_to_eta", "checkin_age_h", "days_until")}
-                evidence.append({"id": kind + ":" + r["id"], "section": source_section, "label": str(r.get("name", r.get("title", r.get("item", r["id"])))), "text": json.dumps(record, sort_keys=True)})
+                location_ids = sorted(set(r.get("site_ids", [])) | {v for k, v in r.items() if k.endswith("location_id") and isinstance(v, str)})
+                evidence.append({"id": kind + ":" + r["id"], "section": source_section, "location_ids": location_ids, "label": str(r.get("name", r.get("title", r.get("item", r["id"])))), "text": json.dumps(record, sort_keys=True)})
     if sum(len(e["text"]) for e in evidence) > 180000:
         raise ValueError("Evidence exceeds the run budget. Narrow the assignment")
     return evidence
@@ -518,6 +536,8 @@ async def worker_tick():
             if not pending or pending.status != "queued":
                 continue
             r = pending
+            if r.retry_at and r.retry_at > now():
+                continue
             claimed = await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "queued").values(status="running", started_at=now(), attempts=RunRow.attempts + 1))
             await session.commit()
             if claimed.rowcount != 1:
@@ -533,14 +553,28 @@ async def worker_tick():
                 else:
                     if not evidence:
                         raise ValueError("No evidence in scope. Add reporting or select another section")
-                    await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "running").values(evidence_json=json.dumps(evidence), instruction=a.instruction))
-                    await session.commit()
                     await event(a.case_id or a.id, "evidence_read", actor.name, f"Analysis {r.id}: {len(evidence)} source records", actor_type="system")
                     previous = list((await session.execute(select(RunRow).where(RunRow.assignment_id == a.id, RunRow.status == "completed").order_by(RunRow.created_at.desc()).limit(3))).scalars())
-                    feedback = [h for prior in previous for h in json.loads(prior.history_json)]
+                    feedback, context_scopes = [], {}
+                    for prior in previous:
+                        prior_evidence = json.loads(prior.evidence_json)
+                        try:
+                            await evidence_scope_ok(session, actor, prior_evidence, a.section)
+                        except HTTPException:
+                            continue
+                        history = json.loads(prior.history_json)
+                        if not history:
+                            continue
+                        feedback.extend(history)
+                        for e in prior_evidence + [s for e in prior_evidence for s in e.get("context_scopes", [])]:
+                            scope = {"section": e.get("section", a.section), "case_id": e.get("case_id"), "location_ids": e.get("location_ids", [])}
+                            context_scopes[json.dumps(scope, sort_keys=True)] = scope
                     instruction = a.instruction
                     if feedback:
                         instruction += "\nPrior human review (context, not additional source reporting): " + json.dumps(feedback[-5:])[:20000]
+                        evidence[0]["context_scopes"] = list(context_scopes.values())
+                    await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "running").values(evidence_json=json.dumps(evidence), instruction=a.instruction))
+                    await session.commit()
                     result, meta = await model_analysis(instruction, evidence)
                     # Recheck access and cancellation after the provider returns.
                     await session.refresh(a)
@@ -550,7 +584,7 @@ async def worker_tick():
                     if a.status != "active":
                         continue
                     changed = await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "running").values(
-                        status="completed", completed_at=now(), evidence_json=json.dumps(evidence),
+                        status="completed", completed_at=now(), error="", retry_at=None, evidence_json=json.dumps(evidence),
                         result_json=result.model_dump_json(), original_json=result.model_dump_json(),
                         provider=meta["provider"], model=meta["model"], metrics_json=json.dumps(meta["metrics"])))
                     if changed.rowcount:
@@ -560,14 +594,19 @@ async def worker_tick():
                 a.last_success_at = now()
             except Exception as e:
                 # Never persist provider response bodies, headers, credentials, or source text in errors.
-                message = str(e) if isinstance(e, ValueError) and not isinstance(e, json.JSONDecodeError) else "Analysis failed; check provider configuration or retry"
+                message = str(e) if isinstance(e, ValueError) and not isinstance(e, (json.JSONDecodeError, ValidationError)) else "Analysis failed; check provider configuration or retry"
                 if isinstance(e, HTTPException):
                     message = "Assignment owner no longer has access to this scope"
                 if isinstance(e, httpx.HTTPStatusError):
                     message = f"Provider returned HTTP {e.response.status_code}; check configuration or retry"
                 if len(message) > 250:
                     message = "Provider output failed validation; retry or use another model"
-                await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "running").values(status="failed", error=message, completed_at=now()))
+                transient = isinstance(e, httpx.TransportError) or isinstance(e, httpx.HTTPStatusError) and (e.response.status_code == 429 or e.response.status_code >= 500)
+                retry = transient and r.attempts < 3
+                await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "running").values(
+                    status="queued" if retry else "failed", error="Temporary provider failure; retry scheduled" if retry else message,
+                    retry_at=now() + timedelta(seconds=20 * 2 ** (r.attempts - 1)) if retry else None,
+                    completed_at=None if retry else now()))
             a.next_at = now() + timedelta(minutes=max(1, a.cadence_minutes))
             await session.commit()
 

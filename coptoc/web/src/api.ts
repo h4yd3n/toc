@@ -91,7 +91,7 @@ export const importText = (kind: 'people' | 'shifts' | 'trips' | 'ics' | 'legs' 
 // §7 / §8 — the background boards
 export const updateSupply = (id: string, body: { on_hand?: number; required?: number; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/supply/${id}`, body)
 export const updateShipment = (id: string, body: { status?: string; eta?: string; priority?: string; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/shipments/${id}`, body)
-export const updateSystem = (id: string, body: { status?: string; pace?: string; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/systems/${id}`, body)
+export const updateSystem = (id: string, body: { status?: string; pace?: string | null; note?: string }) => req<{ id: string }>('PATCH', `/v1/cop/systems/${id}`, body)
 
 // §11.3 — settings entered from the wall (Battle Captain); values are write-only
 export const listSettings = () => req<{ settings: SettingInfo[]; note: string }>('GET', '/v1/cop/settings')
@@ -121,10 +121,10 @@ export const raiseTasking = (body: Partial<Tasking> & { title: string; from_sect
 export const updateTasking = (id: string, body: Partial<Pick<Tasking, 'status' | 'result' | 'notes' | 'asset' | 'priority' | 'window_from' | 'window_to'>>) => req<Tasking>('PATCH', `/v1/cop/taskings/${id}`, body)
 
 // Staff work: scoped analysis assignments and cited products.
-export interface WorkEvidence { case_id?: string | null; section?: string; id: string; label: string; text: string }
+export interface WorkEvidence { context_scopes?: {case_id?: string | null}[]; case_id?: string | null; section?: string; id: string; label: string; text: string }
 export interface WorkAnalysis { title: string; summary: string; findings: { claim: string; citations: { source_id: string; quote: string }[]; uncertainty: string }[]; gaps: string[]; proposed_tasks: string[] }
 export interface WorkAssignment { location_id: string | null; id: string; section: import('./types').SectionCode; case_id: string | null; instruction: string; status: string; owner: string; cadence_minutes: number; created_at: string; last_success_at: string | null; next_at: string }
-export interface WorkRun { id: string; assignment_id: string; status: string; review_status: string; revision: number; result: Partial<WorkAnalysis>; evidence: WorkEvidence[]; provider: string; model: string; error: string; reviewed_by: string; created_at: string; completed_at: string | null; history: { at: string; actor: string; action: string; note: string }[] }
+export interface WorkRun { instruction?: string; attempts?: number; retry_at?: string | null; original?: WorkAnalysis; metrics?: { seconds?: number; usage?: Record<string,number> }; id: string; assignment_id: string; status: string; review_status: string; revision: number; result: Partial<WorkAnalysis>; evidence: WorkEvidence[]; provider: string; model: string; error: string; reviewed_by: string; created_at: string; completed_at: string | null; history: { at: string; actor: string; action: string; note: string; result?: WorkAnalysis }[] }
 export interface WorkBoard { assignments: WorkAssignment[]; runs: WorkRun[]; provider: { provider: string; model: string; configured: boolean; effort: string } }
 export const getWork = () => req<WorkBoard>('GET', '/v1/work')
 export const assignWork = (body: { section: import('./types').SectionCode; case_id?: string; location_id?: string; instruction: string; cadence_minutes: number }) => req<WorkAssignment>('POST', '/v1/work/assignments', body)
@@ -143,3 +143,4 @@ export const createPerson = (body:{name:string;role:string;team_id:string;email:
 export const updatePersonAssignment = (id:string,body:{on_shift:boolean;shift_role:string|null}) => req<unknown>('PATCH',`/v1/cop/people/${id}/assignment`,body)
 
 export const editWork = (id:string,instruction:string,cadence_minutes:number) => req<WorkAssignment>('PATCH',`/v1/work/assignments/${id}`,{action:'edit',instruction,cadence_minutes})
+export const getActivity = (before?:number,includeReads=false) => req<{items:Snapshot['log'];next_cursor:number|null}>('GET',`/v1/cop/activity?include_reads=${includeReads}${before ? '&before='+before : ''}`)

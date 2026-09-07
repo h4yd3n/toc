@@ -8,7 +8,7 @@
 > [!NOTE]
 > **Scope tags:** **[TONIGHT]** is in the prototype being built now. **[NEXT]** is the following iteration. **[LATER]** is roadmap.
 
-**Next implementation plan (2026-09-06):** [Staff workspaces and AI](docs/IMPLEMENTATION_PLAN-ai-workspaces.md) defines the proposed COP simplification, section workspaces, AI execution service, delivery phases, and development model assignments. Its planned features do not change the built-status claims below until implemented and verified.
+**Workspace implementation update (2026-09-07):** [Staff workspaces and AI](docs/IMPLEMENTATION_PLAN-ai-workspaces.md) tracks the COP simplification, section workspaces, AI execution service, delivery phases, and development model assignments. The core web workflow is implemented; [the current contract](docs/WORKSPACE_API.md) identifies verified behavior and remaining limits. Live-provider evaluation and advanced automation are not yet complete.
 
 ---
 
