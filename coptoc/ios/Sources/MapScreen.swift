@@ -63,7 +63,7 @@ struct MapScreen: View {
             }
 
             // Floating layers icon button & dropdown menu
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .trailing, spacing: 6) {
                 Button {
                     withAnimation(.snappy(duration: 0.2)) {
                         showOverlayMenu.toggle()
@@ -216,12 +216,12 @@ struct MapScreen: View {
                     .background(Theme.panel.opacity(0.96), in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line, lineWidth: 1))
                     .shadow(color: .black.opacity(0.6), radius: 16, y: 6)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topLeading)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing)))
                 }
             }
             .padding(.top, 8)
-            .padding(.leading, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.trailing, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         }
         .onAppear { if let r = store.board { camera = .region(r); currentRegion = r } }         // this section inherits the board as it stands
         .onChange(of: store.framedAt) { if let r = store.board { camera = .region(r); currentRegion = r } }
@@ -571,21 +571,24 @@ struct TacticalRuler: View {
                     let h = size.height
                     guard maxDist > 0 else { return }
 
-                    // Zero tick and label at start
+                    let originX: CGFloat = 24
+                    let availableW = max(1.0, w - originX)
+
+                    // Zero tick and label at start (meeting left vertical ruler at x = 24)
                     var zeroPath = Path()
-                    zeroPath.move(to: CGPoint(x: 6, y: h - 7))
-                    zeroPath.addLine(to: CGPoint(x: 6, y: h))
+                    zeroPath.move(to: CGPoint(x: originX, y: h - 7))
+                    zeroPath.addLine(to: CGPoint(x: originX, y: h))
                     context.stroke(zeroPath, with: .color(Color.white.opacity(0.6)), lineWidth: 1)
 
                     let zeroText = Text("0")
                         .font(.system(size: 7.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.6))
-                    context.draw(context.resolve(zeroText), at: CGPoint(x: 6, y: 1), anchor: .top)
+                    context.draw(context.resolve(zeroText), at: CGPoint(x: originX, y: 1), anchor: .top)
 
-                    // Draw ticks across width
+                    // Draw ticks across width starting from originX
                     var d = step
                     while d < maxDist {
-                        let x = CGFloat(d / maxDist) * w
+                        let x = originX + CGFloat(d / maxDist) * availableW
                         if x > w - 70 { break }
 
                         // Major tick
@@ -597,7 +600,7 @@ struct TacticalRuler: View {
                         // Minor tick (midpoint)
                         let midD = d - step / 2.0
                         if midD > 0 {
-                            let midX = CGFloat(midD / maxDist) * w
+                            let midX = originX + CGFloat(midD / maxDist) * availableW
                             if midX < w - 70 {
                                 var minorPath = Path()
                                 minorPath.move(to: CGPoint(x: midX, y: h - 4))
@@ -702,17 +705,18 @@ struct TacticalRulerVertical: View {
                 Rectangle()
                     .fill(Color(red: 0.05, green: 0.07, blue: 0.11).opacity(0.88))
 
-                // Hairline left divider
+                // Hairline right divider (facing the map)
                 HStack(spacing: 0) {
+                    Spacer()
                     Rectangle()
                         .fill(Color.white.opacity(0.2))
                         .frame(width: 0.5)
-                    Spacer()
                 }
 
                 // Ticks, labels, and bottom vertical badge
                 Canvas { context, size in
                     let h = size.height
+                    let w = size.width
                     guard maxDist > 0 else { return }
 
                     // Calculate badge dimensions and tick cutoff
@@ -733,12 +737,12 @@ struct TacticalRulerVertical: View {
 
                     // Zero tick and label at start (top edge)
                     var zeroPath = Path()
-                    zeroPath.move(to: CGPoint(x: 0, y: 0))
-                    zeroPath.addLine(to: CGPoint(x: 4.5, y: 0))
+                    zeroPath.move(to: CGPoint(x: w, y: 0))
+                    zeroPath.addLine(to: CGPoint(x: w - 4.5, y: 0))
                     context.stroke(zeroPath, with: .color(Color.white.opacity(0.6)), lineWidth: 1)
 
                     var zeroCtx = context
-                    zeroCtx.translateBy(x: 12, y: 6)
+                    zeroCtx.translateBy(x: 10, y: 6)
                     zeroCtx.rotate(by: .degrees(90))
                     let zeroText = Text("0")
                         .font(.system(size: 7.5, weight: .medium, design: .monospaced))
@@ -753,8 +757,8 @@ struct TacticalRulerVertical: View {
 
                         // Major tick
                         var majorPath = Path()
-                        majorPath.move(to: CGPoint(x: 0, y: y))
-                        majorPath.addLine(to: CGPoint(x: 4.5, y: y))
+                        majorPath.move(to: CGPoint(x: w, y: y))
+                        majorPath.addLine(to: CGPoint(x: w - 4.5, y: y))
                         context.stroke(majorPath, with: .color(Color.white.opacity(0.7)), lineWidth: 1)
 
                         // Minor tick (midpoint)
@@ -763,8 +767,8 @@ struct TacticalRulerVertical: View {
                             let midY = CGFloat(midD / maxDist) * h
                             if midY < tickCutoff {
                                 var minorPath = Path()
-                                minorPath.move(to: CGPoint(x: 0, y: midY))
-                                minorPath.addLine(to: CGPoint(x: 2.5, y: midY))
+                                minorPath.move(to: CGPoint(x: w, y: midY))
+                                minorPath.addLine(to: CGPoint(x: w - 2.5, y: midY))
                                 context.stroke(minorPath, with: .color(Color.white.opacity(0.35)), lineWidth: 0.75)
                             }
                         }
@@ -775,7 +779,7 @@ struct TacticalRulerVertical: View {
                             .font(.system(size: 7.5, weight: .medium, design: .monospaced))
                             .foregroundStyle(Color.white.opacity(0.75))
                         var tickCtx = context
-                        tickCtx.translateBy(x: 12, y: y)
+                        tickCtx.translateBy(x: 10, y: y)
                         tickCtx.rotate(by: .degrees(90))
                         tickCtx.draw(context.resolve(text), at: .zero, anchor: .center)
 
@@ -784,7 +788,7 @@ struct TacticalRulerVertical: View {
 
                     // Draw bottom badge aligned vertically with screen edge
                     var badgeCtx = context
-                    badgeCtx.translateBy(x: 12, y: badgeCenterY)
+                    badgeCtx.translateBy(x: 10, y: badgeCenterY)
                     badgeCtx.rotate(by: .degrees(90))
 
                     let badgeRect = CGRect(x: -badgeW / 2, y: -badgeH / 2, width: badgeW, height: badgeH)

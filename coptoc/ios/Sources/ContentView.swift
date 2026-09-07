@@ -11,7 +11,7 @@ struct ContentView: View {
                 Group {
                     switch store.tab {
                     case "COP":
-                        ZStack(alignment: .topTrailing) {
+                        ZStack(alignment: .topLeading) {
                             MapScreen()
                             if rulerBottom > 0 {
                                 TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
@@ -26,7 +26,9 @@ struct ContentView: View {
                     case "S4": SectionTab(section: "S4", rulerBottom: rulerBottom) { LogisticsScreen() }
                     default: SectionTab(section: "S6", rulerBottom: rulerBottom) { SignalScreen() }
                     }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(edges: .top)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     VStack(spacing: 0) {
                         PostureTopBar()

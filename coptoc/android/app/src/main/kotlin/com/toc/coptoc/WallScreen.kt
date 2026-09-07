@@ -70,14 +70,14 @@ fun TabletWall(st: WallState, store: Store) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
                 TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopCenter))
-                TacticalRulerVertical(miles = st.viewportHeightMiles, km = st.viewportHeightKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopEnd).padding(top = 20.dp))
+                TacticalRulerVertical(miles = st.viewportHeightMiles, km = st.viewportHeightKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopStart).padding(top = 20.dp))
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
                 st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
                 var overlayOpen by remember { mutableStateOf(false) }
                 if (overlayOpen) {
                     Box(Modifier.fillMaxSize().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { overlayOpen = false })
                 }
-                Box(Modifier.align(Alignment.TopStart).padding(top = 26.dp, start = 10.dp)) {
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 26.dp, end = 10.dp)) {
                     OverlayMenu(st = st, store = store, open = overlayOpen, onToggle = { overlayOpen = !overlayOpen })
                 }
                 st.busy?.let { Text(it.uppercase() + "…", Modifier.align(Alignment.BottomCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).padding(6.dp), color = Palette.blue2, fontSize = 10.sp, fontFamily = FontFamily.Monospace) }
@@ -377,7 +377,7 @@ fun PhoneScreen(st: WallState, store: Store) {
                             km = st.viewportHeightKm,
                             unit = st.distanceUnit,
                             modifier = Modifier
-                                .align(Alignment.TopEnd)
+                                .align(Alignment.TopStart)
                                 .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
                         )
                         if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
@@ -419,8 +419,8 @@ fun PhoneScreen(st: WallState, store: Store) {
         }
         Box(
             Modifier
-                .align(Alignment.TopStart)
-                .padding(top = with(density) { topOverlayPx.toDp() } + 6.dp, start = 12.dp)
+                .align(Alignment.TopEnd)
+                .padding(top = with(density) { topOverlayPx.toDp() } + 6.dp, end = 12.dp)
         ) {
             OverlayMenu(st = st, store = store, open = overlayOpen, onToggle = { overlayOpen = !overlayOpen })
         }
@@ -789,7 +789,7 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
             km = st.viewportHeightKm,
             unit = st.distanceUnit,
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.TopStart)
                 .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
         )
         SectionSheet(headerPx, section, content)
@@ -921,7 +921,7 @@ fun OverlayMenu(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.End) {
         // Floating icon-only button (stacked sheets of paper icon)
         Box(
             modifier = Modifier
@@ -1215,6 +1215,8 @@ fun TacticalRuler(
         androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
+            val originX = with(density) { 24.dp.toPx() }
+            val availableW = (w - originX).coerceAtLeast(1f)
 
             // Bottom hairline
             drawLine(
@@ -1224,20 +1226,20 @@ fun TacticalRuler(
                 strokeWidth = 1f
             )
 
-            // Zero tick and label at start
+            // Zero tick and label at start (meeting left vertical ruler at originX)
             drawLine(
                 color = Color.White.copy(alpha = 0.6f),
-                start = androidx.compose.ui.geometry.Offset(6.dp.toPx(), h - 7.dp.toPx()),
-                end = androidx.compose.ui.geometry.Offset(6.dp.toPx(), h),
+                start = androidx.compose.ui.geometry.Offset(originX, h - 7.dp.toPx()),
+                end = androidx.compose.ui.geometry.Offset(originX, h),
                 strokeWidth = 1.dp.toPx()
             )
             drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawText("0", 6.dp.toPx(), 8.dp.toPx(), textPaint)
+                canvas.nativeCanvas.drawText("0", originX, 8.dp.toPx(), textPaint)
             }
 
             var d = step
             while (d < maxDist) {
-                val x = (d / maxDist).toFloat() * w
+                val x = originX + (d / maxDist).toFloat() * availableW
                 if (x > cutoffPx) break
 
                 // Major tick
@@ -1251,7 +1253,7 @@ fun TacticalRuler(
                 // Minor tick
                 val midD = d - step / 2.0
                 if (midD > 0) {
-                    val midX = (midD / maxDist).toFloat() * w
+                    val midX = originX + (midD / maxDist).toFloat() * availableW
                     if (midX < cutoffPx) {
                         drawLine(
                             color = Color.White.copy(alpha = 0.35f),
@@ -1380,7 +1382,7 @@ fun TacticalRulerVertical(
         }
 
         val maxDist = activeDist.coerceAtLeast(0.001)
-        val textX = with(density) { 12.dp.toPx() }
+        val textX = with(density) { 10.dp.toPx() }
         val vOffset = (textPaint.descent() + textPaint.ascent()) / 2f
 
         // Badge dimensions
@@ -1403,19 +1405,19 @@ fun TacticalRulerVertical(
             val badgeCenterY = h - with(density) { 8.dp.toPx() } - (badgeW / 2f)
             val cutoffPx = badgeCenterY - (badgeW / 2f) - with(density) { 6.dp.toPx() }
 
-            // Left hairline
+            // Right hairline (facing map)
             drawLine(
                 color = Color.White.copy(alpha = 0.2f),
-                start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                end = androidx.compose.ui.geometry.Offset(0f, h),
+                start = androidx.compose.ui.geometry.Offset(w, 0f),
+                end = androidx.compose.ui.geometry.Offset(w, h),
                 strokeWidth = 1f
             )
 
-            // Zero tick and label at top
+            // Zero tick and label at top edge (meeting top ruler at (w, 0))
             drawLine(
                 color = Color.White.copy(alpha = 0.6f),
-                start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                end = androidx.compose.ui.geometry.Offset(4.5.dp.toPx(), 0f),
+                start = androidx.compose.ui.geometry.Offset(w, 0f),
+                end = androidx.compose.ui.geometry.Offset(w - 4.5.dp.toPx(), 0f),
                 strokeWidth = 1.dp.toPx()
             )
             drawIntoCanvas { canvas ->
@@ -1435,8 +1437,8 @@ fun TacticalRulerVertical(
                 // Major tick
                 drawLine(
                     color = Color.White.copy(alpha = 0.7f),
-                    start = androidx.compose.ui.geometry.Offset(0f, y),
-                    end = androidx.compose.ui.geometry.Offset(4.5.dp.toPx(), y),
+                    start = androidx.compose.ui.geometry.Offset(w, y),
+                    end = androidx.compose.ui.geometry.Offset(w - 4.5.dp.toPx(), y),
                     strokeWidth = 1.dp.toPx()
                 )
 
@@ -1447,8 +1449,8 @@ fun TacticalRulerVertical(
                     if (midY < cutoffPx) {
                         drawLine(
                             color = Color.White.copy(alpha = 0.35f),
-                            start = androidx.compose.ui.geometry.Offset(0f, midY),
-                            end = androidx.compose.ui.geometry.Offset(2.5.dp.toPx(), midY),
+                            start = androidx.compose.ui.geometry.Offset(w, midY),
+                            end = androidx.compose.ui.geometry.Offset(w - 2.5.dp.toPx(), midY),
                             strokeWidth = 0.75.dp.toPx()
                         )
                     }

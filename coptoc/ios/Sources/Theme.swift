@@ -91,7 +91,7 @@ struct SectionTab<Content: View>: View {
             MapScreen(layer: section)
             if rulerBottom > 0 {
                 TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.top, rulerBottom)
                     .padding(.bottom, 80)
                     .allowsHitTesting(false)
