@@ -35,7 +35,7 @@ struct ContentView: View {
                         PostureTopBar()
                         TacticalRuler(widthMiles: store.viewportWidthMiles, widthKm: store.viewportWidthKm, unit: store.distanceUnit)
                             .background(GeometryReader { geo in
-                                Color.clear.preference(key: RulerBottomPreferenceKey.self, value: geo.frame(in: .named("contentRoot")).maxY)
+                                Color.clear.preference(key: RulerBottomPreferenceKey.self, value: geo.frame(in: .global).maxY)
                             })
                         FlashStrip()
                         if store.tab == "COP" {
@@ -63,7 +63,9 @@ struct ContentView: View {
                 }
             }
             .coordinateSpace(name: "contentRoot")
+            .ignoresSafeArea(edges: .top)
         }
+        .ignoresSafeArea(edges: .top)
         .onPreferenceChange(RulerBottomPreferenceKey.self) { rulerBottom = $0 }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
