@@ -18,19 +18,19 @@ export function WatchChip({ w, onOpen }: { w: Watch | undefined; onOpen: () => v
 }
 
 /** The running-estimate line under a panel head. Editable by the section's owners. */
-export function EstimateLine({ e, role, busy, act }: { e: Estimate | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void }) {
+export function EstimateLine({ e, role, busy, act, canEditOverride }: { canEditOverride?: boolean; e: Estimate | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void }) {
   const [editing, setEditing] = useState(false)
   const [a, setA] = useState(''); const [r, setR] = useState('')
   if (!e) return null
-  const canEdit = (OWNERS[e.section] ?? ['battle_captain']).includes(role)
+  const canEdit = canEditOverride ?? (OWNERS[e.section] ?? ['battle_captain']).includes(role)
   if (editing) return (
     <div className="estimate editing">
       <textarea value={a} onChange={ev => setA(ev.target.value)} placeholder={`${e.section} assesses…`} rows={2} />
       <input value={r} onChange={ev => setR(ev.target.value)} placeholder="Recommendation (optional)" />
-      <div className="row-btns"><button className="mini ok" disabled={!!busy || !a.trim()} onClick={() => { act('updating estimate', () => api.setEstimate(e.section, a, r)); setEditing(false) }}>SAVE</button><button className="mini" onClick={() => setEditing(false)}>CANCEL</button></div>
+      <div className="row-btns"><button className="mini ok" disabled={!!busy || !a.trim()} onClick={() => { act('updating estimate', async () => { await api.setEstimate(e.section, a, r); setEditing(false) }) }}>SAVE</button><button className="mini" onClick={() => setEditing(false)}>CANCEL</button></div>
     </div>)
   return (
-    <div className={`estimate ${e.assessment ? '' : 'empty'}`} onClick={() => { if (canEdit) { setA(e.assessment); setR(e.recommendation); setEditing(true) } }} title={canEdit ? 'Click to update — you own this estimate' : 'Owned by ' + (OWNERS[e.section] ?? ['battle_captain']).join(' / ')}>
+    <div role={canEdit ? 'button' : undefined} tabIndex={canEdit ? 0 : undefined} onKeyDown={ev => { if (canEdit && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); setA(e.assessment); setR(e.recommendation); setEditing(true) } }} className={`estimate ${e.assessment ? '' : 'empty'}`} onClick={() => { if (canEdit) { setA(e.assessment); setR(e.recommendation); setEditing(true) } }} title={canEdit ? 'Click to update — you own this estimate' : 'Owned by ' + (OWNERS[e.section] ?? ['battle_captain']).join(' / ')}>
       <b>{e.section} assesses:</b> {e.assessment || <span className="dim">no assessment on record{canEdit ? ' — click to add' : ''}</span>}
       {e.recommendation && <div className="rec">↳ {e.recommendation}</div>}
       {e.updated_by && <span className="who dim">— {e.updated_by}</span>}

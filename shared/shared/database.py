@@ -23,6 +23,8 @@ async def init_db(engine: AsyncEngine):
 # carrying live data would otherwise fail on the first SELECT after a model grew a field, so the columns added since
 # the first release are listed here and added if absent. SQLite only, which is what every deployment runs today.
 ADDED_COLUMNS = [
+    ("toc_ai_assignments", "location_id", "VARCHAR"),
+    ("toc_ai_runs", "instruction", "TEXT DEFAULT ''"),
     ("cop_locations", "is_toc", "BOOLEAN DEFAULT 0"),   # §3.1 the CP the TOC is running from
 ]
 

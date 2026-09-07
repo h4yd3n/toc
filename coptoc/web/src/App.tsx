@@ -1,22 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './MapView'
+import OverlayPanel, { OVERLAY_DEFAULTS, PRESETS, toLayers } from './OverlayPanel'
 import { BriefPanel, EstimateLine, WatchChip } from './Watch'
-import { RequirementsPanel } from './Requirements'
-import { CasesPanel } from './Cases'
 import { AreaPanel } from './Area'
 import { IntsumPanel } from './Intsum'
 import { DistributionBox, OperationPanel } from './Operation'
-import { FlashStrip, WarningsSection } from './Warnings'
-import { ImportDrawer, PlanningPanel } from './Planning'
+import { FlashStrip } from './Warnings'
+import { PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
-import { S4Panel, S6Panel } from './Sections'
-import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
-import { UploadDrawer } from './Upload'
-import { TaskingBox } from './Taskings'
 import * as api from './api'
-import type { UserInfo, Assessment, CopEvent, Incident, Layers, Location, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
+import Workspaces, { SectionSummary } from './Workspaces'
+import { useDestination } from './navigation'
+import type { SectionCode } from './types'
+import type { UserInfo, CopEvent, Incident, Location, OverlayId, OverlayPresetId, OverlayState, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE', airfield: 'AIRFIELD', cp: 'CP', fob: 'FOB', farp: 'FARP', range: 'RANGE' }
 const SITE_TYPES = ['hq', 'cp', 'fob', 'farp', 'airfield', 'range', 'office', 'datacenter', 'venue', 'residence'] as const
@@ -38,7 +36,6 @@ function rel(iso: string | null, now: number): string {
   return `${p}${Math.round(a / 86400)}d${s}`
 }
 const clock = (d: Date) => d.toISOString().slice(11, 19) + 'Z'
-const short = (s: string) => s.split(',')[0]
 
 type ById = { loc: Map<string, Location>; person: Map<string, Person>; threat: Map<string, Threat>; trip: Map<string, Trip>; event: Map<string, CopEvent>; incident: Map<string, Incident> }
 const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreachable: 'amber', assist: 'red', injured: 'red', contacted: 'green', safe: 'green' }
@@ -47,6 +44,15 @@ type UiPrefs = { labels: 'full' | 'lean'; header: 'counters' | 'posture' }
 const UI_DEFAULTS: UiPrefs = { labels: 'lean', header: 'posture' }
 
 export default function App() {
+  const { destination, navigate } = useDestination()
+  const isCop = destination.page === 'cop'
+  const [workspaceDetail, setWorkspaceDetail] = useState(false)
+  const [workBoard, setWorkBoard] = useState<api.WorkBoard | null>(null)
+  const openWorkspace = (section: SectionCode, tab = 'overview', record?: string) => {
+    setWorkspaceDetail(false); setShowPlan(false); setOpId(null); setShowIntsum(false); setAreaId(null); setShowBrief(false)
+    navigate({ page: 'workspace', section, tab, record: record ?? null })
+  }
+
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -57,11 +63,13 @@ export default function App() {
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
   // Panels stay up until closed or displaced by another on the same rail; the choice survives a reload.
   type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
-  const [addSite, setAddSite] = useState(false)
   const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
   useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
-  const toggleRight = (p: Exclude<RightPanel, null>) => { const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true })) }
+  const toggleRight = (p: Exclude<RightPanel, null>) => {
+    const next = rightPanel === p ? null : p; setRightPanel(next)
+
+  }
   const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
   const [s3Flash, setS3Flash] = useState(false)
   const jump = (section: 'S1' | 'S2' | 'S3') => {  // a header counter opens its section
@@ -80,7 +88,22 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showDefcon, setShowDefcon] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
-  const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: false, s6: false })
+  // §3 Acetate overlay system — replaces the flat Layers toggle bag
+  const [overlayState, setOverlayState] = useState<OverlayState>(() => {
+    try { const raw = localStorage.getItem('toc.overlays'); if (raw) { const s = JSON.parse(raw); if (s.overlays?.length) return s } } catch { /* private mode */ }
+    return { overlays: OVERLAY_DEFAULTS.map(o => ({ ...o })), soloId: null }
+  })
+  const [activePreset, setActivePreset] = useState<OverlayPresetId | null>('cop')
+  useEffect(() => { try { localStorage.setItem('toc.overlays', JSON.stringify(overlayState)) } catch { /* private mode */ } }, [overlayState])
+  const applyPreset = (id: OverlayPresetId) => {
+    const preset = PRESETS.find(p => p.id === id); if (!preset) return
+    const result = preset.apply(overlayState.overlays)
+    setOverlayState(result)
+    setActivePreset(id)
+  }
+  const onOverlayChange = (s: OverlayState) => { setOverlayState(s); setActivePreset('custom') }
+  // Derive legacy Layers for code paths that still read them (S4/S6 panels, residences API call)
+  const layers = toLayers(overlayState)
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
   const [users, setUsers] = useState<UserInfo[]>([])
@@ -88,23 +111,38 @@ export default function App() {
   const me = snap?.me
   const can = (section: string, level: 'view' | 'edit' = 'view') => !me || me.user_id === null || me.battle_captain ? true : level === 'view' ? me.sections_visible.includes(section) : me.perms[section as 'S1'] === 'edit'
   const enabledSections = (['S1', 'S2', 'S3', 'S4', 'S6'] as const).filter(c => sectionOn(c))
-  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} />
+
   const [showBrief, setShowBrief] = useState(false)
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
   const [opId, setOpId] = useState<string | null>(null)
   const [showPlan, setShowPlan] = useState(false)
-  const [showImport, setShowImport] = useState(false)
-  const [upload, setUpload] = useState<'S1' | 'S3' | 'S4' | 'S6' | null>(null)
-  const [s3Tasks, setS3Tasks] = useState(false)
   const [briefReload, setBriefReload] = useState(0)
 
-  const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
+  const loadGeneration = useRef(0)
+  const load = useCallback(async () => {
+    const user = api.session.userId, generation = ++loadGeneration.current
+    try { const s = await api.fetchSnapshot(layers.residences); if (user === api.session.userId && generation === loadGeneration.current) { setSnap(s); setErr(null) } }
+    catch(e) { if(user === api.session.userId && generation === loadGeneration.current) setErr(String(e)) }
+  }, [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
   useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}) }, [briefReload])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
+  // §3 Keyboard shortcuts: Alt+1–8 to toggle overlays, Alt+Shift+1–8 to solo
+  useEffect(() => {
+    const OVERLAY_KEYS: OverlayId[] = ['blue_force', 'threat', 'sigacts', 'routes', 'events', 's4', 's6', 'restricted']
+    const handler = (e: KeyboardEvent) => {
+      if (!e.altKey || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'SELECT') return
+      const idx = parseInt(e.key) - 1; if (idx < 0 || idx >= OVERLAY_KEYS.length) return
+      e.preventDefault()
+      const id = OVERLAY_KEYS[idx]
+      if (e.shiftKey) { setOverlayState(s => ({ ...s, soloId: s.soloId === id ? null : id })); setActivePreset('custom') }
+      else { setOverlayState(s => ({ ...s, overlays: s.overlays.map(o => o.id === id ? { ...o, enabled: !o.enabled } : o) })); setActivePreset('custom') }
+    }
+    window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const byId = useMemo<ById>(() => ({
     loc: new Map(snap?.locations.map(l => [l.id, l]) ?? []), person: new Map(snap?.people.map(p => [p.id, p]) ?? []),
@@ -116,14 +154,34 @@ export default function App() {
     setBusy(label)
     try { await fn(); await load(); setBriefReload(n => n + 1) } catch (e) { setErr(String(e)) } finally { setBusy(null) }
   }
-  const toggle = (k: keyof Layers) => setLayers(l => ({ ...l, [k]: !l[k] }))
   const s = snap?.summary
-  const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
+  useEffect(() => {
+    let alive = true
+    setWorkBoard(null)
+    const refresh = () => api.getWork().then(b => { if (alive) setWorkBoard(b) }).catch(() => {})
+    void refresh(); const interval = window.setInterval(refresh, 15000)
+    return () => { alive = false; clearInterval(interval) }
+  }, [userId, briefReload])
+  const released = (section: SectionCode) => {
+    const ids = new Set(workBoard?.assignments.filter(a => a.section === section).map(a => a.id))
+    const items = workBoard?.runs.filter(r => ids.has(r.assignment_id) && r.review_status === 'released').sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,3) ?? []
+    return items.length ? <div className="section-summary"><h3>Released findings</h3>{items.map(r => <button className="section-exception" key={r.id} onClick={() => { setWorkspaceDetail(false); navigate({ page:'work',section,tab:'overview',record:r.id }) }}><strong>{r.result.title}</strong><span>{r.result.summary}</span></button>)}</div> : null
+  }
+  const recordDetails = <>
+    {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
+    {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
+    {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
+    {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
+    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} />}
+    {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
+  </>
+
 
   return (
-    <div className={`wall ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${isCop ? '' : 'is-workspace'} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
+        <nav className="global-nav" aria-label="Main navigation"><button aria-current={isCop?'page':undefined} onClick={() => navigate({page:'cop'})}>COP</button><button aria-current={destination.page==='workspace'?'page':undefined} onClick={() => openWorkspace(destination.section)}>Workspaces</button><button aria-current={destination.page==='work'?'page':undefined} onClick={() => { setWorkspaceDetail(false); navigate({page:'work',tab:'overview'}) }}>My work</button></nav>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
           <option value="military">Military</option><option value="corporate">Corporate</option>
         </select>}
@@ -145,7 +203,7 @@ export default function App() {
           {(s?.unreachable ?? 0) > 0 && <Stat onJump={jump} label="UNREACHABLE" v={s?.unreachable} accent="red" />}
           <Stat onJump={jump} label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat onJump={jump} label="EVENTS" v={s?.upcoming_events} />
         </div>
-        <select className="role" value={userId} onChange={e => { api.signIn(e.target.value); setUserId(e.target.value); load() }} title="Profile — the role you are signed in as (§9)">
+        <select className="role" disabled={!!busy} value={userId} onChange={e => { api.signIn(e.target.value); setSnap(null); setWorkBoard(null); setWorkspaceDetail(false); setUserId(e.target.value); load() }} title="Profile — the role you are signed in as (§9)">
           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         {false && <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo role — until someone signs in">
@@ -170,63 +228,16 @@ export default function App() {
         {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
         {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
       </nav>
-      <aside className={`left ${leftOpen ? 'open' : ''}`}>
-        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>{can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}{['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}</PanelHead>
-        {upload === 'S1' && <UploadDrawer section="S1" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-        {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
-        {taskingsFor('S1')}
-        <div className="layer-toggles">
-          {(['locations', 'travelers', 'routes', 'threats', 'events'] as (keyof Layers)[]).map(k => (
-            <button key={k} className={`tog ${layers[k] ? 'on' : ''}`} onClick={() => toggle(k)}>{k}</button>))}
-          {sectionOn('S4') && <button className={`tog sec4 ${layers.s4 ? 'on' : ''}`} onClick={() => toggle('s4')} title="S4 health on every site">S4</button>}
-          {sectionOn('S6') && <button className={`tog sec6 ${layers.s6 ? 'on' : ''}`} onClick={() => toggle('s6')} title="S6 health on every site">S6</button>}
-          <button className={`tog restricted ${layers.residences ? (snap?.restricted_denied ? 'denied' : 'on') : ''}`} onClick={() => toggle('residences')} title={snap?.restricted_denied ? 'Restricted layer — your role is not cleared (Battle Captain / EP only)' : 'Restricted layer — off by default'}>⚿ residences{layers.residences && snap?.restricted_denied ? ' · DENIED' : ''}</button>
-        </div>
-        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
-          <SectionLabel><span className="s6">S6 · ROLL CALLS</span></SectionLabel>
-          <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
-          <ul className="list">
-            {snap.incidents.filter(i => i.status === 'open').map(i => (
-              <li key={i.id} className={`row rollcall ${sel?.type === 'incident' && sel.id === i.id ? 'active' : ''}`} onClick={() => setSel({ type: 'incident', id: i.id })}>
-                <div className="rc-head"><span className="name">☎ {i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></div>
-                <div className="bar"><span style={{ width: `${i.pct}%` }} className={i.pct === 100 ? 'ok' : ''} /></div>
-              </li>))}
-          </ul>
-        </>}
-        {snap && <TaskOrg teams={snap.teams} people={snap.people} onSelect={setSel} sel={sel} />}
-        <SectionLabel>LOCATIONS {can('S3', 'edit') && <button className="mini" title="Add a site — a CP the TOC jumped to, a new office" onClick={e => { e.stopPropagation(); setAddSite(v => !v) }}>{addSite ? '×' : '+ SITE'}</button>}</SectionLabel>
-        {addSite && <SiteForm busy={busy} act={act} onDone={() => setAddSite(false)} />}
-        <ul className="list">
-          {snap?.locations.map(l => (
-            <li key={l.id} className={`row ${sel?.type === 'location' && sel.id === l.id ? 'active' : ''}`} onClick={() => setSel({ type: 'location', id: l.id })}>
-              <span className={`dot posture-${l.effective_posture}`} />
-              <span className="name">{l.is_toc && <span className="tocmark" title="the TOC is running from here">◈</span>}{l.name}{l.sensitivity === 'restricted' && <span className="lock">⚿</span>}</span>
-              {l.confirmed_threat_ids.length > 0 ? <span className="tbadge confirmed" title="confirmed threat link">▲{l.confirmed_threat_ids.length}</span>
-                : l.threat_ids_in_area.length > 0 ? <span className="tbadge" title="threat in area — unconfirmed">△{l.threat_ids_in_area.length}</span> : null}
-              <span className="meta">{l.present}<span className="dim">/{l.assigned}</span>{l.security_on_shift ? <span className="sec"> ·{l.security_on_shift}⛨</span> : null}</span>
-            </li>))}
-        </ul>
-        <SectionLabel>TRAVELING <span className="dim">{travelers.length}</span></SectionLabel>
-        <ul className="list">
-          {travelers.map(p => (
-            <li key={p.id} className={`row ${sel?.type === 'person' && sel.id === p.id ? 'active' : ''}`} onClick={() => setSel({ type: 'person', id: p.id })}>
-              <span className={`dot ${p.confirmed_threat_ids.length ? 'red' : 'blue'}`} />
-              <span className="name">{p.is_vip && <span className="vipstar">★</span>}{p.name}</span>
-              <Presence p={p} />
-              <span className="meta dim">{short(byId.trip.get(p.trip_id ?? '')?.dest_name ?? '')}</span>
-            </li>))}
-        </ul>
+      <aside className={`left ${leftOpen ? 'open' : ''}`} inert={!isCop}>
+        <PanelHead code="S1" title={sectionTitle('S1','PERSONNEL')} onClose={() => setLeftOpen(false)} />
+        {snap && <SectionSummary section="S1" snap={snap} onOpen={(tab,record) => openWorkspace('S1',tab,record)} onSelect={setSel} />}
+        {released('S1')}
       </aside>
 
-      <main className="center" onClick={() => setShowSettings(false)}>
-        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} />
-        {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
-        {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
-        {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
-        {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
-        {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => setSel(null)} onSelect={setSel} onOp={setOpId} role={role} />}
-        {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
+      <main className="center" inert={!isCop} onClick={() => setShowSettings(false)}>
+        <MapView snapshot={snap} selection={sel} overlayState={overlayState} onSelect={setSel} />
+        <OverlayPanel state={overlayState} onChange={onOverlayChange} activePreset={activePreset} onPreset={applyPreset} restrictedDenied={snap?.restricted_denied} />
+        {isCop && recordDetails}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
@@ -237,80 +248,25 @@ export default function App() {
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
-      <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`}>
-        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>{can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}</PanelHead>
-        {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
-        {taskingsFor('S4')}
-        <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
-      </aside>
-      <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`}>
-        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>{can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}</PanelHead>
-        {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
-        {taskingsFor('S6')}
-        <S6Panel board={snap?.s6} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s6} toggleMap={() => toggle('s6')} />
-        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
-          <SectionLabel>ACCOUNTABILITY · OPEN ROLL CALLS <span className="dim">{snap.incidents.filter(i => i.status === 'open').length}</span></SectionLabel>
-          <ul className="list">{snap.incidents.filter(i => i.status === 'open').map(i => (
-            <li key={i.id} className="row rollcall" onClick={() => setSel({ type: 'incident', id: i.id })}><span className="name">{i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></li>))}</ul>
-        </>}
-      </aside>
-      <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`}>
-        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>
-          <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
-          <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
-        </PanelHead>
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
-        {taskingsFor('S2')}
-        <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
-        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
-        <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
-        <SectionLabel>THREATS <span className="dim">{snap?.threats.length ?? 0} · {s?.real_threats ?? 0} live</span></SectionLabel>
-        <ul className="list">
-          {snap?.threats.map(t => (
-            <li key={t.id} className={`row ${sel?.type === 'threat' && sel.id === t.id ? 'active' : ''}`} onClick={() => setSel({ type: 'threat', id: t.id })}>
-              <span className={`sev ${t.severity}`}>{t.severity.slice(0, 3).toUpperCase()}</span>
-              <span className="name">{t.title}</span>
-              {!t.synthetic && <span className="chip live">LIVE</span>}
-              {t.confirmed_links.length > 0 && <span className="tbadge confirmed">▲{t.confirmed_links.length}</span>}
-              <span className="meta dim">{rel(t.observed_at, now)}</span>
-            </li>))}
-        </ul>
-        <SectionLabel>ASSESSMENTS</SectionLabel>
-        <ul className="list cards">
-          {snap?.assessments.map(a => (
-            <li key={a.id} className={`card ${a.confidence === 'insufficient' ? 'gap' : ''}`}>
-              <div className="card-head"><span className="id">{a.id}</span><span className="name">{a.title}</span><span className={`chip ${a.status}`}>{a.status.toUpperCase()}</span></div>
-              {a.confidence === 'insufficient'
-                ? <div className="est"><b className="gapword">COLLECTION GAP</b> · <span className="dim">refused to assess</span></div>
-                : <div className="est"><b>{a.likelihood}</b> <span className="dim">({a.band})</span> · <span className={`conf ${a.confidence}`}>{a.confidence} confidence</span></div>}
-              <div className="bluf">{a.bluf}</div>
-              <AssessmentActions a={a} busy={busy} act={act} />
-            </li>))}
-        </ul>
-        <SectionLabel>PIRs <span className="dim">{s?.open_pirs ?? 0} open</span></SectionLabel>
-        <ul className="list cards">
-          {snap?.pirs.map(p => (
-            <li key={p.id} className="card pir" onClick={() => p.subject_type && p.subject_id && byId[p.subject_type === 'trip' ? 'trip' : p.subject_type === 'event' ? 'event' : p.subject_type === 'location' ? 'loc' : 'person'].has(p.subject_id) && setSel(p.subject_type === 'trip' ? { type: 'person', id: byId.trip.get(p.subject_id)!.person_id } : { type: p.subject_type as 'event' | 'location' | 'person', id: p.subject_id })}>
-              <div className="card-head"><span className="id">{p.id}</span><span className="prio">P{p.priority}</span><span className={`chip ${p.status.toLowerCase()}`}>{p.status}</span></div>
-              <div className="q">{p.question}</div>
-            </li>))}
-        </ul>
-      </aside>
+      {(['S2','S4','S6'] as SectionCode[]).map(section => {
+        const panel = section === 'S2' ? 'right' : section.toLowerCase()
+        return <aside key={section} className={`right ${rightPanel === panel ? 'open' : ''}`} inert={!isCop}>
+          <PanelHead code={section} title={sectionTitle(section,section)} onClose={() => setRightPanel(null)} />
+          {snap && <SectionSummary section={section} snap={snap} onOpen={(tab,record) => openWorkspace(section,tab,record)} onSelect={setSel} />}
+          {released(section)}
+        </aside>
+      })}
 
       <footer className="bottom">
         <div className="s3">
-          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>{can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}<button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button><button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button></PanelHead>
-          {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-          {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
+          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3','OPERATIONS')} inline><button className="mini" onClick={() => openWorkspace('S3')}>OPEN WORKSPACE →</button><button className="mini" onClick={() => openWorkspace('S3','planning')}>PLANNING</button></PanelHead>
           <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
           <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
         </div>
         <div className="oplog">
-          <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />
+          <PanelHead code="LOG" title="RECENT ACTIVITY" inline><button className="mini" onClick={() => { setWorkspaceDetail(false); navigate({page:'work',tab:'overview'}) }}>VIEW ALL</button></PanelHead>
           <ul className="logs">
-            {snap?.log.map(e => (
+            {snap?.log.slice(0, 5).map(e => (
               <li key={e.id} className={`log ${e.actor_type}`}>
                 <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
                 <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
@@ -319,6 +275,12 @@ export default function App() {
           </ul>
         </div>
       </footer>
+      {!isCop && !snap && <main className="workspace"><p role="status">Loading your workspace…</p></main>}
+      {!isCop && snap && <div inert={workspaceDetail}><Workspaces key={userId} destination={destination} navigate={next => { setWorkspaceDetail(false); navigate(next) }} snap={snap} role={role} enabled={enabledSections} can={can} act={act} busy={busy} reload={briefReload}
+        onSelect={s => { setSel(s); setWorkspaceDetail(true) }} onArea={id => { setAreaId(id); setWorkspaceDetail(true) }} onIntsum={() => { setShowIntsum(true); setWorkspaceDetail(true) }} onOp={id => { setOpId(id); setWorkspaceDetail(true) }} siteForm={<SiteForm busy={busy} act={act} onDone={() => setBriefReload(n=>n+1)} />} /></div>}
+      {!isCop && workspaceDetail && <div className="workspace-dialog" role="dialog" aria-modal="true" aria-label="Record details" onKeyDown={e=>{if(e.key==='Escape')setWorkspaceDetail(false)}}><button className="workspace-dialog-backdrop" aria-label="Close record" onClick={() => { setWorkspaceDetail(false); setOpId(null); setAreaId(null); setShowIntsum(false) }} />{recordDetails}</div>}
+      {!isCop && err && <div className="workspace-toast" role="alert"><span>{err}</span><button onClick={()=>setErr(null)}>Dismiss</button></div>}
+      {!isCop && busy && <div className="workspace-toast" role="status">{busy}…</div>}
     </div>
   )
 }
@@ -327,16 +289,6 @@ function Presence({ p }: { p: Person }) {
   if (p.position_source === 'checkin') return <span className="chk fresh" title={p.last_checkin_note ?? ''}>✓{p.checkin_age_h !== null && p.checkin_age_h < 1 ? '<1h' : `${Math.round(p.checkin_age_h ?? 0)}h`}</span>
   if (p.checkin_stale) return <span className="chk stale" title="last check-in older than 12h">stale</span>
   return null
-}
-function AssessmentActions({ a, busy, act }: { a: Assessment; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void }) {
-  if (a.status === 'approved' || a.status === 'superseded') return <div className="card-foot dim">{a.status === 'approved' ? `approved by ${a.approved_by}` : 'superseded'} · {a.author}</div>
-  return (
-    <div className="card-foot">
-      <span className="dim">{a.author}</span>
-      {a.status === 'draft' && <button className="mini" disabled={!!busy} onClick={e => { e.stopPropagation(); act('sending to review', () => api.setAssessmentStatus(a.id, 'review')) }}>→ REVIEW</button>}
-      {a.status === 'review' && a.confidence !== 'insufficient' && <button className="mini ok" disabled={!!busy} onClick={e => { e.stopPropagation(); act('approving', () => api.setAssessmentStatus(a.id, 'approved')) }}>✓ APPROVE</button>}
-      {a.confidence === 'insufficient' && <span className="dim">cannot be approved</span>}
-    </div>)
 }
 // which section a counter belongs to: click it and that section opens
 const STAT_SECTION: Record<string, 'S1' | 'S2' | 'S3'> = { PERSONNEL: 'S1', PRESENT: 'S1', 'CHECKED IN': 'S1', 'SEC ON SHIFT': 'S1', UNACCOUNTED: 'S1', UNREACHABLE: 'S1', TRAVELING: 'S3', 'VIP OUT': 'S3', EVENTS: 'S3', THREATS: 'S2', CONFIRMED: 'S2', FLASH: 'S2', 'OPEN PIRs': 'S2' }
@@ -384,11 +336,10 @@ function SiteForm({ busy, act, onDone, site }: { busy: string | null; act: (l: s
     </div>)
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) { return <div className="section-label">{children}</div> }
 
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
-function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect }: {
-  sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
+function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role }: {
+  sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null; onOp: (id: string) => void; role: Role
   act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)

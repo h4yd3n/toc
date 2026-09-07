@@ -23,6 +23,7 @@ from . import dissemination as D
 from .dissemination import DistributionRow
 from . import warning as W
 from .warning import WarningRow
+from .work import router as work_router
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
 
@@ -244,6 +245,10 @@ async def file_report(body: ReportCreate, session: AsyncSession = Depends(get_se
     everything it finds is suggested to the analyst."""
     if (x_toc_role or "").lower() not in REPORT_FILERS:
         raise HTTPException(403, "Filing a report needs a security, EP, analyst, EA, or Battle Captain role")
+    if body.case_id:
+        target = await session.get(CaseRow, body.case_id)
+        if not target: raise HTTPException(404, "case not found")
+        if target.status != "open": raise HTTPException(409, "case is closed")
     now = R.now_utc()
     r = ReportRow(id=f"rpt_{uuid.uuid4().hex[:8]}", kind=body.kind, reported_by=body.reported_by, reporter_role=body.reporter_role, at=naive(body.at) or now,
                   lat=body.lat, lon=body.lon, place=body.place, text=body.text.strip(), case_id=body.case_id, credibility=body.credibility, filed_at=now)
@@ -257,14 +262,55 @@ async def file_report(body: ReportCreate, session: AsyncSession = Depends(get_se
     await ledger().append_event(content_id=body.case_id or r.id, event_type="s2.report.filed", actor_type="human", actor_id=x_toc_actor or body.reported_by,
                                 reason=f"{body.kind.upper()} from {body.reported_by}: {r.text[:100]}" + (f" — suggested {extracted['entities']} entities, {extracted['relationships']} links, {extracted['events']} events" if extracted else ""),
                                 metadata={"report_id": r.id, "grade": f"{r.reliability}{r.credibility}", **(extracted or {})})
+    from .work import AssignmentRow
+    from sqlalchemy import update
+    await session.execute(update(AssignmentRow).where(AssignmentRow.section == "S2", AssignmentRow.status == "active", AssignmentRow.cadence_minutes > 0,
+        AssignmentRow.case_id.is_(None) | (AssignmentRow.case_id == body.case_id)).values(next_at=R.now_utc()))
+    await session.commit()
     return {**C.report_dict(r), "extracted": extracted}
 
 
 @router.get("/reports")
-async def list_reports(case_id: Optional[str] = None, limit: int = 50, session: AsyncSession = Depends(get_session)):
+async def list_reports(case_id: Optional[str] = None, limit: int = Query(100, ge=1, le=500), session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    role = (x_toc_role or "").lower()
+    if role not in REPORT_FILERS:
+        raise HTTPException(403, "A reporting role is required")
+    readable = [c for c in (await session.execute(select(CaseRow))).scalars() if role in c.access_roles.split(",")]
+    if case_id:
+        case = await session.get(CaseRow, case_id)
+        if not case: raise HTTPException(404, "case not found")
+        await _read_logged(case, role, x_toc_actor)
     q = select(ReportRow).order_by(ReportRow.at.desc()).limit(limit)
-    if case_id: q = q.where(ReportRow.case_id == case_id)
-    return [C.report_dict(r) for r in (await session.execute(q)).scalars()]
+    q = q.where(ReportRow.case_id == case_id) if case_id else q.where(ReportRow.case_id.is_(None) | ReportRow.case_id.in_([c.id for c in readable]))
+    rows = list((await session.execute(q)).scalars())
+    if not case_id:
+        for c in readable:
+            if any(r.case_id == c.id for r in rows): await _read_logged(c, role, x_toc_actor)
+    return [C.report_dict(r) for r in rows]
+
+
+class AttachReport(BaseModel):
+    case_id: str
+
+
+@router.post("/reports/{report_id}/attach")
+async def attach_report(report_id: str, body: AttachReport, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    if (x_toc_role or "").lower() not in CASE_OPENERS:
+        raise HTTPException(403, "An analyst attaches reporting to cases")
+    r = await session.get(ReportRow, report_id)
+    c = await session.get(CaseRow, body.case_id)
+    if not r or not c: raise HTTPException(404, "Report or case not found")
+    await _read_logged(c, x_toc_role, x_toc_actor)
+    if r.case_id and r.case_id != c.id:
+        raise HTTPException(409, "Report is already attached; retain its original case provenance")
+    if c.status != "open": raise HTTPException(409, "Case is closed")
+    if not r.case_id:
+        r.case_id = c.id
+        known = [e.name for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == c.id, EntityRow.status == "confirmed"))).scalars()]
+        await C.file_report_into_case(session, r, c, known)
+        await session.commit()
+        await ledger().append_event(content_id=c.id, event_type="s2.report.attached", actor_type="human", actor_id=x_toc_actor or x_toc_role, reason=f"Attached {r.id} to {c.title}")
+    return C.report_dict(r)
 
 
 @router.get("/cases")
@@ -719,6 +765,7 @@ def standalone_app() -> FastAPI:
         sessions(); await init_db(_engine); yield
     app = FastAPI(title="Sigtoc — S2 API", version="0.1.0", description="Requirements, the collection plan, sources, query. PRD §5.", lifespan=lifespan)
     app.include_router(router)
+    app.include_router(work_router)
     @app.get("/v1/health")
     def health(): return {"status": "ok", "service": "sigtoc"}
     return app

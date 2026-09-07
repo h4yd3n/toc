@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as api from './api'
-import type { Case, CaseDetail, CaseEntity, CaseRel, Evidence, Queue, Role } from './types'
+import { CaseVisuals } from './CaseVisuals'
+import type { Case, CaseDetail, CaseEntity, Evidence, Queue, Role } from './types'
 
 const CASE_OPENERS = ['battle_captain', 'analyst']
 const REPORT_FILERS = ['battle_captain', 'security', 'analyst', 'ea', 'ep']
@@ -8,12 +9,13 @@ type Act = (l: string, f: () => Promise<unknown>) => void
 const when = (iso: string | null) => iso ? new Date(iso).toISOString().slice(5, 16).replace('T', ' ') + 'Z' : ''
 
 /** §5.10 #1–2 and §5.11 — cases that live for months, the SPOTREP form, and the officer's review queue. */
-export function CasesPanel({ reload, busy, act, role, onChanged }: { reload: number; busy: string | null; act: Act; role: Role; onChanged: () => void }) {
+export function CasesPanel({ reload, busy, act, role, onChanged, selectedCase, onSelectCase, onAnalyzeCase }: { selectedCase?: string | null; onSelectCase?: (id: string | null) => void; onAnalyzeCase?: (id: string) => void; reload: number; busy: string | null; act: Act; role: Role; onChanged: () => void }) {
   const [cases, setCases] = useState<Case[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const [showReport, setShowReport] = useState(false)
   const [showCase, setShowCase] = useState(false)
   useEffect(() => { api.listCases().then(setCases).catch(() => setCases([])) }, [reload, role])
+  useEffect(() => { setOpen(selectedCase ?? null) }, [selectedCase])
   const pending = cases.reduce((n, c) => n + (c.pending_review ?? 0), 0)
   return (<>
     <div className="section-label">CASES <span className="dim">{cases.filter(c => c.status === 'open').length} open{pending ? ` · ${pending} to review` : ''}</span>
@@ -25,13 +27,14 @@ export function CasesPanel({ reload, busy, act, role, onChanged }: { reload: num
     {cases.length === 0 && <div className="dim small" style={{ padding: '4px 14px' }}>{CASE_OPENERS.includes(role) ? 'No cases you can read. Open one, then file reports into it.' : 'No cases readable by this role.'}</div>}
     <ul className="list">
       {cases.map(c => (
-        <li key={c.id} className={`row reqrow ${open === c.id ? 'active' : ''}`} onClick={() => setOpen(open === c.id ? null : c.id)}>
+        <li key={c.id} className={`row reqrow ${open === c.id ? 'active' : ''}`} onClick={() => { const id = open === c.id ? null : c.id; setOpen(id); onSelectCase?.(id) }}>
           <div className="rq-head">
             <span className={`chip small ${c.kind === 'person' ? 'amber' : ''}`}>{c.kind.toUpperCase()}</span>
-            <span className="name">{c.title}</span>
+            <button className="name ws-case-open" onClick={e=>{e.stopPropagation();const id=open===c.id?null:c.id;setOpen(id);onSelectCase?.(id)}}>{c.title}</button>
             {c.status === 'closed' ? <span className="chip small dim">CLOSED</span> : (c.pending_review ?? 0) > 0 ? <span className="chip small review">{c.pending_review} TO REVIEW</span> : <span className="chip small green">REVIEWED</span>}
           </div>
           <div className="rq-when dim">{c.entities ?? 0} entities · {c.relationships ?? 0} links · {c.events ?? 0} events · opened {when(c.opened_at)} by {c.opened_by}</div>
+          {open === c.id && onAnalyzeCase && <button className="ws-primary" onClick={e => { e.stopPropagation(); onAnalyzeCase(c.id) }}>Assign AI analysis</button>}
           {open === c.id && <CaseView id={c.id} busy={busy} act={act} role={role} reload={reload} onChanged={onChanged} />}
         </li>))}
     </ul>
@@ -56,7 +59,6 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
   const decideThen = (kind: 'entity' | 'relationship' | 'event', item: string, decision: 'confirm' | 'reject') => act(`${decision}ing`, () => api.decide(id, kind, item, decision).then(() => { load(); onChanged() }))
   if (!d) return <div className="plan dim">loading…</div>
   const confirmed = d.graph.entities.filter(e => e.status === 'confirmed')
-  const names = Object.fromEntries(d.graph.entities.map(e => [e.id, e.name]))
   return (
     <div className="plan casev" onClick={e => e.stopPropagation()}>
       <div className="tabs">
@@ -83,18 +85,7 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
           {can && <span className="qbtns"><button className="mini ok" disabled={!!busy} onClick={() => decideThen('event', v.id, 'confirm')}>✓</button><button className="mini danger" disabled={!!busy} onClick={() => decideThen('event', v.id, 'reject')}>✗</button></span>}
         </div>)}
       </>}
-      {tab === 'graph' && <>
-        <div className="gaps-head">WHAT THE LINK CHART WOULD SHOW</div>
-        {d.analysis.links.length === 0 && <div className="dim small">No links yet.</div>}
-        {d.analysis.links.map((s, i) => <div key={i} className="pline"><span className="lbl">{s}</span></div>)}
-        <div className="gaps-head">PATTERN OF LIFE <span className="dim">time wheel</span></div>
-        <div className="pline"><span className="lbl">{d.analysis.pattern}</span></div>
-        <div className="gaps-head">ENTITIES <span className="dim">{confirmed.length} confirmed · {d.graph.entities.length - confirmed.length} suggested</span></div>
-        {d.graph.entities.map(e => <div key={e.id} className={`pline ${e.status === 'confirmed' ? 'ok' : ''}`}><span className="mark">{e.status === 'confirmed' ? '✓' : '?'}</span><span className="lbl">{e.name}{e.aliases.length > 0 && <span className="dim"> aka {e.aliases.join(', ')}</span>}</span><span className="src dim">{e.type} · {e.evidence.length} cite{e.evidence.length === 1 ? '' : 's'}</span></div>)}
-        {d.graph.relationships.map((r: CaseRel) => <div key={r.id} className={`pline ${r.status === 'confirmed' ? 'ok' : ''}`}><span className="mark">{r.status === 'confirmed' ? '—' : '┄'}</span><span className="lbl">{names[r.from]} → {names[r.to]}</span><span className="src dim">{r.type} [{r.grade}]</span></div>)}
-        <div className="gaps-head">TIMELINE</div>
-        {d.graph.events.map(v => <div key={v.id} className={`pline ${v.status === 'confirmed' ? 'ok' : ''}`}><span className="mark">{v.status === 'confirmed' ? '✓' : '?'}</span><span className="lbl">{when(v.at)} {v.summary}</span></div>)}
-      </>}
+      {tab === 'graph' && <CaseVisuals detail={d} />}
       {tab === 'reports' && <>
         {d.reports.length === 0 && <div className="dim small">No reports filed into this case.</div>}
         {d.reports.map(r => <div key={r.id} className="rpt"><div className="rpt-head"><span className="chip small">{r.kind.toUpperCase()}</span> <span>{r.reported_by}{r.reporter_role && <span className="dim"> · {r.reporter_role}</span>}</span> <span className="chip small green">{r.grade}</span> <span className="dim">{when(r.at)}{r.place ? ` · ${r.place}` : ''}</span></div><div className="rpt-text">{r.text}</div></div>)}
@@ -102,18 +93,24 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
     </div>)
 }
 
-function ReportForm({ busy, act, cases, role, defaultCase, onDone }: { busy: string | null; act: Act; cases: Case[]; role: Role; defaultCase: string | null; onDone: () => void }) {
+export function ReportForm({ busy, act, cases, role, defaultCase, onDone }: { busy: string | null; act: Act; cases: Case[]; role: Role; defaultCase: string | null; onDone: () => void }) {
   const [f, setF] = useState({ text: '', kind: 'spot', reported_by: '', reporter_role: role === 'security' ? 'site security' : role === 'ep' ? 'EP detail' : '', place: '', case_id: defaultCase ?? '' })
-  const ok = f.text.trim().length > 10 && f.reported_by
+  const [draftMessage,setDraftMessage]=useState('')
+  const [draftLoaded,setDraftLoaded]=useState(false)
+  const draftKey = 'report-' + (defaultCase ?? 'inbox')
+  useEffect(()=>{let alive=true;api.getDraft<typeof f>('S2',draftKey).then(d=>{if(alive&&Object.keys(d.payload).length){setF(v=>({...v,...d.payload}));setDraftMessage('Saved draft restored')}}).catch(()=>{}).finally(()=>{if(alive)setDraftLoaded(true)});return()=>{alive=false}},[draftKey])
+  const ok = draftLoaded && f.text.trim().length > 10 && f.reported_by
   return (
     <div className="dform">
       <div className="dform-head">SPOTREP <span className="dim">our own people · graded A2 until corroborated · extraction only suggests</span></div>
-      <textarea rows={4} placeholder="Who, what, where, when — as observed. Names, handles, plates, and numbers will be suggested to the analyst with this text as the citation." value={f.text} onChange={e => setF({ ...f, text: e.target.value })} />
+      {draftMessage&&<p className="dim" role="status">{draftMessage}</p>}
+      <textarea disabled={!draftLoaded} rows={4} placeholder="Who, what, where, when — as observed. Names, handles, plates, and numbers will be suggested to the analyst with this text as the citation." value={f.text} onChange={e => setF({ ...f, text: e.target.value })} />
       <div className="two"><input placeholder="Reported by" value={f.reported_by} onChange={e => setF({ ...f, reported_by: e.target.value })} /><input placeholder="Role (e.g. site security)" value={f.reporter_role} onChange={e => setF({ ...f, reporter_role: e.target.value })} /></div>
       <div className="two"><input placeholder="Place" value={f.place} onChange={e => setF({ ...f, place: e.target.value })} />
         <select value={f.case_id} onChange={e => setF({ ...f, case_id: e.target.value })}><option value="">no case (log only)</option>{cases.filter(c => c.status === 'open').map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select></div>
       <div className="row-btns"><select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })}><option value="spot">SPOTREP</option><option value="sitrep">SITREP</option><option value="note">NOTE</option></select>
-        <button className="mini ok" disabled={!!busy || !ok} onClick={() => { act('filing report', () => api.fileReport({ text: f.text, kind: f.kind, reported_by: f.reported_by, reporter_role: f.reporter_role || undefined, place: f.place || undefined, case_id: f.case_id || undefined })); onDone() }}>FILE</button>
+        <button className="mini ok" disabled={!!busy || !ok} onClick={() => { act('filing report', async () => { await api.fileReport({ text: f.text, kind: f.kind, reported_by: f.reported_by, reporter_role: f.reporter_role || undefined, place: f.place || undefined, case_id: f.case_id || undefined }); await api.saveDraft('S2',draftKey,{}).catch(()=>{}); onDone() }) }}>FILE</button>
+        {['analyst','battle_captain'].includes(role)&&<button className="mini" disabled={!!busy||!draftLoaded} onClick={()=>act('saving report draft',async()=>{await api.saveDraft('S2',draftKey,f);setDraftMessage('Draft saved. You can return to it later.')})}>SAVE DRAFT</button>}
         <button className="mini" onClick={onDone}>CANCEL</button></div>
     </div>)
 }
@@ -126,7 +123,7 @@ function CaseForm({ busy, act, onDone }: { busy: string | null; act: Act; onDone
       <input placeholder="Title (e.g. North gate loiterer)" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} />
       <input placeholder="What this case is about" value={f.summary} onChange={e => setF({ ...f, summary: e.target.value })} />
       <div className="row-btns"><select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })}>{['general', 'person', 'site', 'actor'].map(k => <option key={k} value={k}>{k}</option>)}</select>
-        <button className="mini ok" disabled={!!busy || !f.title} onClick={() => { act('opening case', () => api.openCase(f)); onDone() }}>OPEN</button>
+        <button className="mini ok" disabled={!!busy || !f.title} onClick={() => { act('opening case', async () => { await api.openCase(f); onDone() }) }}>OPEN</button>
         <button className="mini" onClick={onDone}>CANCEL</button></div>
     </div>)
 }

@@ -7,7 +7,7 @@ import type { SettingInfo } from './types'
 const GROUPS: { key: SettingInfo['group']; title: string; blurb: string }[] = [
   { key: 'sources', title: 'SOURCE KEYS', blurb: 'Keyless feeds are already live. These unlock the keyed ones — the SOURCES list below turns LIVE when a key lands.' },
   { key: 'comms', title: 'COMMS', blurb: 'Without these, roll-call SMS and chat are recorded as simulated, never sent.' },
-  { key: 'drafter', title: 'S2 DRAFTER', blurb: 'With a key, assessments and INTSUM prose are drafted for a human to release. Without, humans draft.' },
+  { key: 'drafter', title: 'AI & DRAFTING', blurb: 'Staff assignments use the selected provider and model. Results remain drafts until reviewed and released. Existing assessment tools can use their rules fallback.' },
   { key: 'sections', title: 'STAFF SECTIONS', blurb: 'Which sections this deployment runs. S1–S3 are always on.' },
 ]
 

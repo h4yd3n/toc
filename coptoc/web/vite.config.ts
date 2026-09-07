@@ -8,6 +8,6 @@ export default defineConfig({
   optimizeDeps: { exclude: ['maplibre-gl'] },
   server: {
     port: 5173,
-    proxy: { '/v1': 'http://localhost:8000' },
+    proxy: { '/v1': process.env.TOC_API_URL || 'http://localhost:8000' },
   },
 })

@@ -784,6 +784,47 @@ async def checkin(person_id: str, body: CheckIn, session: AsyncSession = Depends
     return {"id": p.id, "status": "checked_in", "at": p.last_checkin_at.isoformat() + "Z", "cleared_rosters": cleared}
 
 
+class PersonnelInput(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    role: str = Field(default="Staff", max_length=200)
+    team_id: str
+    email: str = Field(default="", max_length=250)
+    phone: str = Field(default="", max_length=100)
+
+
+def require_personnel_editor(role):
+    actor = toc_users.current_actor.get()
+    if actor.user and not actor.can("S1", "edit"):
+        raise HTTPException(403, "S1 edit access is required")
+    require_role(role, {"battle_captain", "security", "ep"}, "Personnel changes", section="S1")
+
+
+@router.post("/people", status_code=201)
+async def create_person(body: PersonnelInput, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    require_personnel_editor(x_toc_role)
+    await one_or_404(session, TeamRow, body.team_id, "team")
+    if not body.name.strip():
+        raise HTTPException(422, "A person needs a name")
+    if body.email.strip():
+        from sqlalchemy import func
+        existing = (await session.execute(select(PersonRow.id).where(func.lower(PersonRow.email) == body.email.strip().lower()))).first()
+        if existing:
+            raise HTTPException(409, "A person with that email already exists. Open the existing record")
+    p = PersonRow(id="p_" + uuid.uuid4().hex[:12], name=body.name.strip(), role=body.role.strip(), team_id=body.team_id,
+                  email=body.email.strip() or None, phone=body.phone.strip() or None, source="staff:manual")
+    session.add(p)
+    await session.commit()
+    await get_ledger().append_event(content_id=p.id, event_type="cop.person.created", actor_type="human", actor_id=actor_from(x_toc_actor), reason=f"Added {p.name} to the roster")
+    await sync_standing_requirements(session)
+    return {"id": p.id}
+
+
+@router.patch("/people/{person_id}/assignment")
+async def update_person_assignment(person_id: str, body: ShiftUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    require_personnel_editor(x_toc_role)
+    return await set_shift(person_id, body, session, x_toc_actor)
+
+
 @router.patch("/people/{person_id}/shift")
 async def set_shift(person_id: str, body: ShiftUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None)):
     p = await one_or_404(session, PersonRow, person_id, "person")

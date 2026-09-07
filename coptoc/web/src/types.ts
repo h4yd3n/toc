@@ -82,7 +82,7 @@ export interface Watch {
   next_watch: string; next_starts_at: string; pattern: string; nstr: boolean; outgoing_notes: string | null
   handed_over_at: string | null; acknowledged_by: string | null; acknowledged_at: string | null
 }
-export interface Estimate { section: 'S1' | 'S2' | 'S3' | 'S6'; assessment: string; recommendation: string; updated_by: string | null; updated_at: string | null }
+export interface Estimate { section: 'S1' | 'S2' | 'S3' | 'S4' | 'S6'; assessment: string; recommendation: string; updated_by: string | null; updated_at: string | null }
 export interface BriefEvent { id: string; at: string; type: string; actor: string; subject: string; summary: string | null; old: string | null; new: string | null; during_handover: boolean }
 export interface Brief {
   watch: Watch; window: { from: string; to: string; overlap_from: string }
@@ -114,6 +114,13 @@ export interface Snapshot { warnings: Warning[]; me: Me; taskings: TaskingBoard;
 export type Selection =
   | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | null
 export interface Layers { locations: boolean; travelers: boolean; threats: boolean; routes: boolean; events: boolean; residences: boolean; s4: boolean; s6: boolean }
+
+// §3 Acetate overlay system — each overlay is a named sheet that can be toggled, dimmed, or soloed
+export type OverlayId = 'blue_force' | 'threat' | 'sigacts' | 'routes' | 'events' | 's4' | 's6' | 'restricted'
+export interface Overlay { id: OverlayId; label: string; icon: string; enabled: boolean; opacity: number; outlineOnly: boolean }
+export interface OverlayState { overlays: Overlay[]; soloId: OverlayId | null }
+export type OverlayPresetId = 'cop' | 's2_sittemp' | 's2_light' | 's3_maneuver' | 's4_sustain' | 's6_comms' | 'clean' | 'custom'
+export interface OverlayPreset { id: OverlayPresetId; label: string; hint: string }
 
 export interface Requirement {
   id: string; kind: 'standing' | 'directed'; subject_type: 'location' | 'trip' | 'event' | 'person' | 'place'; subject_id: string | null; subject_name: string

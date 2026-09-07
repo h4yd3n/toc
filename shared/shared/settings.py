@@ -22,6 +22,10 @@ from .database import Base
 
 # What the wall can set. `secret` values are never echoed; `needed_by` ties a key to the source or channel it unlocks.
 KNOWN: List[Dict[str, Any]] = [
+    {"name": "OPENAI_API_KEY", "label": "OpenAI API key", "group": "drafter", "secret": True, "needed_by": ["work"], "help": "Server-side key for staff analysis assignments."},
+    {"name": "TOC_AI_PROVIDER", "label": "Staff analysis provider", "group": "drafter", "secret": False, "needed_by": ["work"], "help": "off, openai, or anthropic. Default off; explicitly enable to process assignments."},
+    {"name": "TOC_AI_MODEL", "label": "Staff analysis model", "group": "drafter", "secret": False, "needed_by": ["work"], "help": "Exact API model ID available to your provider account. Separate from the coding model."},
+    {"name": "TOC_AI_EFFORT", "label": "OpenAI analysis reasoning", "group": "drafter", "secret": False, "needed_by": ["work"], "help": "low, medium, high, xhigh, or max, if supported by your model. Default high."},
     {"name": "ACLED_API_KEY",      "label": "ACLED API key",        "group": "sources", "secret": True,  "needed_by": ["acled"],  "help": "Free key from acleddata.com; pairs with ACLED_EMAIL."},
     {"name": "ACLED_EMAIL",        "label": "ACLED account email",  "group": "sources", "secret": False, "needed_by": ["acled"],  "help": "The email the ACLED key was issued to."},
     {"name": "CLSTR_API_KEY",      "label": "CLSTR API key",        "group": "sources", "secret": True,  "needed_by": ["clstr"],  "help": "Free key, 100 requests/day."},

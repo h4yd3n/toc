@@ -8,41 +8,41 @@ export const statusChip = (s: string, label?: string) => <span className={`chip 
 const S4_ROLES: Role[] = ['battle_captain', 'logistics']
 const S6_ROLES: Role[] = ['battle_captain', 'signal']
 
-export function S4Panel({ board, role, busy, act, site, onClearSite, onMap, toggleMap }: { board: S4Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; site?: Location; onClearSite?: () => void; onMap?: boolean; toggleMap?: () => void }) {
+export function S4Panel({ board, role, busy, act, site, onClearSite, onMap, toggleMap, canEditOverride, view = 'all' }: { canEditOverride?: boolean; view?: 'all' | 'supplies' | 'shipments'; board: S4Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; site?: Location; onClearSite?: () => void; onMap?: boolean; toggleMap?: () => void }) {
   const [group, setGroup] = useState<'exceptions' | 'all'>('exceptions')
-  const canEdit = S4_ROLES.includes(role)
+  const canEdit = canEditOverride ?? S4_ROLES.includes(role)
+  const [editing,setEditing]=useState<SupplyLine|null>(null)
+  const [quantity,setQuantity]=useState('')
+  const [note,setNote]=useState('')
   if (!board) return <div className="dim small" style={{ padding: 14 }}>No logistics board yet.</div>
   const atSite = (id: string | null) => !site || id === site.id
   const supplies = (group === 'all' ? board.supplies : board.supplies.filter(x => x.status !== 'green')).filter(x => atSite(x.location_id))
   const inbound = board.shipments.filter(x => !['arrived', 'cancelled'].includes(x.status)).filter(x => atSite(x.to_location_id))
-  const setOnHand = (x: SupplyLine) => {
-    const v = window.prompt(`${x.item} at ${x.location_name} — on hand (${x.unit}):`, String(x.on_hand)); if (v === null || v.trim() === '' || isNaN(+v)) return
-    const note = window.prompt('Note (optional):', '') ?? ''
-    act('updating the supply line', () => api.updateSupply(x.id, { on_hand: +v, ...(note ? { note } : {}) }))
-  }
+  const setOnHand = (x: SupplyLine) => { setEditing(x); setQuantity(String(x.on_hand)); setNote(x.note || '') }
   return (<>
+    {editing&&<form className="ws-form" onSubmit={e=>{e.preventDefault();act('updating supply',async()=>{await api.updateSupply(editing.id,{on_hand:+quantity,note});setEditing(null)})}}><h3>{editing.item} · {editing.location_name}</h3><label>On hand ({editing.unit})<input type="number" required min={0} step="any" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><label>Update note<input value={note} onChange={e=>setNote(e.target.value)}/></label><div className="ws-actions"><button disabled={!!busy}>Save stock</button><button type="button" onClick={()=>setEditing(null)}>Cancel</button></div></form>}
     <div className="s4-summary">
       {statusChip(board.status, `S4 ${board.status}`)}
       <span className="dim small">{board.counts.red} red · {board.counts.amber} amber · {board.counts.inbound} inbound{board.counts.late > 0 && <> · <b className="bad">{board.counts.late} late</b></>}</span>
       <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}{toggleMap && <button className={`chip btn ${onMap ? 'on' : ''}`} onClick={toggleMap} title="S4 health on every site of the picture">ON MAP</button>}</span>
     </div>
     {site && <div className="site-filter">AT <b>{site.name}</b>{site.s4_status && statusChip(site.s4_status)}<button className="mini" onClick={onClearSite}>ALL SITES</button></div>}
-    <div className="section-label">SUPPLY &amp; EQUIPMENT <span className="dim">{supplies.length}{group === 'exceptions' && ` of ${board.supplies.length}`}</span></div>
+    {view !== 'shipments' && <><div className="section-label">SUPPLY &amp; EQUIPMENT <span className="dim">{supplies.length}{group === 'exceptions' && ` of ${board.supplies.length}`}</span></div>
     <ul className="list">
-      {supplies.length === 0 && <li className="row dim small">All lines at or above required.</li>}
+      {supplies.length === 0 && <li className="row dim small">No inventory lines match this view.</li>}
       {supplies.map(x => (
-        <li key={x.id} className={`row supply ${x.status}`} onClick={() => canEdit && setOnHand(x)} title={x.note || `${x.category} · updated by ${x.updated_by}`}>
+        <li key={x.id} className={`row supply ${x.status}`} role={canEdit?'button':undefined} tabIndex={canEdit?0:undefined} onKeyDown={e=>{if(canEdit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setOnHand(x)}}} onClick={() => canEdit && setOnHand(x)} title={x.note || `${x.category} · updated by ${x.updated_by}`}>
           <span className={`sev ${x.status === 'green' ? 'ok' : x.status === 'amber' ? 'low' : 'critical'}`}>{x.status === 'green' ? 'OK' : x.status.slice(0, 3).toUpperCase()}</span>
           <span className="name">{x.item}<span className="dim"> · {x.location_name}</span></span>
           <span className="qty mono">{x.on_hand.toLocaleString()}<span className="dim">/{x.required.toLocaleString()} {x.unit}</span></span>
           <span className="bar small"><span style={{ width: `${Math.min(100, x.pct)}%` }} className={x.status === 'green' ? 'ok' : x.status} /></span>
         </li>))}
     </ul>
-    <div className="section-label">INBOUND <span className="dim">{inbound.length}</span></div>
+    </>}{view !== 'supplies' && <><div className="section-label">INBOUND <span className="dim">{inbound.length}</span></div>
     <ul className="list">
       {inbound.length === 0 && <li className="row dim small">Nothing inbound.</li>}
       {inbound.map(x => <ShipmentRow key={x.id} x={x} canEdit={canEdit} busy={busy} act={act} />)}
-    </ul>
+    </ul></>}
   </>)
 }
 
@@ -67,24 +67,25 @@ function ShipmentRow({ x, canEdit, busy, act }: { x: Shipment; canEdit: boolean;
     </li>)
 }
 
-export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, toggleMap }: { board: S6Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; site?: Location; onClearSite?: () => void; onMap?: boolean; toggleMap?: () => void }) {
+export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, toggleMap, canEditOverride, view = 'all' }: { canEditOverride?: boolean; view?: 'all' | 'systems' | 'pace'; board: S6Board | undefined; role: Role; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; site?: Location; onClearSite?: () => void; onMap?: boolean; toggleMap?: () => void }) {
   const [group, setGroup] = useState<'exceptions' | 'all'>('exceptions')
-  const canEdit = S6_ROLES.includes(role)
+  const canEdit = canEditOverride ?? S6_ROLES.includes(role)
+  const [editing,setEditing]=useState<{system:SystemLine;status:SystemLine['status']}|null>(null)
+  const [note,setNote]=useState('')
   if (!board) return <div className="dim small" style={{ padding: 14 }}>No signal board yet.</div>
   const systems = (group === 'all' ? board.systems : board.systems.filter(x => x.health !== 'green')).filter(x => !site || x.location_id === site.id)
   const paceSites = Object.entries(board.pace).filter(([id]) => !site || id === site.id)
-  const set = (x: SystemLine, status: SystemLine['status']) => {
-    const note = status === 'up' ? '' : (window.prompt(`${x.name}: what is wrong?`, x.note) ?? '')
-    act(`marking ${x.name} ${status}`, () => api.updateSystem(x.id, { status, ...(note ? { note } : {}) }))
-  }
+  const set = (x: SystemLine, status: SystemLine['status']) => { setEditing({system:x,status}); setNote(status==='up'?'':x.note) }
   return (<>
+    {editing&&<form className="ws-form" onSubmit={e=>{e.preventDefault();act('updating system',async()=>{await api.updateSystem(editing.system.id,{status:editing.status,note});setEditing(null)})}}><h3>{editing.system.name} → {editing.status}</h3><label>Update note<input value={note} onChange={e=>setNote(e.target.value)} required={editing.status!=='up'}/></label><div className="ws-actions"><button disabled={!!busy}>Save system status</button><button type="button" onClick={()=>setEditing(null)}>Cancel</button></div></form>}
+
     <div className="s4-summary">
       {statusChip(board.status, `S6 ${board.status}`)}
       <span className="dim small">{board.counts.down} down · {board.counts.degraded} degraded · {board.counts.total} systems</span>
       <span className="grp">{(['exceptions', 'all'] as const).map(g => <button key={g} className={`chip btn ${group === g ? 'on' : ''}`} onClick={() => setGroup(g)}>{g.toUpperCase()}</button>)}{toggleMap && <button className={`chip btn ${onMap ? 'on' : ''}`} onClick={toggleMap} title="S6 health on every site of the picture">ON MAP</button>}</span>
     </div>
     {site && <div className="site-filter">AT <b>{site.name}</b>{site.s6_status && statusChip(site.s6_status)}<button className="mini" onClick={onClearSite}>ALL SITES</button></div>}
-    <div className="section-label">PACE · HOW TO REACH EACH SITE</div>
+    {view !== 'systems' && <><div className="section-label">PACE · HOW TO REACH EACH SITE</div>
     <ul className="list pace">
       {paceSites.map(([site, p]) => (
         <li key={site} className="row">
@@ -94,9 +95,9 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
           <span className="meta dim">{p.in_use ? `on ${p.in_use.toUpperCase()}` : 'NO NET'}</span>
         </li>))}
     </ul>
-    <div className="section-label">SYSTEMS <span className="dim">{systems.length}{group === 'exceptions' && ` of ${board.systems.length}`}</span></div>
+    </>}{view !== 'pace' && <><div className="section-label">SYSTEMS <span className="dim">{systems.length}{group === 'exceptions' && ` of ${board.systems.length}`}</span></div>
     <ul className="list">
-      {systems.length === 0 && <li className="row dim small">Everything up.</li>}
+      {systems.length === 0 && <li className="row dim small">No systems match this view.</li>}
       {systems.map(x => (
         <li key={x.id} className={`row system ${x.health}`} title={x.note || `${x.category} · updated by ${x.updated_by}`}>
           <span className={`sev ${x.status === 'up' ? 'ok' : x.status === 'degraded' ? 'low' : 'critical'}`}>{x.status === 'up' ? 'UP' : x.status === 'degraded' ? 'DEG' : 'DOWN'}</span>
@@ -108,6 +109,6 @@ export function S6Panel({ board, role, busy, act, site, onClearSite, onMap, togg
             {x.status !== 'down' && <button className="mini danger" disabled={!!busy} onClick={() => set(x, 'down')}>DOWN</button>}
           </span>}
         </li>))}
-    </ul>
+    </ul></>}
   </>)
 }

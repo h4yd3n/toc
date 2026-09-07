@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { Map as MLMap, Marker } from 'maplibre-gl'
-import type { CopEvent, Layers, Location, Person, Selection, Snapshot } from './types'
+import type { CopEvent, Location, OverlayId, OverlayState, Person, Selection, Snapshot } from './types'
+import { effectiveOpacity } from './OverlayPanel'
 import { arc, circle } from './geo'
 
 // Free, keyless vector basemap. Attribution is carried in the style JSON.
@@ -25,25 +26,38 @@ function savedBoard(): { center: [number, number]; zoom: number } | null {
 const SEV_COLOR: Record<string, string> = { low: '#f59e0b', moderate: '#f97316', elevated: '#ef4444', critical: '#dc2626' }
 const TYPE_GLYPH: Record<string, string> = { hq: '◆', office: '■', datacenter: '▣', residence: '⌂', venue: '★', airfield: '✈', cp: '▲', fob: '⬢', farp: '⛽', range: '◎' }
 
+// Tier 2D — Threat circle stroke style by severity
+
 interface Point { kind: 'location' | 'person' | 'event'; id: string; lat: number; lon: number; loc?: Location; person?: Person; event?: CopEvent }
 interface Cluster { x: number; y: number; lat: number; lon: number; members: Point[] }
 
 interface Props {
   snapshot: Snapshot | null
   selection: Selection
-  layers: Layers
+  overlayState: OverlayState
   onSelect: (s: Selection) => void
 }
 
-export default function MapView({ snapshot, selection, layers, onSelect }: Props) {
+/** Resolve the effective opacity for a given overlay id from the state. */
+function ovOpacity(state: OverlayState, id: OverlayId): number {
+  const ov = state.overlays.find(o => o.id === id)
+  return ov ? effectiveOpacity(ov, state.soloId) : 0
+}
+
+/** Whether an overlay has outlineOnly enabled. */
+function ovOutline(state: OverlayState, id: OverlayId): boolean {
+  return state.overlays.find(o => o.id === id)?.outlineOnly ?? false
+}
+
+export default function MapView({ snapshot, selection, overlayState, onSelect }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
   const framed = useRef(savedBoard() != null)   // applied once, and never over a board this browser remembers
   const waiting = useRef(false)                // an opening frame queued against a style that has not landed yet
-  const propsRef = useRef({ snapshot, layers, onSelect, selection })
-  propsRef.current = { snapshot, layers, onSelect, selection }
+  const propsRef = useRef({ snapshot, overlayState, onSelect, selection })
+  propsRef.current = { snapshot, overlayState, onSelect, selection }
 
   // ---- init ----
   useEffect(() => {
@@ -64,12 +78,21 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
       loaded.current = true
       m.resize()
       m.addSource('threats', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+      // Tier 2A: zoom-adaptive fill-opacity for threat circles — fades at wide zoom, full at tactical
       m.addLayer({ id: 'threat-fill', type: 'fill', source: 'threats',
-        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.18 } })
+        paint: { 'fill-color': ['get', 'color'],
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.04, 8, 0.12, 11, 0.20] } })
       m.addLayer({ id: 'threat-line', type: 'line', source: 'threats',
-        paint: { 'line-color': ['get', 'color'], 'line-width': 1.5, 'line-opacity': 0.9, 'line-dasharray': [2, 2] } })
+        paint: { 'line-color': ['get', 'color'],
+          'line-width': ['match', ['get', 'severity'], 'critical', 2.5, 'elevated', 2, 'moderate', 1.5, 1],
+          'line-opacity': 0.9,
+          'line-dasharray': ['match', ['get', 'severity'],
+            'critical', ['literal', [1, 0]], 'elevated', ['literal', [4, 2]], 'moderate', ['literal', [2, 2]], ['literal', [1, 3]]] } })
       m.addSource('incidents', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      m.addLayer({ id: 'incident-fill', type: 'fill', source: 'incidents', paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.10 } })
+      // Tier 2E: zoom-adaptive opacity for incident circles too
+      m.addLayer({ id: 'incident-fill', type: 'fill', source: 'incidents',
+        paint: { 'fill-color': '#ef4444',
+          'fill-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.03, 8, 0.08, 11, 0.12] } })
       m.addLayer({ id: 'incident-line', type: 'line', source: 'incidents', paint: { 'line-color': '#ef4444', 'line-width': 2.5, 'line-dasharray': [3, 2] } })
       m.addSource('routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
       m.addLayer({ id: 'route-line', type: 'line', source: 'routes',
@@ -98,42 +121,71 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
 
   // ---- data layers ----
   function renderData(m: MLMap) {
-    const { snapshot, layers } = propsRef.current
+    const { snapshot, overlayState } = propsRef.current
     if (!snapshot || !m.getSource('threats')) return
+
+    // Resolve overlay opacities
+    const threatOp = ovOpacity(overlayState, 'threat')
+    const threatOutline = ovOutline(overlayState, 'threat')
+    const sigactOp = ovOpacity(overlayState, 'sigacts')
+    const sigactOutline = ovOutline(overlayState, 'sigacts')
+    const routeOp = ovOpacity(overlayState, 'routes')
+
+    // Threats
     const threats = m.getSource('threats') as maplibregl.GeoJSONSource
-    threats.setData({ type: 'FeatureCollection', features: layers.threats ? snapshot.threats.map(t => ({
-      type: 'Feature', properties: { id: t.id, color: SEV_COLOR[t.severity] },
+    threats.setData({ type: 'FeatureCollection', features: threatOp > 0 ? snapshot.threats.map(t => ({
+      type: 'Feature', properties: { id: t.id, color: SEV_COLOR[t.severity], severity: t.severity },
       geometry: { type: 'Polygon', coordinates: [circle(t.lat, t.lon, t.radius_km)] },
     })) : [] })
+    // Apply overlay opacity to fill and line layers dynamically
+    // Tier 2A+B: zoom-adaptive + outline-only mode: when outlineOnly or below zoom 8, fill fades to 0
+    m.setPaintProperty('threat-fill', 'fill-opacity', threatOutline ? 0 : ['interpolate', ['linear'], ['zoom'], 4, 0.04 * threatOp, 8, 0.12 * threatOp, 11, 0.20 * threatOp])
+    m.setPaintProperty('threat-line', 'line-opacity', 0.9 * threatOp)
+
+    // Incidents / SIGACTs
     const incidents = m.getSource('incidents') as maplibregl.GeoJSONSource
-    incidents.setData({ type: 'FeatureCollection', features: snapshot.incidents.filter(i => i.status === 'open').map(i => ({
+    incidents.setData({ type: 'FeatureCollection', features: sigactOp > 0 ? snapshot.incidents.filter(i => i.status === 'open').map(i => ({
       type: 'Feature', properties: { id: i.id }, geometry: { type: 'Polygon', coordinates: [circle(i.lat, i.lon, i.radius_km)] },
-    })) })
+    })) : [] })
+    m.setPaintProperty('incident-fill', 'fill-opacity', sigactOutline ? 0 : ['interpolate', ['linear'], ['zoom'], 4, 0.03 * sigactOp, 8, 0.08 * sigactOp, 11, 0.12 * sigactOp])
+    m.setPaintProperty('incident-line', 'line-opacity', sigactOp)
+
+    // Routes
     const routes = m.getSource('routes') as maplibregl.GeoJSONSource
-    routes.setData({ type: 'FeatureCollection', features: layers.routes ? snapshot.trips.map(t => ({
+    routes.setData({ type: 'FeatureCollection', features: routeOp > 0 ? snapshot.trips.map(t => ({
       type: 'Feature', properties: { id: t.id, status: t.status },
       geometry: { type: 'LineString', coordinates: arc(t.origin_lat, t.origin_lon, t.dest_lat, t.dest_lon) },
     })) : [] })
+    m.setPaintProperty('route-line', 'line-opacity', 0.85 * routeOp)
   }
-  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers])
+  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, overlayState])
 
   // ---- markers with screen-space clustering ----
   function renderMarkers(m: MLMap) {
-    const { snapshot, layers, onSelect, selection } = propsRef.current
+    const { snapshot, overlayState, onSelect, selection } = propsRef.current
     markers.current.forEach(mk => mk.remove()); markers.current = []
     if (!snapshot) return
+
+    // Resolve per-overlay opacities for DOM markers
+    const blueOp = ovOpacity(overlayState, 'blue_force')
+    const eventOp = ovOpacity(overlayState, 'events')
+    const s4On = overlayState.overlays.find(o => o.id === 's4')?.enabled ?? false
+    const s6On = overlayState.overlays.find(o => o.id === 's6')?.enabled ?? false
+    const restrictedOn = overlayState.overlays.find(o => o.id === 'restricted')?.enabled ?? false
+
     const pts: Point[] = []
-    if (layers.locations) for (const l of snapshot.locations) {
-      if (l.sensitivity === 'restricted' && !layers.residences) continue
+    if (blueOp > 0) for (const l of snapshot.locations) {
+      if (l.sensitivity === 'restricted' && !restrictedOn) continue
       pts.push({ kind: 'location', id: l.id, lat: l.lat, lon: l.lon, loc: l })
     }
-    if (layers.travelers) for (const p of snapshot.people) if (p.status === 'traveling')
+    if (blueOp > 0) for (const p of snapshot.people) if (p.status === 'traveling')
       pts.push({ kind: 'person', id: p.id, lat: p.lat, lon: p.lon, person: p })
-    if (layers.events) for (const e of snapshot.events) if (!e.venue_location_id)
+    if (eventOp > 0) for (const e of snapshot.events) if (!e.venue_location_id)
       pts.push({ kind: 'event', id: e.id, lat: e.venue_lat, lon: e.venue_lon, event: e })
 
     const clusters: Cluster[] = []
-    const R = 44
+    // Tier 2C: smarter clustering — wider radius at strategic zoom, tighter at tactical
+    const R = Math.max(32, 64 - m.getZoom() * 3)
     for (const p of pts) {
       const s = m.project([p.lon, p.lat])
       const c = clusters.find(c => Math.hypot(c.x - s.x, c.y - s.y) < R)
@@ -146,25 +198,31 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
       const ppl = c.members.filter(x => x.kind === 'person')
       const evs = c.members.filter(x => x.kind === 'event')
       const selected = c.members.some(x => selection && x.kind === selection.type && x.id === selection.id)
+
+      // Determine which overlay governs this cluster's opacity
+      const clusterHasEvents = evs.length > 0 && locs.length === 0 && ppl.length === 0
+      const dimClass = (clusterHasEvents && eventOp < 1) || (!clusterHasEvents && blueOp < 1) ? ' ov-dimmed' : ''
+      const markerOpacity = clusterHasEvents ? eventOp : blueOp
+
       if (c.members.length === 1 && locs.length === 1) {
         const l = locs[0].loc!
         // §3 the map-first sections: with the S4 or S6 layer on, the site wears that section's health
-        const sec = layers.s6 && l.s6_status ? `sec-${l.s6_status}` : layers.s4 && l.s4_status ? `sec-${l.s4_status}` : ''
-        div.className = `mk mk-loc mk-${l.type} posture-${l.effective_posture}${selected ? ' selected' : ''}${l.threat_ids_in_area.length ? ' in-area' : ''} ${sec}`
-        const chips = (layers.s4 && l.s4_status ? `<span class="sec s4 ${l.s4_status}" title="S4 ${l.s4_status}">S4${l.s4_red ? ' ' + l.s4_red : ''}</span>` : '') +
-                      (layers.s6 && l.s6_status ? `<span class="sec s6 ${l.s6_status}" title="S6 ${l.s6_status}${l.s6_in_use ? ' · on ' + l.s6_in_use : ''}">S6${l.s6_down ? ' ' + l.s6_down : ''}</span>` : '')
+        const sec = s6On && l.s6_status ? `sec-${l.s6_status}` : s4On && l.s4_status ? `sec-${l.s4_status}` : ''
+        div.className = `mk mk-loc mk-${l.type} posture-${l.effective_posture}${selected ? ' selected' : ''}${l.threat_ids_in_area.length ? ' in-area' : ''} ${sec}${dimClass}`
+        const chips = (s4On && l.s4_status ? `<span class="sec s4 ${l.s4_status}" title="S4 ${l.s4_status}">S4${l.s4_red ? ' ' + l.s4_red : ''}</span>` : '') +
+                      (s6On && l.s6_status ? `<span class="sec s6 ${l.s6_status}" title="S6 ${l.s6_status}${l.s6_in_use ? ' · on ' + l.s6_in_use : ''}">S6${l.s6_down ? ' ' + l.s6_down : ''}</span>` : '')
         div.innerHTML = `<span class="glyph">${TYPE_GLYPH[l.type]}</span><span class="badge">${l.present}</span>${l.vips_present ? '<span class="vip">★</span>' : ''}${chips ? `<span class="secs">${chips}</span>` : ''}`
         div.title = `${l.name} — ${l.present} present / ${l.assigned} assigned${l.s4_status ? ` · S4 ${l.s4_status}` : ''}${l.s6_status ? ` · S6 ${l.s6_status}${l.s6_in_use ? ' on ' + l.s6_in_use.toUpperCase() : ''}` : ''}`
         div.onclick = e => { e.stopPropagation(); onSelect({ type: 'location', id: l.id }) }
       } else if (c.members.length === 1 && ppl.length === 1) {
         const p = ppl[0].person!
-        div.className = `mk mk-person${p.is_vip ? ' vip' : ''}${p.position_source === 'checkin' ? ' checked' : ''}${p.confirmed_threat_ids.length ? ' threatened' : ''}${selected ? ' selected' : ''}`
+        div.className = `mk mk-person${p.is_vip ? ' vip' : ''}${p.position_source === 'checkin' ? ' checked' : ''}${p.confirmed_threat_ids.length ? ' threatened' : ''}${selected ? ' selected' : ''}${dimClass}`
         div.innerHTML = `<span class="glyph">●</span><span class="label">${p.short_name ?? p.name.split(' ')[0]}</span>`
         div.title = `${p.name} — ${p.role}`
         div.onclick = e => { e.stopPropagation(); onSelect({ type: 'person', id: p.id }) }
       } else if (c.members.length === 1 && evs.length === 1) {
         const e = evs[0].event!
-        div.className = `mk mk-event${selected ? ' selected' : ''}`
+        div.className = `mk mk-event${selected ? ' selected' : ''}${dimClass}`
         div.innerHTML = `<span class="glyph">★</span><span class="label">T-${e.days_until}d</span>`
         div.title = `${e.name} — ${e.venue_name}`
         div.onclick = ev => { ev.stopPropagation(); onSelect({ type: 'event', id: e.id }) }
@@ -175,14 +233,16 @@ export default function MapView({ snapshot, selection, layers, onSelect }: Props
         // a cluster wears the worst S4 / S6 health of its sites when that layer is on
         const RANK = { green: 0, amber: 1, red: 2 } as Record<string, number>
         const worstOf = (k: 's4_status' | 's6_status') => locs.map(x => x.loc![k]).filter(Boolean).sort((a, b) => RANK[b!] - RANK[a!])[0] ?? null
-        const h4 = layers.s4 ? worstOf('s4_status') : null, h6 = layers.s6 ? worstOf('s6_status') : null
+        const h4 = s4On ? worstOf('s4_status') : null, h6 = s6On ? worstOf('s6_status') : null
         const sec = h6 ? `sec-${h6}` : h4 ? `sec-${h4}` : ''
         const chips = (h4 ? `<span class="sec s4 ${h4}">S4 ${locs.reduce((a, x) => a + (x.loc!.s4_red ?? 0), 0) || ''}</span>` : '') + (h6 ? `<span class="sec s6 ${h6}">S6 ${locs.reduce((a, x) => a + (x.loc!.s6_down ?? 0), 0) || ''}</span>` : '')
-        div.className = `mk mk-cluster posture-${LEVELS[worst]}${selected ? ' selected' : ''} ${sec}`
+        div.className = `mk mk-cluster posture-${LEVELS[worst]}${selected ? ' selected' : ''} ${sec}${dimClass}`
         div.innerHTML = `<span class="count">${present}</span><span class="sub">${locs.length} site${locs.length === 1 ? '' : 's'}${ppl.length ? ` · ${ppl.length} tvl` : ''}${evs.length ? ` · ${evs.length} evt` : ''}</span>${chips ? `<span class="secs">${chips}</span>` : ''}`
         div.title = c.members.map(x => x.loc?.name ?? x.person?.name ?? x.event?.name).join('\n')
         div.onclick = e => { e.stopPropagation(); m.flyTo({ center: [c.lon, c.lat], zoom: Math.min(m.getZoom() + 2.5, 12), speed: 1.4 }) }
       }
+      // Apply overlay opacity to DOM markers for smooth dimming
+      if (markerOpacity < 1 && markerOpacity > 0) div.style.opacity = String(markerOpacity)
       markers.current.push(new maplibregl.Marker({ element: div, anchor: 'center' }).setLngLat([c.lon, c.lat]).addTo(m))
     }
   }

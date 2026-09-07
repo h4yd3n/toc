@@ -60,7 +60,7 @@ export function ImportDrawer({ busy, act, onDone }: { busy: string | null; act: 
       <div className="dform-head">IMPORT <span className="dim">exports from the systems of record · rows carry their provenance</span></div>
       <div className="row-btns"><select value={kind} onChange={e => { setKind(e.target.value as typeof kind); setResult(null) }}><option value="people">People (HRIS CSV)</option><option value="shifts">Shifts (schedule CSV)</option><option value="trips">Trips (travel CSV)</option><option value="ics">Events (calendar ICS)</option><option value="legs">Itinerary legs (travel CSV)</option><option value="itinerary">Itinerary (pasted confirmation)</option></select></div>
       <textarea rows={5} placeholder={hint[kind]} value={text} onChange={e => setText(e.target.value)} />
-      {result && <div className="small" style={{ color: result.errors.length ? 'var(--amber)' : 'var(--green)' }}>{Object.entries(result).filter(([k, v]) => typeof v === 'number').map(([k, v]) => `${k} ${v}`).join(' · ')}{result.errors.map((e, i) => <div key={i} className="dim">{e}</div>)}</div>}
+      {result && <div className="small" style={{ color: result.errors.length ? 'var(--amber)' : 'var(--green)' }}>{Object.entries(result).filter(([, v]) => typeof v === 'number').map(([k, v]) => `${k} ${v}`).join(' · ')}{result.errors.map((e, i) => <div key={i} className="dim">{e}</div>)}</div>}
       <div className="row-btns"><button className="mini ok" disabled={!!busy || text.trim().length < 5} onClick={() => act('importing', () => api.importText(kind, text).then(setResult))}>IMPORT</button><button className="mini" onClick={onDone}>CLOSE</button></div>
     </div>)
 }

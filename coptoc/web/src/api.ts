@@ -103,7 +103,7 @@ export const setProfile = (profile: 'military' | 'corporate') => req<{ profile: 
 export const me = () => req<Me>('GET', '/v1/cop/me')
 export const listUsers = () => req<{ users: UserInfo[]; presets: Record<string, { label: string; perms: Record<string, string>; battle_captain: boolean }>; sections: string[] }>('GET', '/v1/cop/users')
 export const createUser = (body: Partial<UserInfo>) => req<UserInfo>('POST', '/v1/cop/users', body)
-export const updateUser = (id: string, body: Partial<UserInfo> & { perms?: Record<string, string | null> }) => req<UserInfo>('PATCH', `/v1/cop/users/${id}`, body)
+export const updateUser = (id: string, body: Omit<Partial<UserInfo>, 'perms'> & { perms?: Record<string, string | null> }) => req<UserInfo>('PATCH', `/v1/cop/users/${id}`, body)
 export const deleteUser = (id: string) => req<{ id: string }>('DELETE', `/v1/cop/users/${id}`)
 export const signIn = (userId: string) => { session.userId = userId; try { localStorage.setItem('toc.user', userId) } catch { /* private mode */ } }
 
@@ -119,3 +119,27 @@ export const uploadCommit = (section: string, body: { upload_id: string; sheet: 
 // §5.10 taskings
 export const raiseTasking = (body: Partial<Tasking> & { title: string; from_section: string; to_section: string }) => req<Tasking>('POST', '/v1/cop/taskings', body)
 export const updateTasking = (id: string, body: Partial<Pick<Tasking, 'status' | 'result' | 'notes' | 'asset' | 'priority' | 'window_from' | 'window_to'>>) => req<Tasking>('PATCH', `/v1/cop/taskings/${id}`, body)
+
+// Staff work: scoped analysis assignments and cited products.
+export interface WorkEvidence { case_id?: string | null; section?: string; id: string; label: string; text: string }
+export interface WorkAnalysis { title: string; summary: string; findings: { claim: string; citations: { source_id: string; quote: string }[]; uncertainty: string }[]; gaps: string[]; proposed_tasks: string[] }
+export interface WorkAssignment { location_id: string | null; id: string; section: import('./types').SectionCode; case_id: string | null; instruction: string; status: string; owner: string; cadence_minutes: number; created_at: string; last_success_at: string | null; next_at: string }
+export interface WorkRun { id: string; assignment_id: string; status: string; review_status: string; revision: number; result: Partial<WorkAnalysis>; evidence: WorkEvidence[]; provider: string; model: string; error: string; reviewed_by: string; created_at: string; completed_at: string | null; history: { at: string; actor: string; action: string; note: string }[] }
+export interface WorkBoard { assignments: WorkAssignment[]; runs: WorkRun[]; provider: { provider: string; model: string; configured: boolean; effort: string } }
+export const getWork = () => req<WorkBoard>('GET', '/v1/work')
+export const assignWork = (body: { section: import('./types').SectionCode; case_id?: string; location_id?: string; instruction: string; cadence_minutes: number }) => req<WorkAssignment>('POST', '/v1/work/assignments', body)
+export const changeWork = (id: string, action: 'pause' | 'resume' | 'cancel' | 'run') => req<WorkAssignment>('PATCH', `/v1/work/assignments/${id}`, { action })
+export const reviewWork = (id: string, revision: number, action: 'save' | 'review' | 'release' | 'reject', result?: WorkAnalysis, note = '') => req<WorkRun>('PATCH', `/v1/work/runs/${id}`, { revision, action, result, note })
+export const editAssessment = (id: string, bluf: string) => req<unknown>('PATCH', `/v1/cop/assessments/${id}`, { bluf })
+export const attachReport = (id: string, case_id: string) => req<Report>('POST', `/v1/s2/reports/${id}/attach`, { case_id })
+export const createWorkTask = (id: string, index: number, to_section: import('./types').SectionCode) => req<{ id: string; status: string }>('POST', `/v1/work/runs/${id}/taskings`, { index, to_section })
+export const createEvent = (body: { name: string; venue_location_id: string; start_at: string; end_at: string; description: string; generate_trips: boolean }) => req<{ id: string }>('POST', '/v1/cop/events', body)
+export const getDraft = <T>(section: string, key: string) => req<{ payload: Partial<T>; updated_at: string | null }>('GET', `/v1/work/drafts/${section}/${encodeURIComponent(key)}`)
+export const saveDraft = (section: string, key: string, payload: unknown) => req<{ saved: boolean }>('PUT', `/v1/work/drafts/${section}/${encodeURIComponent(key)}`, payload)
+export const createSupply = (body: { item: string; location_id: string | null; on_hand: number; required: number; unit: string; note: string }) => req<{id:string}>('POST','/v1/cop/supply',body)
+export const createShipment = (body: { description: string; quantity: string; to_location_id: string | null; eta: string; note: string }) => req<{id:string}>('POST','/v1/cop/shipments',body)
+export const createSystem = (body: { name: string; location_id: string | null; pace: string | null; status: string; note: string }) => req<{id:string}>('POST','/v1/cop/systems',body)
+export const createPerson = (body:{name:string;role:string;team_id:string;email:string;phone:string}) => req<{id:string}>('POST','/v1/cop/people',body)
+export const updatePersonAssignment = (id:string,body:{on_shift:boolean;shift_role:string|null}) => req<unknown>('PATCH',`/v1/cop/people/${id}/assignment`,body)
+
+export const editWork = (id:string,instruction:string,cadence_minutes:number) => req<WorkAssignment>('PATCH',`/v1/work/assignments/${id}`,{action:'edit',instruction,cadence_minutes})

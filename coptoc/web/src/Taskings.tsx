@@ -10,14 +10,17 @@ const fmt = (iso: string | null) => iso ? new Date(iso).toUTCString().slice(5, 2
 export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSelect }: { section: SectionCode; board: TaskingBoard | undefined; canEdit: boolean; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; enabled: SectionCode[]; onSelect?: (t: Tasking) => void }) {
   const [raise, setRaise] = useState(false)
   const [showDone, setShowDone] = useState(false)
+  const [decision, setDecision] = useState<{ task: Tasking; status: Tasking['status'] } | null>(null)
+  const [resultNote, setResultNote] = useState('')
   const [f, setF] = useState({ to_section: (enabled.find(s => s !== section) ?? 'S3') as SectionCode, kind: 'other' as Tasking['kind'], title: '', asset: '', priority: 'routine' as Tasking['priority'], window_from: '', window_to: '', notes: '' })
   if (!board) return null
   const inbox = board.items.filter(t => t.to_section === section && (t.open || showDone))
   const outbox = board.items.filter(t => t.from_section === section && (t.open || showDone))
   const set = (t: Tasking, status: Tasking['status']) => {
-    const result = status === 'declined' ? (window.prompt('Why?', '') ?? '') : status === 'complete' ? (window.prompt('What was done?', t.result) ?? '') : ''
-    if (status === 'declined' && !result) return
-    act(`${status} · ${t.title}`, () => api.updateTasking(t.id, { status, ...(result ? { result } : {}) }))
+    if (status === 'declined' || status === 'complete') {
+      setDecision({ task: t, status }); setResultNote(t.result || ''); return
+    }
+    act(`${status} · ${t.title}`, () => api.updateTasking(t.id, { status }))
   }
   const submit = () => { if (!f.title.trim()) return; act(`raising a tasking on ${f.to_section}`, async () => { await api.raiseTasking({ ...f, from_section: section, title: f.title.trim(), window_from: f.window_from ? new Date(f.window_from).toISOString() : null, window_to: f.window_to ? new Date(f.window_to).toISOString() : null }); setRaise(false); setF({ ...f, title: '', asset: '', notes: '' }) }) }
   const row = (t: Tasking, mine: boolean) => (
@@ -31,6 +34,7 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
         <span className="dim small">{t.asset}{t.subject_name ? ` · ${t.subject_name}` : ''}{t.window_from ? ` · ${fmt(t.window_from)}${t.window_to ? ' → ' + fmt(t.window_to) : ''}` : ''}{t.result ? ` · ${t.result}` : ''}</span>
       </div>
       <div className="l3">
+        {t.subject_type === 'work_product' && t.subject_id && <a className="ws-link" href={`#/work/${t.from_section}/overview?record=${encodeURIComponent(t.subject_id)}`} onClick={e=>e.stopPropagation()}>Open source analysis →</a>}
         {mine && canEdit && t.open && <span className="acts">
           {t.status === 'requested' && <button className="mini" disabled={!!busy} onClick={e => { e.stopPropagation(); set(t, 'accepted') }}>ACCEPT</button>}
           {t.status !== 'scheduled' && <button className="mini" disabled={!!busy} onClick={e => { e.stopPropagation(); set(t, 'scheduled') }}>SCHEDULE</button>}
@@ -40,6 +44,7 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
       </div>
     </li>)
   return (<>
+    {decision && <form className="ws-form" onSubmit={e=>{e.preventDefault();act('recording task outcome',async()=>{await api.updateTasking(decision.task.id,{status:decision.status,result:resultNote.trim()});setDecision(null)})}}><h3>{decision.status === 'complete' ? 'Complete task' : 'Decline task'} · {decision.task.title}</h3><label>{decision.status === 'complete' ? 'What was done?' : 'Reason for declining'}<textarea required value={resultNote} onChange={e=>setResultNote(e.target.value)}/></label><div className="ws-actions"><button disabled={!!busy||!resultNote.trim()}>Save outcome</button><button type="button" onClick={()=>setDecision(null)}>Cancel</button></div></form>}
     <div className="section-label">TASKINGS <span className="dim">{inbox.filter(t => t.open).length} to do · {outbox.filter(t => t.open).length} waiting</span>
       <span className="grp"><button className={`chip btn ${showDone ? 'on' : ''}`} onClick={() => setShowDone(v => !v)}>DONE</button>{canEdit && <button className={`chip btn ${raise ? 'on' : ''}`} onClick={() => setRaise(v => !v)}>RAISE</button>}</span></div>
     {raise && <div className="dform">
