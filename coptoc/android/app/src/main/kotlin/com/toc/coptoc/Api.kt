@@ -15,7 +15,26 @@ class ApiError(val status: Int, message: String) : Exception(message)
 
 /** The COP backend client — same contract as the web app and the iOS app. Role and actor travel as headers. */
 @OptIn(ExperimentalSerializationApi::class)
-class CopClient(var baseUrl: String = BuildConfig.TOC_API, var role: String = "battle_captain", var actor: String = "Battle Captain (Android)", var userId: String = "") {
+class CopClient(
+    var baseUrl: String = defaultBaseUrl(),
+    var role: String = "battle_captain",
+    var actor: String = "Battle Captain (Android)",
+    var userId: String = ""
+) {
+    companion object {
+        fun defaultBaseUrl(): String {
+            val configured = BuildConfig.TOC_API
+            val isEmulator = android.os.Build.FINGERPRINT.startsWith("generic")
+                || android.os.Build.FINGERPRINT.startsWith("unknown")
+                || android.os.Build.MODEL.contains("google_sdk")
+                || android.os.Build.MODEL.contains("Emulator")
+                || android.os.Build.MODEL.contains("Android SDK built for x86")
+            if (!isEmulator && (configured.contains("10.0.2.2") || configured.contains("localhost") || configured.contains("127.0.0.1"))) {
+                return "http://10.8.12.32:8000"
+            }
+            return configured
+        }
+    }
     private val json = Json { ignoreUnknownKeys = true; namingStrategy = JsonNamingStrategy.SnakeCase; explicitNulls = false; coerceInputValues = true; isLenient = true }
 
     suspend fun snapshot(restricted: Boolean): Snapshot = json.decodeFromString(get("/v1/cop/snapshot?restricted=$restricted"))

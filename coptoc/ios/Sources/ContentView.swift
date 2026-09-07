@@ -48,9 +48,18 @@ struct ContentView: View {
         }
         .overlay(alignment: .bottom) {
             if let err = store.error {
-                Text(err).font(.system(size: 11, design: .monospaced)).lineLimit(2).padding(8)
-                    .background(Theme.red.opacity(0.9), in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
-                    .onTapGesture { store.error = nil }
+                HStack(spacing: 8) {
+                    Text(err).font(.system(size: 11, design: .monospaced)).lineLimit(2)
+                    Button {
+                        Task { await store.load() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(8)
+                .background(Theme.red.opacity(0.9), in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
+                .onTapGesture { Task { await store.load() } }
             } else if let busy = store.busy {
                 Text(busy.uppercased()).font(.system(size: 10, weight: .semibold, design: .monospaced)).tracking(1.5).padding(8)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
