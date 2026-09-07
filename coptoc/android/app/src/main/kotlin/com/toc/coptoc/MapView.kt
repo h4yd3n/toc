@@ -210,6 +210,7 @@ private fun applySnapshotInner(style: Style, st: WallState, layer: String? = nul
     val showRoutesLayer = st.showRoutes
     val showThreatsLayer = st.showThreats
     val showEventsLayer = st.showEvents
+    val showGraphicsLayer = st.showGraphics
     val outlineOnlyThreats = st.outlineOnlyThreats
 
     // §3 the map-first sections: a section's layer shows only what that section owns; S4 / S6 color every site by its health
@@ -254,11 +255,11 @@ private fun applySnapshotInner(style: Style, st: WallState, layer: String? = nul
             f.addStringProperty("id", mv.id); f.addStringProperty("color", hex(color)); f.addNumberProperty("lw", if (lg.status == "current") (if (mv.pax >= 3) 3.0 else 2.2) else 1.4)
             f.addNumberProperty("lo", (if (lg.status == "done") 0.35 else if (lg.status == "current") 0.95 else 0.7) * mA); f.addBooleanProperty("dashed", mv.kind == "shipment" || lg.status == "planned") } } }
     // §3.4 the control measures a section drew: shapes on their own source, the glyph and name as a label in the blue source
-    val gfx = s.graphics.mapNotNull { g -> val a = (if (layer == null || layer == g.section) 1.0 else 0.3) * (if (g.windowFrom != null && !g.inWindow) 0.45 else 1.0); val p = g.path
+    val gfx = if (!showGraphicsLayer) emptyList() else s.graphics.mapNotNull { g -> val a = (if (layer == null || layer == g.section) 1.0 else 0.3) * (if (g.windowFrom != null && !g.inWindow) 0.45 else 1.0); val p = g.path
         val geom = when { g.kind == "polygon" && p.size >= 3 -> Polygon.fromLngLats(listOf((p + p.first()).map { Point.fromLngLat(it.first, it.second) })); g.kind != "point" && p.size >= 2 -> LineString.fromLngLats(p.map { Point.fromLngLat(it.first, it.second) }); else -> null }
         geom?.let { Feature.fromGeometry(it).also { f -> f.addStringProperty("id", g.id); f.addStringProperty("color", g.color); f.addBooleanProperty("dash", g.dash)
             f.addNumberProperty("fo", (if (g.type == "range" && g.inWindow) 0.22 else 0.07) * a); f.addNumberProperty("lo", 0.85 * a); f.addNumberProperty("lw", if (g.type == "boundary" || g.type == "phase_line") 1.5 else 2.5) } } }
-    val gfxLabels = s.graphics.mapNotNull { g -> val a = if (layer == null || layer == g.section) 1.0 else 0.3
+    val gfxLabels = if (!showGraphicsLayer) emptyList() else s.graphics.mapNotNull { g -> val a = if (layer == null || layer == g.section) 1.0 else 0.3
         val at = if (g.kind == "point") g.path.firstOrNull() else g.center.takeIf { it.size == 2 }?.let { it[0] to it[1] }
         at?.let { (lon, lat) -> feature(lon, lat, "id" to g.id, "kind" to "graphic", "label" to "${g.glyph} ${g.name}", "color" to g.color, "alpha" to a) } }
     (style.getSource("graphics") as? GeoJsonSource)?.setGeoJson(FeatureCollection.fromFeatures(gfx))

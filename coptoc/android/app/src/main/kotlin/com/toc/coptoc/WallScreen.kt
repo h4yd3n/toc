@@ -943,7 +943,7 @@ fun OverlayMenu(
                     .padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                val allOn = st.showSites && st.showTravelers && st.showRoutes && st.showThreats && st.showEvents
+                val allOn = st.showSites && st.showTravelers && st.showRoutes && st.showThreats && st.showEvents && st.showGraphics
                 val threatMode = when {
                     !st.showThreats -> "OFF"
                     st.outlineOnlyThreats -> "OUTLINE"
@@ -1103,6 +1103,7 @@ fun OverlayMenu(
                 LayerPill("Routes & Convoys", "↗", st.showRoutes) { store.toggleLayer("routes") }
                 LayerPill("Threats & Hazards", "⚠", st.showThreats) { store.toggleLayer("threats") }
                 LayerPill("Operations & Events", "★", st.showEvents) { store.toggleLayer("events") }
+                LayerPill("Control Measures", "⚑", st.showGraphics) { store.toggleLayer("graphics") }
                 LayerPill(
                     if (st.snap?.restrictedDenied == true) "Residences · DENIED" else "Residences",
                     "⚿",

@@ -14,7 +14,7 @@ data class WallState(
     val role: String = "battle_captain", val restricted: Boolean = true, val busy: String? = null, val error: String? = null,
     val selection: Selection? = null, val lastRefresh: Long = 0L,
     val showSites: Boolean = true, val showTravelers: Boolean = true, val showRoutes: Boolean = true,
-    val showThreats: Boolean = true, val showEvents: Boolean = true, val outlineOnlyThreats: Boolean = false,
+    val showThreats: Boolean = true, val showEvents: Boolean = true, val showGraphics: Boolean = true, val outlineOnlyThreats: Boolean = false,
     val viewportWidthMiles: Double = 0.0, val viewportWidthKm: Double = 0.0,
     val viewportHeightMiles: Double = 0.0, val viewportHeightKm: Double = 0.0,
     val distanceUnit: String = "mi",
@@ -56,6 +56,7 @@ class Store : ViewModel() {
                 "routes" -> it.copy(showRoutes = !it.showRoutes)
                 "threats" -> it.copy(showThreats = !it.showThreats)
                 "events" -> it.copy(showEvents = !it.showEvents)
+                "graphics" -> it.copy(showGraphics = !it.showGraphics)
                 "outline" -> it.copy(outlineOnlyThreats = !it.outlineOnlyThreats)
                 "restricted" -> {
                     val next = !it.restricted
@@ -67,7 +68,7 @@ class Store : ViewModel() {
         }
     }
     fun setAllLayers(enabled: Boolean) {
-        _state.update { it.copy(showSites = enabled, showTravelers = enabled, showRoutes = enabled, showThreats = enabled, showEvents = enabled) }
+        _state.update { it.copy(showSites = enabled, showTravelers = enabled, showRoutes = enabled, showThreats = enabled, showEvents = enabled, showGraphics = enabled) }
     }
     fun setThreatMode(mode: String) {
         _state.update {

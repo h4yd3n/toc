@@ -16,6 +16,7 @@ struct MapScreen: View {
     var showsNAIs: Bool { layer == "S2" }
     var showsTravelers: Bool { store.showTravelers }
     var showsEvents: Bool { store.showEvents }
+    var showsGraphics: Bool { store.showGraphics }
     /// Where a phone that remembers nothing and cannot reach the API opens: the Bay Area. Replaced on appear by the
     /// board this device was left on, and on the first snapshot by the server's answer for this deployment.
     @State private var camera: MapCameraPosition = .region(MKCoordinateRegion(
@@ -79,7 +80,7 @@ struct MapScreen: View {
                 .buttonStyle(.plain)
 
                 if showOverlayMenu {
-                    let allOn = store.showSites && store.showTravelers && store.showRoutes && store.showThreats && store.showEvents
+                    let allOn = store.showSites && store.showTravelers && store.showRoutes && store.showThreats && store.showEvents && store.showGraphics
                     let threatMode: String = {
                         if !store.showThreats { return "OFF" }
                         return store.outlineOnlyThreats ? "OUTLINE" : "FILL"
@@ -96,6 +97,7 @@ struct MapScreen: View {
                                     store.showRoutes = target
                                     store.showThreats = target
                                     store.showEvents = target
+                                    store.showGraphics = target
                                 }
                             } label: {
                                 HStack(spacing: 3) {
@@ -202,6 +204,7 @@ struct MapScreen: View {
                             LayerPill(label: "Routes & Convoys", icon: "↗", isOn: Binding(get: { store.showRoutes }, set: { store.showRoutes = $0 }))
                             LayerPill(label: "Threats & Hazards", icon: "⚠", isOn: Binding(get: { store.showThreats }, set: { store.showThreats = $0 }))
                             LayerPill(label: "Operations & Events", icon: "★", isOn: Binding(get: { store.showEvents }, set: { store.showEvents = $0 }))
+                            LayerPill(label: "Control Measures", icon: "⚑", isOn: Binding(get: { store.showGraphics }, set: { store.showGraphics = $0 }))
                             LayerPill(label: store.snapshot?.restrictedDenied == true ? "Residences · DENIED" : "Residences",
                                       icon: "⚿",
                                       isOn: Binding(get: { store.showRestricted }, set: { store.showRestricted = $0 }),
@@ -261,7 +264,7 @@ struct MapScreen: View {
 
     @MapContentBuilder
     private func graphicsContent(snap: Snapshot) -> some MapContent {
-        if let gfx = snap.graphics {
+        if showsGraphics, let gfx = snap.graphics {
             ForEach(gfx) { g in
                 let a = (layer == nil || layer == g.section ? 1.0 : 0.3) * (g.windowFrom != nil && !g.inWindow ? 0.45 : 1.0)
                 let color = g.swiftColor

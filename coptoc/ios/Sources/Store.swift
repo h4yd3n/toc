@@ -68,6 +68,7 @@ final class COPStore {
     var showRoutes: Bool = true
     var showThreats: Bool = true
     var showEvents: Bool = true
+    var showGraphics: Bool = true
     var outlineOnlyThreats: Bool = false
     var now = Date()
     /// DISPLAY toggles, the same two as the wall. Lean labels drop hints and empty estimate lines; the posture header
