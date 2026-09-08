@@ -14,6 +14,7 @@ import { WarningsSection } from './Warnings'
 import { TaskOrg } from './TaskOrg'
 import { WorkPanel } from './WorkPanel'
 import { ActivityPanel } from './ActivityPanel'
+import { IntakePanel } from './IntakePanel'
 import { PersonForm, EventForm, PersonnelList, StaffRecordForm } from './RecordForms'
 
 type Act = (label: string, fn: () => Promise<unknown>) => void
@@ -56,8 +57,8 @@ export default function Workspaces({ destination:d, navigate, snap, role, enable
   const [site, setSite] = useState(false)
   const [adding,setAdding] = useState(false)
   useEffect(() => { setQuery(''); setImporting(false); setSite(false); setAdding(false) }, [d.section,d.tab])
-  const section = enabled.includes(d.section) ? d.section : enabled[0]
-  const tabs = section ? TABS[section] : []
+  const section = enabled.includes(d.section) ? d.section : enabled.find(s=>can(s,'edit')) ?? enabled[0]
+  const tabs: [string,string][] = section ? [...TABS[section], ['activity','Activity']] : []
   const tab = tabs.some(([id]) => id === d.tab) ? d.tab : 'overview'
   const open = (tab='overview',record?:string) => navigate({ page:'workspace',section,tab,record:record ?? null })
   if (!section) return <div className="workspace"><p>No staff workspaces are available to this profile.</p></div>
@@ -65,15 +66,19 @@ export default function Workspaces({ destination:d, navigate, snap, role, enable
   const match = (text:string) => text.toLowerCase().includes(query.toLowerCase())
   const tasks = <TaskingBox section={section} board={snap.taskings} canEdit={can(section,'edit')} busy={busy} act={act} enabled={enabled} />
   const search = <label className="ws-search"><span className="sr-only">Search {STAFF[section]}</span><input type="search" placeholder="Search this view…" value={query} onChange={e=>setQuery(e.target.value)} /></label>
-  return <main className="workspace" aria-label={d.page === 'work' ? 'My work' : `${STAFF[section]} workspace`}>
-    <nav className="workspace-sidebar" aria-label="Staff workspaces"><p className="ws-kicker">Staff workspaces</p>{enabled.map(s=><button key={s} aria-current={s===section && d.page==='workspace' ? 'page':undefined} onClick={()=>navigate({page:'workspace',section:s,tab:'overview'})}><span>{s}</span>{snap.sections.find(x=>x.code===s)?.title || STAFF[s]}</button>)}<button onClick={()=>navigate({page:'work',tab:'overview'})} aria-current={d.page==='work'?'page':undefined}>My work</button><button onClick={()=>navigate({page:'cop'})}>← Return to COP</button></nav>
+  return <main className="workspace" aria-label={`${STAFF[section]} workspace`}>
+    <nav className="workspace-sidebar" aria-label="Staff workspaces"><p className="ws-kicker">Staff workspaces</p>{enabled.map(s=><button key={s} aria-current={s===section && d.page==='workspace' ? 'page':undefined} onClick={()=>navigate({page:'workspace',section:s,tab:'overview'})}><span>{s}</span>{snap.sections.find(x=>x.code===s)?.title || STAFF[s]}</button>)}<button onClick={()=>navigate({page:'cop'})}>← Return to COP</button></nav>
     <div className="workspace-body">
-      <div className="workspace-heading"><div><p className="ws-kicker">{d.page==='work'?'Across your staff sections':section+' workspace'}</p><h1>{d.page==='work'?'My work':STAFF[section]}</h1></div><span className="dim">{snap.me?.name || role.replace('_',' ')}</span></div>
-      {d.page==='work' ? <><WorkPanel locations={snap.locations} key={d.page+':'+section} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} selectedRun={d.record} onOpenCase={id=>navigate({page:'workspace',section:'S2',tab:'cases',record:id})} />{enabled.filter(s=>can(s,'edit')).map(s=><details className="ws-card" key={s}><summary>{s} · {STAFF[s]} taskings</summary><TaskingBox section={s} board={snap.taskings} canEdit={can(s,'edit')} busy={busy} act={act} enabled={enabled}/></details>)}<ActivityPanel reload={reload}/></> : <>
+      <div className="workspace-heading"><div><p className="ws-kicker">{section+' workspace'}</p><h1>{STAFF[section]}</h1></div><span className="dim">{snap.me?.name || role.replace('_',' ')}</span></div>
+      <>
         <nav className="workspace-tabs" aria-label={`${section} views`}>{tabs.map(([id,label])=><button key={id} aria-current={tab===id?'page':undefined} onClick={()=>open(id)}>{label}</button>)}</nav>
-        {tab==='overview' && <><div className="workspace-overview"><section className="ws-card"><SectionSummary section={section} snap={snap} onOpen={open} onSelect={onSelect}/></section><section className="ws-card"><h2>Staff estimate</h2><EstimateLine e={snap.estimates.find(e=>e.section===section) ?? {section,assessment:'',recommendation:'',updated_by:null,updated_at:null}} canEditOverride={can(section,'edit')} role={role} busy={busy} act={act}/><p className="dim">Maintain the section’s current assessment and recommendation here.</p><button className="ws-link" onClick={()=>open('analysis')}>Assign AI analysis →</button></section></div><WorkPanel locations={snap.locations} section={section} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} onOpenCase={id=>open('cases',id)}/></>}
+        {tab==='overview' && <>
+          {section==='S4' && <IntakePanel snap={snap} canEdit={can('S4','edit')} act={act} busy={busy} reload={reload} selected={d.record} onSelect={id=>open('overview',id??undefined)}/>}
+          {!(section==='S4'&&d.record)&&<><details className="ws-card"><summary>Section picture & staff estimate</summary><SectionSummary section={section} snap={snap} onOpen={open} onSelect={onSelect}/><EstimateLine e={snap.estimates.find(e=>e.section===section) ?? {section,assessment:'',recommendation:'',updated_by:null,updated_at:null}} canEditOverride={can(section,'edit')} role={role} busy={busy} act={act}/></details><WorkPanel locations={snap.locations} section={section} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} onOpenCase={id=>open('cases',id)}/></>}
+        </>}
+        {tab==='activity' && <ActivityPanel reload={reload}/>}
         {tab==='tasks' && <section className="ws-card">{tasks}</section>}
-        {tab==='analysis' && <WorkPanel locations={snap.locations} section={section} caseId={d.record} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} onOpenCase={id=>open('cases',id)}/>}
+        {tab==='analysis' && <WorkPanel locations={snap.locations} section={section} caseId={d.record?.startsWith('run_')?null:d.record} selectedRun={d.record?.startsWith('run_')?d.record:null} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} onOpenCase={id=>open('cases',id)}/>}
         {section==='S2' && tab==='cases' && <section className="ws-card"><CasesPanel {...common} selectedCase={d.record} onSelectCase={id=>open('cases',id ?? undefined)} onAnalyzeCase={id=>open('analysis',id)} onChanged={()=>{}} /></section>}
         {section==='S2' && tab==='reporting' && <Reporting {...common} onCase={id=>open('cases',id)}/>}
         {section==='S2' && tab==='collection' && <section className="ws-card"><div className="ws-toolbar"><h2>Requirements & collection</h2>{can('S2','edit') && <button className="ws-primary" disabled={!!busy} onClick={()=>act('collecting intelligence',api.refreshIntel)}>Collect from enabled sources</button>}</div><RequirementsPanel {...common} onSelect={onSelect} onArea={onArea}/></section>}
@@ -84,7 +89,7 @@ export default function Workspaces({ destination:d, navigate, snap, role, enable
         {section==='S3' && tab==='planning' && <div className="workspace-embedded"><PlanningPanel {...common} snap={snap} onSelect={onSelect} onClose={()=>open()}/></div>}
         {section==='S4' && ['inventory','shipments'].includes(tab) && <>{can('S4','edit')&&<button className="ws-primary" onClick={()=>setAdding(!adding)}>{tab==='inventory'?'Add inventory line':'Add shipment'}</button>}{adding&&<StaffRecordForm kind={tab==='inventory'?'supply':'shipment'} snap={snap} busy={busy} act={act} onDone={()=>setAdding(false)}/>}<div className="ws-toolbar">{search}{can('S4','edit') && <button className="ws-primary" onClick={()=>setImporting(!importing)}>Import logistics</button>}</div>{importing && <section className="ws-card"><UploadDrawer section="S4" busy={busy} act={act} onDone={()=>{}}/></section>}<section className="ws-card"><S4Panel canEditOverride={can('S4','edit')} role={role} busy={busy} act={act} view={tab==='inventory'?'supplies':'shipments'} board={{...snap.s4,supplies:snap.s4.supplies.filter(x=>match(x.item+' '+x.location_name)),shipments:snap.s4.shipments.filter(x=>match(x.description+' '+x.to_name))}}/></section></>}
         {section==='S6' && ['systems','contacts','incidents'].includes(tab) && <>{can('S6','edit')&&<button className="ws-primary" onClick={()=>setAdding(!adding)}>Add system</button>}{adding&&<StaffRecordForm kind="system" snap={snap} busy={busy} act={act} onDone={()=>setAdding(false)}/>}<div className="ws-toolbar">{search}{can('S6','edit') && <button className="ws-primary" onClick={()=>setImporting(!importing)}>Import communications</button>}</div>{importing && <section className="ws-card"><UploadDrawer section="S6" busy={busy} act={act} onDone={()=>{}}/></section>}<section className="ws-card"><S6Panel canEditOverride={can('S6','edit')} role={role} busy={busy} act={act} view={tab==='contacts'?'pace':'systems'} board={{...snap.s6,systems:snap.s6.systems.filter(x=>match(x.name+' '+x.location_name)&&(tab!=='incidents'||x.status!=='up'))}}/></section></>}
-      </>}
+      </>
     </div>
   </main>
 }

@@ -1,13 +1,13 @@
 # Staff workspaces and AI: implemented contract
 
-Updated 2026-09-07. This describes the current web implementation. The broader backlog and coding-model allocations remain in [the implementation plan](IMPLEMENTATION_PLAN-ai-workspaces.md).
+Updated 2026-09-08. Administrative intake and embedded mobile workspace additions are documented in [INTAKE_API.md](INTAKE_API.md). This describes the current web implementation. The broader backlog and coding-model allocations remain in [the implementation plan](IMPLEMENTATION_PLAN-ai-workspaces.md).
 
 ## Navigation and ownership
 
 - `#/cop`: compact staff estimates, exceptions, released findings, and recent changes. The map remains mounted when a workspace opens.
 - `#/workspace/{S1|S2|S3|S4|S6}/{tab}`: staff records and editing tools. S3 owns planning; there is no separate S5 workspace.
 - `#/workspace/S2/cases?record={case_id}` and `#/workspace/S2/analysis?record={case_id}`: a case or its assigned analysis.
-- `#/work/{section}/overview?record={run_id}`: shared taskings, AI assignments, and a selected result.
+- Legacy `#/work/{section}/overview?record={run_id}` links resolve into the section analysis view. My Work is no longer a separate main destination; tasks, analysis and activity are available within workspaces.
 
 Coptoc owns personnel, activities, supplies, shipments, systems, taskings, and the COP. Sigtoc owns reports, case evidence, case review, and intelligence products. `sigtoc.work` currently hosts the shared analysis service using the same database; it reads authorized Coptoc records and writes its own draft results. It does not autonomously change operational records or send messages.
 

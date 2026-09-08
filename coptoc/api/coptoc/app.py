@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sigtoc.api import router as s2_router
 from sigtoc.work import router as work_router, worker_loop
 from .routes import router as cop_router, startup as cop_startup
+from .ingestion import router as intake_router
+from . import intake_monitor  # register administrative checks on the intake router
 
 
 async def _intsum_clock() -> None:
@@ -79,6 +81,7 @@ app.add_middleware(MethodOverride)
 from .users import Identity  # noqa: E402
 app.add_middleware(Identity)  # X-TOC-User → role + actor; outermost so every route sees the resolved identity
 app.include_router(work_router)
+app.include_router(intake_router)
 app.include_router(cop_router)
 app.include_router(s2_router)  # Sigtoc embedded (Decision 3a); also runs standalone via sigtoc.api:app
 
@@ -86,3 +89,11 @@ app.include_router(s2_router)  # Sigtoc embedded (Decision 3a); also runs standa
 @app.get("/v1/health")
 def health():
     return {"status": "ok", "service": "coptoc"}
+
+
+# The native workspace uses the same origin as the API, avoiding a second web server.
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+_web_dist = Path(__file__).resolve().parents[2] / "web" / "dist"
+if (_web_dist / "index.html").is_file():
+    app.mount("/console", StaticFiles(directory=_web_dist, html=True), name="workspace-console")

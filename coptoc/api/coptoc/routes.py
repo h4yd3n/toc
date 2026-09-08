@@ -489,7 +489,8 @@ async def delete_supply(supply_id: str, session: AsyncSession = Depends(get_sess
 async def create_shipment(body: ShipmentCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
     require_role(x_toc_role, S4_OWNERS, "Adding a shipment", section="S4")
     to = await one_or_404(session, LocationRow, body.to_location_id, "destination") if body.to_location_id else None
-    row = ShipmentRow(id=f"shp_{uuid.uuid4().hex[:8]}", description=body.description, category=body.category, quantity=body.quantity, from_name=body.from_name,
+    from .shipments import add_shipment
+    row = add_shipment(session, record_id=f"shp_{uuid.uuid4().hex[:8]}", description=body.description, category=body.category, quantity=body.quantity, from_name=body.from_name,
                       to_location_id=body.to_location_id, to_name=body.to_name or (to.name if to else ""), eta=naive(body.eta), status=body.status, priority=body.priority,
                       carrier=body.carrier, ref=body.ref, note=body.note, updated_by=actor_from(x_toc_actor), updated_at=now_utc(), source="manual")
     session.add(row); await session.commit()
@@ -503,9 +504,10 @@ async def update_shipment(shipment_id: str, body: ShipmentUpdate, session: Async
     require_role(x_toc_role, S4_OWNERS, "Updating a shipment", section="S4")
     row = await one_or_404(session, ShipmentRow, shipment_id, "shipment")
     old = row.status
-    for k, v in body.model_dump(exclude_unset=True).items():
-        setattr(row, k, naive(v) if k == "eta" else v)
-    row.updated_by, row.updated_at = actor_from(x_toc_actor), now_utc()
+    from .shipments import patch_shipment
+    values = {k: naive(v) if k == "eta" else v for k, v in body.model_dump(exclude_unset=True).items()}
+    values.update(updated_by=actor_from(x_toc_actor), updated_at=now_utc())
+    await patch_shipment(session, row.id, values)
     await session.commit()
     await get_ledger().append_event(content_id=row.id, event_type="cop.s4.shipment", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=row.status,
                                     reason=f"{row.description} → {row.to_name}: {row.status.replace('_', ' ')}, ETA {row.eta:%d %b %H:%M}Z" + (f" — {row.note}" if body.note else ""), metadata={"priority": row.priority})

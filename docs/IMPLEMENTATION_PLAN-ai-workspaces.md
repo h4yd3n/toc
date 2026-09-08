@@ -2,6 +2,8 @@
 
 Date: 2026-09-06
 
+Planning update (2026-09-07): [AI Operations Center Plan](AI_OPERATIONS_CENTER_PLAN.md) supersedes this document's future interface direction and milestone order. It centers ingestion, reviewable record proposals, and unified mobile workspaces, and folds My Work into section workspaces. The phases below remain historical context; they are not all shipped requirements.
+
 Status: Core workspace and AI workflow implementation delivered for local verification (2026-09-07). Live-provider validation and the remaining advanced automation are still open. See [the implemented contract and rollout notes](WORKSPACE_API.md) for the exact boundary; the phase exit criteria below remain the full roadmap.
 
 ## Outcome

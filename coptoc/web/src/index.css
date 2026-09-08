@@ -688,3 +688,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .ws-person-row { display: flex; align-items: center; gap: 12px; }
 .ws-person-row > button:first-child { flex: 1; min-width: 0; }
 .ws-person-row > .ws-link { width: auto; flex: 0 0 auto; }
+
+.native-workspace .wall > header, .native-workspace .global-nav, .native-workspace .workspace-sidebar > button:last-child { display:none; }
+
+.native-workspace .workspace { height:100dvh; padding-top:0; }
+.native-workspace .workspace { inset:0; }

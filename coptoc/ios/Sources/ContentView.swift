@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(COPStore.self) private var store
+    @State private var workspaceOpen = false
 
     var body: some View {
         @Bindable var store = store
@@ -20,6 +21,23 @@ struct ContentView: View {
                 .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }  // the map runs under the header; lists start below it
                 TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
             }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack {
+                Text("COP TALK").font(.caption.bold())
+                Spacer()
+                Button("Workspaces") { workspaceOpen = true }
+            }.padding(.horizontal).padding(.vertical, 8).background(Theme.panel)
+        }
+        .fullScreenCover(isPresented: $workspaceOpen) {
+            NavigationStack {
+                WorkspaceBrowser(baseURL: store.client.baseURL, userId: store.client.userId,
+                                 section: store.tab == "COP" ? (store.me?.sectionsVisible.first(where: { store.me?.perms[$0] == "edit" }) ?? store.me?.sectionsVisible.first ?? "S1") : store.tab)
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle("Workspaces")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Back to COP") { workspaceOpen = false } } }
+            }.onDisappear { Task { await store.load() } }
         }
         .sheet(item: $store.selection) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)

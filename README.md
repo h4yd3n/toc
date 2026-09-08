@@ -59,7 +59,7 @@ with the reasoning, because a requirements document I could not defend would ser
 
 ## Layout — three modules, one repo
 
-The web app now has **COP**, **Workspaces**, and **My Work**. Open a section workspace to enter records, review cases, or assign AI analysis. The [implemented API and setup guide](docs/WORKSPACE_API.md) explains provider configuration, review/release, permissions, and current limits. AI is off until a provider, exact API model, and key are configured. The broader [implementation plan](docs/IMPLEMENTATION_PLAN-ai-workspaces.md) retains the Astra/Sol development allocations and the remaining work; live-provider validation is still open.
+The web app has **COP** and **Workspaces**. Logistics now accepts pasted delivery updates and text-based PDF manifests, prepares cited shipment changes, and applies only explicitly approved changes. iOS and Android have an in-app workspace entry point backed by the API's `/console/` web build. See the [intake and mobile setup guide](docs/INTAKE_API.md) for exact scope, verification, and remaining authentication/offline work. AI is off until a provider, exact model and key are configured. The [AI Operations Center Plan](docs/AI_OPERATIONS_CENTER_PLAN.md) tracks remaining milestones; [WORKSPACE_API.md](docs/WORKSPACE_API.md) describes the existing analysis APIs.
 
 ```
 toc/

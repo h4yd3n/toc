@@ -12,3 +12,5 @@ createRoot(document.getElementById('root')!).render(
     {token ? <CheckinPage token={token} /> : <App />}
   </StrictMode>,
 )
+
+if (new URLSearchParams(window.location.search).get('embedded') === '1') document.documentElement.classList.add('native-workspace')

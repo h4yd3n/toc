@@ -180,8 +180,8 @@ export default function App() {
   return (
     <div className={`wall ${isCop ? '' : 'is-workspace'} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
-        <div className="brand"><img className="glyph" src="/mark.svg" alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
-        <nav className="global-nav" aria-label="Main navigation"><button aria-current={isCop?'page':undefined} onClick={() => navigate({page:'cop'})}>COP</button><button aria-current={destination.page==='workspace'?'page':undefined} onClick={() => openWorkspace(destination.section)}>Workspaces</button><button aria-current={destination.page==='work'?'page':undefined} onClick={() => { setWorkspaceDetail(false); navigate({page:'work',tab:'overview'}) }}>My work</button></nav>
+        <div className="brand"><img className="glyph" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
+        <nav className="global-nav" aria-label="Main navigation"><button aria-current={isCop?'page':undefined} onClick={() => navigate({page:'cop'})}>COP</button><button aria-current={destination.page==='workspace'?'page':undefined} onClick={() => openWorkspace(destination.section)}>Workspaces</button></nav>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
           <option value="military">Military</option><option value="corporate">Corporate</option>
         </select>}
@@ -264,7 +264,7 @@ export default function App() {
           <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
         </div>
         <div className="oplog">
-          <PanelHead code="LOG" title="RECENT ACTIVITY" inline><button className="mini" onClick={() => { setWorkspaceDetail(false); navigate({page:'work',tab:'overview'}) }}>VIEW ALL</button></PanelHead>
+          <PanelHead code="LOG" title="RECENT ACTIVITY" inline><button className="mini" onClick={() => { setWorkspaceDetail(false); navigate({page:'workspace',tab:'activity'}) }}>VIEW ALL</button></PanelHead>
           <ul className="logs">
             {snap?.log.slice(0, 5).map(e => (
               <li key={e.id} className={`log ${e.actor_type}`}>

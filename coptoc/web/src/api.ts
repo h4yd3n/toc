@@ -3,7 +3,7 @@ import type { Location, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaA
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
 // Demo identity. Production: from the session. Decision C — only battle_captain and ep may see the restricted layer.
-export const session = { role: 'battle_captain' as Role, actor: '', userId: (() => { try { return localStorage.getItem('toc.user') || 'u_battle_captain' } catch { return 'u_battle_captain' } })() }
+export const session = { role: 'battle_captain' as Role, actor: '', userId: (() => { try { return (new URLSearchParams(window.location.search).get('embedded') === '1' ? (new URLSearchParams(window.location.search).get('profile') || '__missing_native_profile__') : null) || localStorage.getItem('toc.user') || 'u_battle_captain' } catch { return 'u_battle_captain' } })() }
 const ROLE_LABEL: Record<Role, string> = { battle_captain: 'Battle Captain', ep: 'Executive Protection', security: 'Security', analyst: 'S2 Analyst', ea: 'Executive Assistant', logistics: 'S4 Logistics', signal: 'S6 Signal' }
 const actor = () => `${ROLE_LABEL[session.role]} (web)`
 
@@ -144,3 +144,36 @@ export const updatePersonAssignment = (id:string,body:{on_shift:boolean;shift_ro
 
 export const editWork = (id:string,instruction:string,cadence_minutes:number) => req<WorkAssignment>('PATCH',`/v1/work/assignments/${id}`,{action:'edit',instruction,cadence_minutes})
 export const getActivity = (before?:number,includeReads=false) => req<{items:Snapshot['log'];next_cursor:number|null}>('GET',`/v1/cop/activity?include_reads=${includeReads}${before ? '&before='+before : ''}`)
+
+export type IntakeProposal = {
+  id: string; target_id: string | null; status: string; revision: number;
+  values: Record<string,string>; original: Record<string,string>; current: Record<string,string | null>;
+  questions: string[]; evidence: {field:string;value:string;page:number;quote:string}[];
+  history: {at?:string;actor?:string;action:string;note?:string;status?:string;values?:Record<string,string>}[];
+}
+export type IntakeSubmission = {
+  id:string; location_id:string; filename:string; status:string; revision:number; created_at:string;
+  owner:string; attempts:number; error:string; pending:number; applied:number;
+  meta: {provider?:string;model?:string;gaps?:string[]};
+  pages?: {page:number;text:string}[]; proposals?:IntakeProposal[];
+}
+export const listIntake = () => req<{items:IntakeSubmission[];provider:{configured:boolean;provider:string;model:string}}>('GET','/v1/intake')
+export const getIntake = (id:string) => req<IntakeSubmission>('GET',`/v1/intake/${id}`)
+export const submitIntakeText = (text:string,location_id:string) => req<IntakeSubmission>('POST','/v1/intake/text',{text,location_id})
+export const retryIntake = (id:string) => req<IntakeSubmission>('POST',`/v1/intake/${id}/retry`)
+export const reviewIntake = (sid:string,pid:string,body:{revision:number;action:'save'|'apply'|'reject';values?:Record<string,string>;target_id?:string;create_new?:boolean;note?:string}) => req<IntakeProposal>('PATCH',`/v1/intake/${sid}/proposals/${pid}`,body)
+export async function submitIntakeFile(file:File,locationId:string):Promise<IntakeSubmission> {
+  const body=new FormData(); body.append('file',file); body.append('location_id',locationId)
+  const response=await fetch('/v1/intake/file',{method:'POST',body,headers:{'X-TOC-Role':session.role,'X-TOC-Actor':actor(),...(session.userId?{'X-TOC-User':session.userId}:{})}})
+  if(!response.ok) throw new Error((await response.text()).slice(0,300))
+  return response.json()
+}
+export async function downloadIntakeSource(id:string) {
+  const response=await fetch(`/v1/intake/${id}/source`,{headers:{'X-TOC-Role':session.role,'X-TOC-Actor':actor(),...(session.userId?{'X-TOC-User':session.userId}:{})}})
+  if(!response.ok) throw new Error('Source is unavailable to this profile')
+  const blob=await response.blob(), url=URL.createObjectURL(blob), link=document.createElement('a')
+  link.href=url;link.download=blob.type==='application/pdf'?'Manifest.pdf':'Update.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+}
+export type IntakeFinding={id:string;shipment_id:string;location_id:string;title:string;status:string;revision:number;checked_at:string;snoozed_until:string|null;history:{actor:string;action:string;note:string;at:string}[]}
+export const getIntakeFindings=()=>req<{rule:string;items:IntakeFinding[]}>('GET','/v1/intake/monitor/findings')
+export const decideIntakeFinding=(id:string,revision:number,action:string,note:string)=>req<unknown>('PATCH',`/v1/intake/monitor/findings/${id}`,{revision,action,note})

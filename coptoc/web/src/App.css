@@ -1,0 +1,21 @@
+
+/* Source-led administrative review: roomy on desktop, sequential on phones. */
+.intake-panel { margin-bottom: 1.5rem; }
+.intake-capture { border-top: 3px solid var(--accent, #5bb6b4); }
+.intake-summary { width: 100%; display:flex; justify-content:space-between; gap:1rem; text-align:left; cursor:pointer; }
+.intake-summary strong, .intake-summary .dim { display:block; margin:.3rem 0; }
+.intake-review { display:grid; grid-template-columns:minmax(240px, .8fr) minmax(0, 1.2fr); gap:1rem; align-items:start; }
+.intake-source { max-height:75vh; overflow:auto; position:sticky; top:1rem; }
+.intake-source .ws-source { white-space:pre-wrap; overflow-wrap:anywhere; }
+.intake-comparison { overflow:auto; margin:1rem 0; }
+.intake-comparison table { width:100%; border-collapse:collapse; font-size:.9rem; }
+.intake-comparison th, .intake-comparison td { padding:.65rem; text-align:left; vertical-align:top; border-bottom:1px solid #ffffff20; overflow-wrap:anywhere; min-width:80px; }
+.intake-comparison input { width:100%; min-width:120px; box-sizing:border-box; }
+.intake-label { display:flex; flex-direction:column; gap:.4rem; margin:1rem 0; }
+.intake-proposal blockquote { border-left:2px solid #5bb6b4; margin:.8rem 0; padding-left:1rem; overflow-wrap:anywhere; }
+.intake-proposal details { margin:.8rem 0; }
+@media (max-width: 760px) {
+ .intake-review { grid-template-columns: minmax(0,1fr); }
+ .intake-source { position:static; max-height:260px; }
+ .intake-summary { flex-direction:column; }
+}

@@ -36,6 +36,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -50,7 +51,20 @@ val ROLES = listOf("battle_captain", "ep", "security", "analyst", "ea")
 @Composable
 fun WallScreen(store: Store) {
     val st by store.state.collectAsStateWithLifecycle()
-    if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840) TabletWall(st, store) else PhoneScreen(st, store)
+    var workspace by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().background(Palette.bg).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("COP TALK", color = Palette.text, fontSize = 12.sp)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { workspace = !workspace }) { Text(if (workspace) "Back to COP" else "Workspaces") }
+        }
+        Box(Modifier.weight(1f)) {
+            Box(if (workspace) Modifier.fillMaxSize().clearAndSetSemantics {} else Modifier.fillMaxSize()) {
+                if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840) TabletWall(st, store) else PhoneScreen(st, store)
+            }
+            if (workspace) NativeWorkspace(store.api.baseUrl, st.userId, (enabledTabs(st.snap).firstOrNull { it != Tab.COP && can(st.snap, it.label, "edit") } ?: enabledTabs(st.snap).firstOrNull { it != Tab.COP })?.label ?: "S1") { workspace = false }
+        }
+    }
 }
 
 /** The wall on a tablet: header strip, map in the middle, S1 left, S2 right, S3 + log below. */
