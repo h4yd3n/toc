@@ -2,7 +2,11 @@ package com.toc.coptoc
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -80,13 +84,15 @@ fun WallMap(
     onSelect: (Selection) -> Unit,
     modifier: Modifier = Modifier,
     layer: String? = null,
+    headerPx: Int = 0,
     onViewportChanged: ((Double, Double, Double, Double) -> Unit)? = null
 ) {
     val latestLayer = remember { arrayOfNulls<String>(1) }; latestLayer[0] = layer
+    val latestHeaderPx = remember { intArrayOf(headerPx) }; latestHeaderPx[0] = headerPx
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context) }
-    val mapHolder = remember { arrayOfNulls<MapLibreMap>(1) }
+    var mapInstance by remember { mutableStateOf<MapLibreMap?>(null) }
     val latestState = remember { arrayOf(st) }
     DisposableEffect(lifecycle) {
         val obs = LifecycleEventObserver { _, e -> when (e) {
@@ -95,6 +101,16 @@ fun WallMap(
         lifecycle.addObserver(obs)
         onDispose { lifecycle.removeObserver(obs) }
     }
+
+    val currentStop = layer?.let { SheetRaise.getStopIndex(it) }
+    LaunchedEffect(mapInstance, st.selection, currentStop) {
+        val map = mapInstance ?: return@LaunchedEffect
+        val sel = st.selection ?: return@LaunchedEffect
+        mapView.post {
+            flyToSelection(map, mapView, latestState[0], sel, layer, latestHeaderPx[0])
+        }
+    }
+
     fun updateScale(map: MapLibreMap) {
         val h = mapView.height.toFloat()
         val w = mapView.width.toFloat()
@@ -117,7 +133,7 @@ fun WallMap(
     AndroidView(factory = {
         mapView.onCreate(null)
         mapView.getMapAsync { map ->
-            mapHolder[0] = map
+            mapInstance = map
             Board.load(context)
             map.cameraPosition = Board.position ?: Board.bayArea
             // The camera is shared between tabs from the first frame, but only written to disk once the board is
@@ -156,7 +172,12 @@ fun WallMap(
                     textField(get("label")), textFont(arrayOf("Noto Sans Regular")), textSize(10f), textColor(literal("#dce4ee")), textOpacity(get("alpha")), textHaloColor(literal("#0b0f14")), textHaloWidth(1.2f),
                     textOffset(arrayOf(0f, 1.3f)), textAllowOverlap(false), textOptional(true)))
                 applySnapshot(style, latestState[0], latestLayer[0])  // the first snapshot usually arrives before the style does
-                mapView.post { updateScale(map) }
+                mapView.post {
+                    updateScale(map)
+                    latestState[0].selection?.let { sel ->
+                        flyToSelection(map, mapView, latestState[0], sel, latestLayer[0], latestHeaderPx[0])
+                    }
+                }
                 map.addOnMapClickListener { p ->
                     val pt = map.projection.toScreenLocation(p)
                     val rect = android.graphics.RectF(pt.x - 24, pt.y - 24, pt.x + 24, pt.y + 24)
@@ -172,8 +193,11 @@ fun WallMap(
         mapView
     }, modifier = modifier, update = {
         latestState[0] = st
-        mapHolder[0]?.let { map ->
-            frameOpening(map, st.snap)
+        latestHeaderPx[0] = headerPx
+        mapInstance?.let { map ->
+            if (st.selection == null) {
+                frameOpening(map, st.snap)
+            }
             map.style?.let { applySnapshot(it, st, layer) }
             updateScale(map)
         }
@@ -181,8 +205,88 @@ fun WallMap(
 }
 
 @Composable
-fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null, onViewportChanged: ((Double, Double, Double, Double) -> Unit)? = null) =
-    WallMap(WallState(snap = snap, restricted = restricted), onSelect, modifier, layer, onViewportChanged)
+fun WallMap(snap: Snapshot?, restricted: Boolean, onSelect: (Selection) -> Unit, modifier: Modifier = Modifier, layer: String? = null, headerPx: Int = 0, onViewportChanged: ((Double, Double, Double, Double) -> Unit)? = null) =
+    WallMap(WallState(snap = snap, restricted = restricted), onSelect, modifier, layer, headerPx, onViewportChanged)
+
+private data class TargetLocation(val lat: Double, val lon: Double, val distanceMeters: Double)
+
+private fun resolveTarget(st: WallState, sel: Selection): TargetLocation? {
+    val snap = st.snap ?: return null
+    return when (sel) {
+        is Selection.SiteSel -> snap.locations.firstOrNull { it.id == sel.id }?.let {
+            TargetLocation(it.lat, it.lon, 20_000.0)
+        }
+        is Selection.PersonSel -> snap.people.firstOrNull { it.id == sel.id }?.let { p ->
+            val lat = if (p.lat != 0.0) p.lat else snap.locations.firstOrNull { it.id == p.locationId || it.id == p.homeLocationId }?.lat ?: 0.0
+            val lon = if (p.lon != 0.0) p.lon else snap.locations.firstOrNull { it.id == p.locationId || it.id == p.homeLocationId }?.lon ?: 0.0
+            if (lat != 0.0 && lon != 0.0) TargetLocation(lat, lon, 80_000.0) else null
+        }
+        is Selection.EventSel -> snap.events.firstOrNull { it.id == sel.id }?.let {
+            TargetLocation(it.venueLat, it.venueLon, 40_000.0)
+        }
+        is Selection.ThreatSel -> snap.threats.firstOrNull { it.id == sel.id }?.let {
+            TargetLocation(it.lat, it.lon, maxOf(it.radiusKm * 4000.0, 30_000.0))
+        }
+        is Selection.IncidentSel -> snap.incidents.firstOrNull { it.id == sel.id }?.let { inc ->
+            val site = inc.locationId?.let { lid -> snap.locations.firstOrNull { it.id == lid } }
+            val lat = if (inc.lat != 0.0) inc.lat else (site?.lat ?: 0.0)
+            val lon = if (inc.lon != 0.0) inc.lon else (site?.lon ?: 0.0)
+            val r = if (inc.radiusKm != 0.0) inc.radiusKm else 5.0
+            if (lat != 0.0 && lon != 0.0) {
+                TargetLocation(lat, lon, maxOf(r * 4000.0, 20_000.0))
+            } else null
+        }
+    }
+}
+
+private fun flyToSelection(
+    map: MapLibreMap,
+    mapView: MapView,
+    st: WallState,
+    sel: Selection,
+    layer: String?,
+    headerPx: Int
+) {
+    val target = resolveTarget(st, sel) ?: return
+    val h = mapView.height.toFloat()
+    val w = mapView.width.toFloat()
+    if (h <= 0f || w <= 0f) {
+        mapView.post { flyToSelection(map, mapView, st, sel, layer, headerPx) }
+        return
+    }
+
+    val d = target.distanceMeters
+    var centerLat = target.lat
+
+    // When section overlay sheet is in default/half position (stop 1), shift the map camera south
+    // so the selected target is vertically centered in the visible un-occluded window between
+    // the top ruler and the top edge of the overlay sheet.
+    // When minimized (stop 0) or maximized (stop 2), or on COP tab, center normally on screen.
+    val stopIdx = layer?.let { SheetRaise.getStopIndex(it) } ?: -1
+    if (stopIdx == 1) {
+        val avail = (h - headerPx).coerceAtLeast(200f)
+        val sheetH = avail * 0.55f
+        val visibleCenterY = (headerPx + h - sheetH) / 2.0f
+        val screenCenterY = h / 2.0f
+        val offsetY = screenCenterY - visibleCenterY
+        val fraction = offsetY / h
+        val latDelta = d / 111_139.0
+        centerLat = target.lat - (latDelta * fraction)
+    }
+
+    val currentZoom = map.cameraPosition.zoom
+    val pTop = map.projection.fromScreenLocation(android.graphics.PointF(w / 2f, 0f))
+    val pBottom = map.projection.fromScreenLocation(android.graphics.PointF(w / 2f, h))
+    val currentHeightMeters = if (pTop != null && pBottom != null) pTop.distanceTo(pBottom) else 0.0
+    val targetZoom = if (currentHeightMeters > 0.0 && currentZoom > 0.0) {
+        (currentZoom + (kotlin.math.ln(currentHeightMeters / d) / kotlin.math.ln(2.0))).coerceIn(2.0, 18.0)
+    } else {
+        (10.5 + (kotlin.math.ln(80_000.0 / d) / kotlin.math.ln(2.0))).coerceIn(2.0, 18.0)
+    }
+
+    val update = CameraUpdateFactory.newLatLngZoom(LatLng(centerLat, target.lon), targetZoom)
+    map.animateCamera(update, 800)
+}
 
 /** Frame the AO the Battle Captain declared, or the box that holds our sites. Once per process. */
 private fun frameOpening(map: MapLibreMap, snap: Snapshot?) {

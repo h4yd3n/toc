@@ -371,7 +371,7 @@ fun PhoneScreen(st: WallState, store: Store) {
             Box(Modifier.weight(1f).fillMaxWidth()) {  // the picture runs under the header on every tab; each section's sheet stops below it
                 when (tab) {
                     Tab.COP -> {
-                        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
+                        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), headerPx = headerPx, onViewportChanged = store::setViewportDimensions)
                         TacticalRulerVertical(
                             miles = st.viewportHeightMiles,
                             km = st.viewportHeightKm,
@@ -388,7 +388,9 @@ fun PhoneScreen(st: WallState, store: Store) {
                     Tab.S4 -> SectionTab(st, store, "S4", headerPx) { S4Phone(st, store) }
                     Tab.S6 -> SectionTab(st, store, "S6", headerPx) { S6Phone(st, store) }
                 }
-                st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+                if (tab == Tab.COP) {
+                    st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+                }
             }
         }
         var topOverlayPx by remember { mutableStateOf(0) }
@@ -783,7 +785,7 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
         val density = androidx.compose.ui.platform.LocalDensity.current
         // The map is composed here and not again while the sheet moves. It used to share a scope with the drag
         // state, so every frame of a drag re-ran the map's update block and rebuilt every feature on it.
-        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section, onViewportChanged = store::setViewportDimensions)
+        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section, headerPx = headerPx, onViewportChanged = store::setViewportDimensions)
         TacticalRulerVertical(
             miles = st.viewportHeightMiles,
             km = st.viewportHeightKm,
@@ -798,9 +800,21 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
 
 /** Bumped when a section's own tab is tapped again: the sheet takes it as "raise me a step". */
 object SheetRaise {
-    var count by androidx.compose.runtime.mutableStateOf(0)
+    var count by mutableStateOf(0)
         private set
     fun bump() { count += 1 }
+
+    private val sectionStops = mutableStateMapOf<String, Int>()
+    var defaultStopIndex by mutableStateOf(1)
+        private set
+
+    fun getStopIndex(section: String): Int = sectionStops[section] ?: defaultStopIndex
+
+    fun setStopIndex(section: String, index: Int) {
+        val clamped = index.coerceIn(0, 2)
+        sectionStops[section] = clamped
+        defaultStopIndex = clamped
+    }
 }
 
 /** The sheet: it owns the drag, so a drag recomposes this and nothing else. */
@@ -811,17 +825,25 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
     val avail = (totalPx - headerPx).coerceAtLeast(200f)
     val grip = 52f * density.density      // the handle is a comfortable target, not a hairline
     val dock = 104f * density.density     // the floating tab bar and a thumb of clearance above it
-    // Peek leaves the handle above the tab bar rather than behind it; half and full are fractions of the wall.
-    val stops = listOf(grip + dock, avail * 0.55f, avail * 0.92f)
-    var rest by remember { mutableStateOf(stops[1]) }
+    // Peek leaves the handle above the tab bar rather than behind it; half is mid-screen; high stops right under the scale at the top.
+    val highStop = (totalPx - headerPx - 8f * density.density).coerceAtLeast(avail * 0.6f)
+    val stops = listOf(grip + dock, avail * 0.55f, highStop)
+    val savedIdx = SheetRaise.getStopIndex(section).coerceIn(0, stops.size - 1)
+    var rest by remember(section) { mutableStateOf(stops[savedIdx]) }
     var drag by remember { mutableStateOf(0f) }
     val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
     var lastBump by remember { mutableStateOf(SheetRaise.count) }
+    androidx.compose.runtime.LaunchedEffect(stops) {
+        val idx = SheetRaise.getStopIndex(section).coerceIn(0, stops.size - 1)
+        rest = stops[idx]
+    }
     androidx.compose.runtime.LaunchedEffect(SheetRaise.count) {
         if (SheetRaise.count > lastBump) {
             lastBump = SheetRaise.count
             val i = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
-            rest = stops[(i + 1) % stops.size]
+            val nextIdx = (i + 1) % stops.size
+            SheetRaise.setStopIndex(section, nextIdx)
+            rest = stops[nextIdx]
         }
     }
     val visible = (restAnim - drag).coerceIn(stops[0], stops[2])
@@ -851,8 +873,11 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
                         if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
                         ch.consume()
                     }
-                    rest = if (moved) stops.minByOrNull { kotlin.math.abs(it - (rest - delta)) }!!
-                           else stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1) % stops.size]
+                    val currentIdx = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
+                    val settledIdx = if (moved) stops.indices.minByOrNull { kotlin.math.abs(stops[it] - (rest - delta)) } ?: 1
+                                     else (currentIdx + 1) % stops.size
+                    SheetRaise.setStopIndex(section, settledIdx)
+                    rest = stops[settledIdx]
                     drag = 0f
                 }
             }

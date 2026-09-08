@@ -44,7 +44,7 @@ import kotlinx.serialization.json.double
 @Serializable data class Delivery(val channel: String, val status: String, val at: String = "", val error: String? = null)
 @Serializable data class RosterEntry(val personId: String, val name: String, val role: String = "", val isVip: Boolean = false, val phone: String? = null, val status: String = "unaccounted", val basis: String = "in_area",
                                      val checkinRequestedAt: String? = null, val deliveries: List<Delivery> = emptyList(), val attempts: Int = 0, val updatedBy: String? = null, val note: String? = null)
-@Serializable data class Incident(val id: String, val title: String, val kind: String = "site", val locationId: String? = null, val threatId: String? = null, val status: String = "open", val openedBy: String = "",
+@Serializable data class Incident(val id: String, val title: String, val kind: String = "site", val locationId: String? = null, val threatId: String? = null, val lat: Double = 0.0, val lon: Double = 0.0, val radiusKm: Double = 0.0, val status: String = "open", val openedBy: String = "",
                                   val openedAt: String = "", val closedAt: String? = null, val notes: String? = null, val total: Int = 0, val accounted: Int = 0, val pct: Int = 0,
                                   val counts: Map<String, Int> = emptyMap(), val checkinsRequested: Int = 0, val roster: List<RosterEntry> = emptyList())
 @Serializable data class LogEntry(val id: String, val at: String, val type: String, val actor: String = "", val actorType: String = "", val summary: String = "")

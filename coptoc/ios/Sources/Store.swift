@@ -84,6 +84,23 @@ final class COPStore {
     /// Bumped when the section's own tab is tapped again: the sheet takes it as "raise me a step", so a sheet resting
     /// down by the dock can be brought back without finding the handle.
     var sheetRaise = 0
+
+    /// In-memory session tracking of sheet rest stops (0 = peek, 1 = half/regular, 2 = high).
+    /// Kept in memory across tab switches within the same session; resets on cold app restart.
+    var sheetStopIndexBySection: [String: Int] = [:]
+    var defaultSheetStopIndex: Int = 1
+
+    func sheetStopIndex(for section: String) -> Int {
+        sheetStopIndexBySection[section] ?? defaultSheetStopIndex
+    }
+
+    func setSheetStopIndex(_ index: Int, for section: String) {
+        let clamped = max(0, min(2, index))
+        sheetStopIndexBySection[section] = clamped
+        defaultSheetStopIndex = clamped
+    }
+    /// Bottom Y coordinate of the horizontal tactical ruler, measured in global coordinates.
+    var rulerBottom: CGFloat = 0
     func signIn(_ id: String) { client.userId = id; UserDefaults.standard.set(id, forKey: "toc.user"); Task { await load() } }
     func loadUsers() async { users = (try? await client.users()) ?? [] }
     var me: Me? { snapshot?.me }

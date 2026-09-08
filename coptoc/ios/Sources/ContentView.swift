@@ -13,7 +13,7 @@ struct ContentView: View {
                     switch store.tab {
                     case "COP":
                         ZStack(alignment: .topLeading) {
-                            MapScreen()
+                            MapScreen(rulerBottom: rulerBottom)
                             if rulerBottom > 0 {
                                 TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
                                     .padding(.top, rulerBottom)
@@ -65,8 +65,11 @@ struct ContentView: View {
             }
             .coordinateSpace(name: "contentRoot")
         }
-        .onPreferenceChange(RulerBottomPreferenceKey.self) { rulerBottom = $0 }
-        .sheet(item: $store.selection) { sel in
+        .onPreferenceChange(RulerBottomPreferenceKey.self) {
+            rulerBottom = $0
+            store.rulerBottom = $0
+        }
+        .sheet(item: Binding(get: { store.tab == "COP" ? store.selection : nil }, set: { store.selection = $0 })) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
         }
         .overlay(alignment: .bottom) {

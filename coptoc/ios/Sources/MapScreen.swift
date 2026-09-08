@@ -6,6 +6,7 @@ struct MapScreen: View {
     /// §3.4 the overlays: a section's tab brings its own things forward and dims the rest — an overlay sits on the base, the base stays.
     /// S2 draws the NAIs and the threats in full; S3 draws every movement leg by leg; S4 / S6 color every site by its health.
     var layer: String? = nil
+    var rulerBottom: CGFloat = 0
     var showsSites: Bool { store.showSites }
     var showsThreatsLayer: Bool { store.showThreats }
     var showsRoutesLayer: Bool { store.showRoutes }
@@ -23,24 +24,36 @@ struct MapScreen: View {
         center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000))
     @State private var currentRegion: MKCoordinateRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000)
+    @State private var screenHeight: CGFloat = 850
     var body: some View {
         @Bindable var store = store
-        ZStack(alignment: .topLeading) {
-            Map(position: $camera) {
-                if let snap = store.snapshot {
-                    threatsContent(snap: snap)
-                    graphicsContent(snap: snap)
-                    routesContent(snap: snap)
-                    markersContent(snap: snap)
+        GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                Map(position: $camera) {
+                    if let snap = store.snapshot {
+                        threatsContent(snap: snap)
+                        graphicsContent(snap: snap)
+                        routesContent(snap: snap)
+                        markersContent(snap: snap)
+                    }
+                }
+                .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+                .mapControls { MapCompass() }
+            }
+            .onAppear {
+                screenHeight = geo.size.height
+                if let r = store.board { camera = .region(r); currentRegion = r }
+            }         // this section inherits the board as it stands
+            .onChange(of: geo.size.height) { _, newH in screenHeight = newH }
+            .onChange(of: store.framedAt) { if let r = store.board { camera = .region(r); currentRegion = r } }
+            .onMapCameraChange(frequency: .continuous) { ctx in currentRegion = ctx.region; store.board = ctx.region }   // wherever it is left is where every section finds it
+            .onChange(of: store.selection) { _, sel in fly(to: sel, screenH: geo.size.height) }
+            .onChange(of: layer.map { store.sheetStopIndex(for: $0) }) { _, _ in
+                if store.selection != nil {
+                    fly(to: store.selection, screenH: geo.size.height)
                 }
             }
-            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
-            .mapControls { MapCompass() }
         }
-        .onAppear { if let r = store.board { camera = .region(r); currentRegion = r } }         // this section inherits the board as it stands
-        .onChange(of: store.framedAt) { if let r = store.board { camera = .region(r); currentRegion = r } }
-        .onMapCameraChange(frequency: .continuous) { ctx in currentRegion = ctx.region; store.board = ctx.region }   // wherever it is left is where every section finds it
-        .onChange(of: store.selection) { _, sel in fly(to: sel) }
     }
 
     @MapContentBuilder
@@ -157,7 +170,7 @@ struct MapScreen: View {
         }
     }
 
-    func fly(to sel: Selection?) {
+    func fly(to sel: Selection?, screenH: CGFloat? = nil, animated: Bool = true) {
         guard let sel else { return }
         var target: (CLLocationCoordinate2D, CLLocationDistance)? = nil
         switch sel {
@@ -167,7 +180,32 @@ struct MapScreen: View {
         case .threat(let id): if let t = store.threat(id) { target = (t.coordinate, max(t.radiusKm * 4_000, 30_000)) }
         case .incident(let id): if let i = store.incident(id) { target = (i.coordinate, max(i.radiusKm * 4_000, 20_000)) }
         }
-        if let (c, d) = target { withAnimation(.easeInOut(duration: 1.2)) { camera = .camera(MapCamera(centerCoordinate: c, distance: d)) } }
+        guard let (c, d) = target else { return }
+
+        var centerLat = c.latitude
+        let h = screenH ?? screenHeight
+        // When section overlay sheet is in default/half position (stop 1), shift the map camera south
+        // so the selected target is vertically centered in the visible un-occluded window between
+        // the top ruler and the top edge of the overlay sheet.
+        // When minimized (stop 0) or maximized (stop 2), center normally on screen.
+        if let sec = layer, store.sheetStopIndex(for: sec) == 1, h > 0 {
+            let sheetH = h * 0.55
+            let scaleBottom = rulerBottom > 0 ? rulerBottom : (store.rulerBottom > 0 ? store.rulerBottom : 124)
+            let visibleCenterY = (scaleBottom + (h - sheetH)) / 2.0
+            let screenCenterY = h / 2.0
+            let offsetY = screenCenterY - visibleCenterY
+            let fraction = offsetY / h
+            let latDelta = d / 111_139.0
+            centerLat = c.latitude - (latDelta * fraction)
+        }
+
+        let adjustedCenter = CLLocationCoordinate2D(latitude: centerLat, longitude: c.longitude)
+        let newRegion = MKCoordinateRegion(center: adjustedCenter, latitudinalMeters: d, longitudinalMeters: d)
+        if animated {
+            withAnimation(.easeInOut(duration: 1.0)) { camera = .region(newRegion) }
+        } else {
+            camera = .region(newRegion)
+        }
     }
 }
 
