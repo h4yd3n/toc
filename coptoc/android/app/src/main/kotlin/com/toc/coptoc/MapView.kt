@@ -259,27 +259,28 @@ private fun flyToSelection(
     var centerLat = target.lat
 
     // When section overlay sheet is in default/half position (stop 1), shift the map camera south
-    // so the selected target is vertically centered in the visible un-occluded window between
-    // the top ruler and the top edge of the overlay sheet.
+    // so the selected target is vertically centered higher in the visible un-occluded window between
+    // the top ruler and the top edge of the overlay sheet, leaving generous clearance above the handle.
     // When minimized (stop 0) or maximized (stop 2), or on COP tab, center normally on screen.
     val stopIdx = layer?.let { SheetRaise.getStopIndex(it) } ?: -1
     if (stopIdx == 1) {
         val avail = (h - headerPx).coerceAtLeast(200f)
         val sheetH = avail * 0.55f
-        val visibleCenterY = (headerPx + h - sheetH) / 2.0f
+        val visibleH = ((h - sheetH) - headerPx).coerceAtLeast(100f)
+        val targetY = headerPx + (visibleH * 0.38f)
         val screenCenterY = h / 2.0f
-        val offsetY = screenCenterY - visibleCenterY
-        val fraction = offsetY / h
-        val latDelta = d / 111_139.0
-        centerLat = target.lat - (latDelta * fraction)
+        val offsetY = screenCenterY - targetY
+        val span = minOf(w, h)
+        val latDeltaPerPx = (d / 111_139.0) / (if (span > 0f) span else 440f)
+        centerLat = target.lat - (latDeltaPerPx * offsetY)
     }
 
     val currentZoom = map.cameraPosition.zoom
-    val pTop = map.projection.fromScreenLocation(android.graphics.PointF(w / 2f, 0f))
-    val pBottom = map.projection.fromScreenLocation(android.graphics.PointF(w / 2f, h))
-    val currentHeightMeters = if (pTop != null && pBottom != null) pTop.distanceTo(pBottom) else 0.0
-    val targetZoom = if (currentHeightMeters > 0.0 && currentZoom > 0.0) {
-        (currentZoom + (kotlin.math.ln(currentHeightMeters / d) / kotlin.math.ln(2.0))).coerceIn(2.0, 18.0)
+    val pLeft = map.projection.fromScreenLocation(android.graphics.PointF(0f, h / 2f))
+    val pRight = map.projection.fromScreenLocation(android.graphics.PointF(w, h / 2f))
+    val currentWidthMeters = if (pLeft != null && pRight != null) pLeft.distanceTo(pRight) else 0.0
+    val targetZoom = if (currentWidthMeters > 0.0 && currentZoom > 0.0) {
+        (currentZoom + (kotlin.math.ln(currentWidthMeters / d) / kotlin.math.ln(2.0))).coerceIn(2.0, 18.0)
     } else {
         (10.5 + (kotlin.math.ln(80_000.0 / d) / kotlin.math.ln(2.0))).coerceIn(2.0, 18.0)
     }

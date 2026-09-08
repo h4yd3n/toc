@@ -24,7 +24,7 @@ struct MapScreen: View {
         center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000))
     @State private var currentRegion: MKCoordinateRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 37.72, longitude: -122.16), latitudinalMeters: 140_000, longitudinalMeters: 140_000)
-    @State private var screenHeight: CGFloat = 850
+    @State private var screenSize: CGSize = CGSize(width: 440, height: 850)
     var body: some View {
         @Bindable var store = store
         GeometryReader { geo in
@@ -41,16 +41,16 @@ struct MapScreen: View {
                 .mapControls { MapCompass() }
             }
             .onAppear {
-                screenHeight = geo.size.height
+                screenSize = geo.size
                 if let r = store.board { camera = .region(r); currentRegion = r }
             }         // this section inherits the board as it stands
-            .onChange(of: geo.size.height) { _, newH in screenHeight = newH }
+            .onChange(of: geo.size) { _, newSize in screenSize = newSize }
             .onChange(of: store.framedAt) { if let r = store.board { camera = .region(r); currentRegion = r } }
             .onMapCameraChange(frequency: .continuous) { ctx in currentRegion = ctx.region; store.board = ctx.region }   // wherever it is left is where every section finds it
-            .onChange(of: store.selection) { _, sel in fly(to: sel, screenH: geo.size.height) }
+            .onChange(of: store.selection) { _, sel in fly(to: sel, size: geo.size) }
             .onChange(of: layer.map { store.sheetStopIndex(for: $0) }) { _, _ in
                 if store.selection != nil {
-                    fly(to: store.selection, screenH: geo.size.height)
+                    fly(to: store.selection, size: geo.size)
                 }
             }
         }
@@ -170,7 +170,7 @@ struct MapScreen: View {
         }
     }
 
-    func fly(to sel: Selection?, screenH: CGFloat? = nil, animated: Bool = true) {
+    func fly(to sel: Selection?, size: CGSize? = nil, animated: Bool = true) {
         guard let sel else { return }
         var target: (CLLocationCoordinate2D, CLLocationDistance)? = nil
         switch sel {
@@ -183,20 +183,26 @@ struct MapScreen: View {
         guard let (c, d) = target else { return }
 
         var centerLat = c.latitude
-        let h = screenH ?? screenHeight
+        let s = (size?.height ?? 0) > 0 ? (size ?? screenSize) : screenSize
+        let h = s.height
+        let w = s.width > 0 ? s.width : 440
         // When section overlay sheet is in default/half position (stop 1), shift the map camera south
-        // so the selected target is vertically centered in the visible un-occluded window between
-        // the top ruler and the top edge of the overlay sheet.
+        // so the selected target is vertically centered higher in the visible un-occluded window between
+        // the top ruler and the top edge of the overlay sheet, leaving generous clearance above the handle.
         // When minimized (stop 0) or maximized (stop 2), center normally on screen.
         if let sec = layer, store.sheetStopIndex(for: sec) == 1, h > 0 {
             let sheetH = h * 0.55
             let scaleBottom = rulerBottom > 0 ? rulerBottom : (store.rulerBottom > 0 ? store.rulerBottom : 124)
-            let visibleCenterY = (scaleBottom + (h - sheetH)) / 2.0
+            let visibleH = max(100, (h - sheetH) - scaleBottom)
+            // Position target 38% down from scaleBottom into visible window for generous breathing room above sheet handle
+            let targetY = scaleBottom + (visibleH * 0.38)
             let screenCenterY = h / 2.0
-            let offsetY = screenCenterY - visibleCenterY
-            let fraction = offsetY / h
-            let latDelta = d / 111_139.0
-            centerLat = c.latitude - (latDelta * fraction)
+            let offsetY = screenCenterY - targetY
+            // In portrait MapKit, zoom fits distance `d` into the narrower viewport dimension min(w, h).
+            // Therefore degrees of latitude per vertical screen point is (d / 111_139.0) / min(w, h).
+            let span = min(w, h)
+            let latDeltaPerPoint = (d / 111_139.0) / (span > 0 ? span : 440)
+            centerLat = c.latitude - (latDeltaPerPoint * offsetY)
         }
 
         let adjustedCenter = CLLocationCoordinate2D(latitude: centerLat, longitude: c.longitude)
