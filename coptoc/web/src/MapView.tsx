@@ -130,6 +130,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       renderMarkers(m)
     })
     m.on('move', () => renderMarkers(m))
+
     const ro = new ResizeObserver(() => m.resize())
     ro.observe(el.current)
     const onWin = () => m.resize()
@@ -137,7 +138,13 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     map.current = m
     if (import.meta.env.DEV) (window as unknown as { __tocMap?: MLMap }).__tocMap = m
     m.on('error', e => console.error('[maplibre]', e.error?.message ?? e))
-    return () => { ro.disconnect(); window.removeEventListener('resize', onWin); loaded.current = false; try { m.remove() } catch { /* map teardown */ } map.current = null }
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', onWin)
+      loaded.current = false
+      try { m.remove() } catch { /* map teardown */ }
+      map.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

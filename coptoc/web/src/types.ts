@@ -137,7 +137,39 @@ export interface WatchLogEntry { id: string; at: string; type: string; bucket: s
 export interface S2Actor { id: string; kind: 'unit' | 'individual' | 'group' | 'organization'; name: string; aliases: string[]; echelon: string; strength: string; equipment: string[]; ttps: string[]; assessed_intent: string; status: 'active' | 'dormant' | 'neutralized'; case_id: string | null; owner: string; lat: number | null; lon: number | null; place: string | null; last_seen_at: string | null; created_at: string; updated_at: string; sighting_ids: string[] }
 export interface S2Sighting { id: string; actor_id: string; at: string; lat: number; lon: number; place: string | null; nai_id: string | null; source_type: string; source_id: string | null; reliability: string; credibility: number; grade: string; what: string; confidence: 'confirmed' | 'probable' | 'possible'; created_by: string; created_at: string }
 export interface S2Report { id: string; kind: string; reported_by: string; reporter_role: string; at: string; lat: number | null; lon: number | null; place: string | null; text: string; case_id: string | null; reliability: string; credibility: number; grade: string; source: string; status: 'filed' | 'corroborated' | 'linked' | 'promoted' | 'dismissed'; disposition: string | null; disposition_target_type: string | null; disposition_target_id: string | null; disposed_by: string | null; disposed_at: string | null; disposition_note: string | null; filed_at: string }
-export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View;
+export interface WeatherAdvisory {
+  id: string
+  event: string
+  severity: 'low' | 'moderate' | 'elevated' | 'critical'
+  headline: string
+  description: string
+  distance_km?: number
+  starts_at?: string | null
+  expires_at?: string | null
+  url?: string | null
+}
+
+export interface WeatherInfo {
+  station_id: string
+  station_name: string
+  condition: string
+  temp_f: number
+  temp_c: number
+  wind_speed_kt: number
+  wind_direction_deg: number
+  wind_gust_kt: number | null
+  flight_category: 'VMC' | 'MVFR' | 'IMC'
+  visibility_sm: number
+  ceiling_ft: number | null
+  barometer_inhg: number
+  summary: string
+  operational_impact: string
+  active_advisories: WeatherAdvisory[]
+  external_url: string
+  awc_url: string
+}
+
+export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
   s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]

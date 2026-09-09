@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './MapView'
-import { BriefPanel, EstimateLine, WatchChip } from './Watch'
+import { BriefPanel, EstimateLine } from './Watch'
+import HeaderClocks from './HeaderClocks'
 import { RequirementsPanel } from './Requirements'
 import { CasesPanel } from './Cases'
 import { AreaPanel } from './Area'
@@ -16,6 +17,7 @@ import { UsersPanel } from './Users'
 import { TaskingBox } from './Taskings'
 import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
 import { ContextRow, RollCallStrip } from './Strips'
+import WeatherPopover from './WeatherPopover'
 import { CommandBar, buildCommands } from './CommandBar'
 import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } from './Areas'
 import * as api from './api'
@@ -59,7 +61,6 @@ function rel(iso: string | null, now: number): string {
   if (a < 86400) return `${p}${Math.round(a / 3600)}h${s}`
   return `${p}${Math.round(a / 86400)}d${s}`
 }
-const clock = (d: Date) => d.toISOString().slice(11, 19) + 'Z'
 const short = (s: string) => s.split(',')[0]
 
 type ById = { loc: Map<string, Location>; person: Map<string, Person>; threat: Map<string, Threat>; trip: Map<string, Trip>; event: Map<string, CopEvent>; incident: Map<string, Incident> }
@@ -99,6 +100,7 @@ export default function App() {
   })
   const [s3Open, setS3Open] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.s3') !== 'closed' } catch { return true } })
   const [logOpen, setLogOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.log') !== 'closed' } catch { return true } })
+  const [showWeather, setShowWeather] = useState(false)
   useEffect(() => {
     try {
       localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed')
@@ -188,6 +190,7 @@ export default function App() {
       if (e.key === 'Escape') {
         setDraw(null); setDrawMenu(false); setOverlayMenuOpen(false); setShowDefcon(false); setShowSettings(false);
         setSel(null); setOpId(null); setShowIntsum(false); setShowPlan(false); setAreaId(null); setAreaMode(null); setShowBrief(false); setCmd(false);
+        setShowWeather(false);
         if (!isCop && !workspaceDetail) navigate({ page: 'cop' })
       }
     };
@@ -273,51 +276,48 @@ export default function App() {
     {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
   </>
 
+  const hasStrips = ((snap?.warnings?.length ?? 0) > 0) || (snap?.incidents ?? []).some(i => i.status === 'open')
+
   return (
-    <div className={`wall ${isCop ? '' : 'is-workspace bottom-closed'} ${(!s3Open && !logOpen) || !isCop ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${hasStrips ? 'has-strips' : ''} ${isCop ? '' : 'is-workspace bottom-closed'} ${(!s3Open && !logOpen) || !isCop ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
-        <div className="brand"><img className="glyph" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
-        {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
-          <option value="military">Military</option><option value="corporate">Corporate</option>
-        </select>}
-        <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">DEFCON {s?.defcon ?? '—'}</button>
-        {showDefcon && s && <div className="defcon" onClick={e => e.stopPropagation()}>
-          <div className="dform-head">DEFCON <span className="dim">the wall reads the worst site · set a site's level from its card</span></div>
-          {[...(s.defcon_levels ?? [])].sort((x, y) => y.defcon - x.defcon).map(l => <div key={l.defcon} className={`dlevel ${l.posture} ${l.defcon === s.defcon ? 'now' : ''}`}>
-            <span className="dnum">{l.defcon}</span><span className="dname">{l.posture.toUpperCase()}</span><span className="dmean">{l.meaning}</span><span className="dsites dim">{l.sites ? `${l.sites} site${l.sites === 1 ? '' : 's'}` : ''}</span>
-          </div>)}
-        </div>}
-        <WatchChip w={snap?.watch} onOpen={() => setShowBrief(v => !v)} />
-        <div className="stats">
-          <Stat onJump={jump} label="PERSONNEL" v={s?.total_people} /><Stat onJump={jump} label="PRESENT" v={s?.present} />
-          <Stat onJump={jump} label="TRAVELING" v={s?.traveling} accent="blue" /><Stat onJump={jump} label="VIP OUT" v={s?.vips_traveling} accent="gold" />
-          <Stat onJump={jump} label="CHECKED IN" v={s?.checked_in_fresh} accent="green" /><Stat onJump={jump} label="SEC ON SHIFT" v={s?.security_on_shift} accent="green" />
-          <Stat onJump={jump} label="THREATS" v={s?.active_threats} accent="red" /><Stat onJump={jump} label="CONFIRMED" v={s?.confirmed_links} accent="red" />
-          {(s?.unaccounted ?? 0) > 0 && <Stat onJump={jump} label="UNACCOUNTED" v={s?.unaccounted} accent="red" />}
-          {(s?.flash ?? 0) > 0 && <Stat onJump={jump} label="FLASH" v={s?.flash} accent="red" />}
-          {(s?.unreachable ?? 0) > 0 && <Stat onJump={jump} label="UNREACHABLE" v={s?.unreachable} accent="red" />}
-          <Stat onJump={jump} label="OPEN PIRs" v={s?.open_pirs} accent="amber" /><Stat onJump={jump} label="EVENTS" v={s?.upcoming_events} />
+        <div className="top-left">
+          <div className="brand"><img className="glyph" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
+          {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
+            <option value="military">Military</option><option value="corporate">Corporate</option>
+          </select>}
+          <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">DEFCON {s?.defcon ?? '—'}</button>
+          {showDefcon && s && <div className="defcon" onClick={e => e.stopPropagation()}>
+            <div className="dform-head">DEFCON <span className="dim">the wall reads the worst site · set a site's level from its card</span></div>
+            {[...(s.defcon_levels ?? [])].sort((x, y) => y.defcon - x.defcon).map(l => <div key={l.defcon} className={`dlevel ${l.posture} ${l.defcon === s.defcon ? 'now' : ''}`}>
+              <span className="dnum">{l.defcon}</span><span className="dname">{l.posture.toUpperCase()}</span><span className="dmean">{l.meaning}</span><span className="dsites dim">{l.sites ? `${l.sites} site${l.sites === 1 ? '' : 's'}` : ''}</span>
+            </div>)}
+          </div>}
         </div>
-        <select className="role" disabled={!!busy} value={userId} onChange={e => { api.signIn(e.target.value); setSnap(null); setWorkBoard(null); setWorkspaceDetail(false); setUserId(e.target.value); load() }} title="Profile — the role you are signed in as (§9)">
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-        {false && <select className="role" value={role} onChange={e => setRole(e.target.value as Role)} title="Demo role — until someone signs in">
-          <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
-        </select>}
-        {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
-        <button className="gear kbd" title="Find anything on the picture (⌘K / Ctrl+K)" onClick={() => setCmd(true)}>⌘K</button>
-        <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
-        <div className="clock">{clock(new Date(now))}</div>
+
+        <div className="top-center">
+          <HeaderClocks now={now} profile={snap?.profile} />
+        </div>
+
+        <div className="top-right">
+          <select className="role" disabled={!!busy} value={userId} onChange={e => { api.signIn(e.target.value); setSnap(null); setWorkBoard(null); setWorkspaceDetail(false); setUserId(e.target.value); load() }} title="Profile — the role you are signed in as (§9)">
+            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
+          <button className="gear kbd" title="Find anything on the picture (⌘K / Ctrl+K)" onClick={() => setCmd(true)}>⌘K</button>
+          <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
+        </div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
           <div className="s-row"><span>LABELS</span>{(['full', 'lean'] as const).map(m => <button key={m} className={`chip btn ${ui.labels === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, labels: m })}>{m.toUpperCase()}</button>)}<span className="dim small">LEAN drops hints, empty lines, second lines</span></div>
           <div className="s-row"><span>HEADER</span>{(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}<span className="dim small">POSTURE: one big posture tile, five counters</span></div>
         </div>}
       </header>
-      <div className="strips">
-        <ContextRow view={snap?.view} now={now} />
-        <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
-        <RollCallStrip incidents={snap?.incidents ?? []} now={now} role={role} busy={busy} act={act} onSelect={setSel} selected={sel} />
-      </div>
+      {hasStrips && (
+        <div className="strips">
+          <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
+          <RollCallStrip incidents={snap?.incidents ?? []} now={now} role={role} busy={busy} act={act} onSelect={setSel} selected={sel} />
+        </div>
+      )}
       {cmd && snap && <CommandBar commands={buildCommands(snap, { select: setSel, open: openPanel2 })} onClose={() => setCmd(false)} />}
 
       <nav className="rail rail-left">
@@ -386,10 +386,65 @@ export default function App() {
         {released('S1')}
       </aside>
 
-      <main className="center" onClick={() => { setShowSettings(false); setOverlayMenuOpen(false) }}>
+      <main className="center" onClick={() => { setShowSettings(false); setOverlayMenuOpen(false); setShowWeather(false) }}>
         {isCop ? (
           <>
             <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
+            {s && (
+              <div
+                className="map-stats-pill"
+                style={{ left: leftOpen ? 394 : 14 }}
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="msp-item"
+                  onClick={() => setLeftOpen(v => !v)}
+                  title="Total Personnel · Click to toggle S1 panel"
+                >
+                  <span className="msp-val">{s.total_people.toLocaleString()}</span>
+                  <span className="msp-lbl">PERSONNEL</span>
+                </button>
+                <span className="msp-sep" />
+                <button
+                  type="button"
+                  className="msp-item blue"
+                  onClick={() => { setOverlay('S3'); jump('S3') }}
+                  title="Personnel traveling · Click to view S3 movement"
+                >
+                  <span className="msp-val blue">{s.traveling}</span>
+                  <span className="msp-lbl">TRAVELING</span>
+                </button>
+                {s.vips_traveling > 0 && (
+                  <>
+                    <span className="msp-sep" />
+                    <button
+                      type="button"
+                      className="msp-item gold"
+                      onClick={() => { setOverlay('S3'); jump('S3') }}
+                      title="VIPs traveling"
+                    >
+                      <span className="msp-val gold">{s.vips_traveling}</span>
+                      <span className="msp-lbl">VIP OUT</span>
+                    </button>
+                  </>
+                )}
+                {(s.unaccounted ?? 0) > 0 && (
+                  <>
+                    <span className="msp-sep" />
+                    <button
+                      type="button"
+                      className="msp-item red"
+                      onClick={() => isCop ? setLeftOpen(true) : navigate({ page: 'workspace', section: 'S1', tab: 'accountability' })}
+                      title="Unaccounted personnel in active roll call"
+                    >
+                      <span className="msp-val red">{s.unaccounted}</span>
+                      <span className="msp-lbl">UNACCOUNTED</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             <div className="ovbar" onClick={e => e.stopPropagation()}>
               {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
               {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
@@ -458,6 +513,27 @@ export default function App() {
               )}
             </div>
             {recordDetails}
+            {showWeather && snap?.weather && (
+              <WeatherPopover
+                weather={snap.weather}
+                onClose={() => setShowWeather(false)}
+                style={{
+                  left: leftOpen ? 394 : 14,
+                  bottom: 34,
+                }}
+              />
+            )}
+            <ContextRow
+              view={snap?.view}
+              now={now}
+              weather={snap?.weather}
+              showWeather={showWeather}
+              onToggleWeather={() => setShowWeather(v => !v)}
+              style={{
+                left: leftOpen ? 380 : 0,
+                right: rightPanel ? (rightPanel === 'settings' ? 460 : 380) : 0,
+              }}
+            />
           </>
         ) : (
           snap && (
@@ -646,11 +722,6 @@ function Presence({ p }: { p: Person }) {
   if (p.position_source === 'checkin') return <span className="chk fresh" title={p.last_checkin_note ?? ''}>✓{p.checkin_age_h !== null && p.checkin_age_h < 1 ? '<1h' : `${Math.round(p.checkin_age_h ?? 0)}h`}</span>
   if (p.checkin_stale) return <span className="chk stale" title="last check-in older than 12h">stale</span>
   return null
-}
-const STAT_SECTION: Record<string, 'S1' | 'S2' | 'S3'> = { PERSONNEL: 'S1', PRESENT: 'S1', 'CHECKED IN': 'S1', 'SEC ON SHIFT': 'S1', UNACCOUNTED: 'S1', UNREACHABLE: 'S1', TRAVELING: 'S3', 'VIP OUT': 'S3', EVENTS: 'S3', THREATS: 'S2', CONFIRMED: 'S2', FLASH: 'S2', 'OPEN PIRs': 'S2' }
-function Stat({ label, v, accent, onJump }: { label: string; v?: number; accent?: string; onJump?: (section: 'S1' | 'S2' | 'S3') => void }) {
-  const sec = STAT_SECTION[label]
-  return <div className={`stat ${accent ?? ''} ${sec ? 'jump' : ''}`} data-k={label} title={sec ? `open ${sec}` : undefined} onClick={() => sec && onJump?.(sec)}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
 }
 function PanelHead({ code, title, hint, inline, children, onClose }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode; onClose?: () => void }) {
   return <div className={`panel-head ${inline ? 'inline' : ''}`}>{code && <span className="code">{code}</span>}<span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>

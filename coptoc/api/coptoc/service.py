@@ -21,6 +21,7 @@ from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRo
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 from sigtoc.cases import ReportRow, report_dict as s2_report_out
 from sigtoc.picture import S2ActorRow, S2SightingRow, actor_dict as s2_actor_out, sighting_dict as s2_sighting_out
+from .weather import derive_weather
 
 SEVERITY_RANK = {"low": 0, "moderate": 1, "elevated": 2, "critical": 3}
 # Five levels, read on the wall as DEFCON 5 → 1. The rule (Decision 3) forces normal / elevated / critical from confirmed
@@ -520,8 +521,10 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
                                      .order_by(LedgerEventRow.id))).scalars().all()
     watch_log = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "bucket": LOG_BUCKETS.get(r.event_type, "other"), "actor": r.actor_id, "subject": r.content_id, "summary": r.reason}
                  for r in wl_rows if LOG_BUCKETS.get(r.event_type, "other") != "estimates"]
+    view_out = default_view(locations)
+    weather_out = derive_weather(view_out.get("center_lat"), view_out.get("center_lon"), view_out.get("radius_km"), threats, prof)
     return {
-        "profile": toc_profile(), "sections": sections_config(), "view": default_view(locations), "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
+        "profile": toc_profile(), "sections": sections_config(), "view": view_out, "weather": weather_out, "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
         "watch": watch_summary(wrow, now, cfg), "estimates": await section_estimates(session),
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,

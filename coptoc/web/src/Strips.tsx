@@ -2,27 +2,61 @@
 // wall while it is open. Both sit above the map and below the posture bar, full width, never over S3 or the log.
 import * as api from './api'
 import { hhmmZ, sunState, sunTimes } from './solar'
-import type { Incident, Role, RosterStatus, Selection, View } from './types'
+import type { Incident, Role, RosterStatus, Selection, View, WeatherInfo } from './types'
 
 type Act = (l: string, f: () => Promise<unknown>) => void
-const fmtLat = (v: number) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? 'N' : 'S'}`
-const fmtLon = (v: number) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? 'E' : 'W'}`
 
-/** Where the board is cut and what the sun is doing there. BMNT and EENT are what an aviation brigade plans around. */
-export function ContextRow({ view, now, label }: { view: View | undefined; now: number; label?: string }) {
+/** Where the board is cut and what the sun is doing there. Anchored at the map bottom with tactical weather and solar cycle. */
+export function ContextRow({
+  view,
+  now,
+  label,
+  weather,
+  showWeather,
+  onToggleWeather,
+  style,
+}: {
+  view: View | undefined
+  now: number
+  label?: string
+  weather?: WeatherInfo
+  showWeather?: boolean
+  onToggleWeather?: () => void
+  style?: React.CSSProperties
+}) {
   if (!view || view.center_lat == null || view.center_lon == null) return null
   const t = sunTimes(view.center_lat, view.center_lon, new Date(now))
   const state = sunState(t, new Date(now))
   return (
-    <div className="ctx">
-      <span className="ctx-k">{view.source === 'ao' ? 'AO' : 'BOARD'}</span>
-      <span className="ctx-v">{label ?? (view.source === 'ao' ? 'declared' : 'home ground')} · {fmtLat(view.center_lat)} {fmtLon(view.center_lon)}{view.radius_km ? ` · ${Math.round(view.radius_km)} km` : ''}</span>
-      <span className="ctx-sep" />
-      <span className="ctx-k">BMNT</span><span className="ctx-v mono">{hhmmZ(t.bmnt)}</span>
-      <span className="ctx-k">SR</span><span className="ctx-v mono">{hhmmZ(t.sunrise)}</span>
-      <span className="ctx-k">SS</span><span className="ctx-v mono">{hhmmZ(t.sunset)}</span>
-      <span className="ctx-k">EENT</span><span className="ctx-v mono">{hhmmZ(t.eent)}</span>
-      <span className={`chip small sun-${state}`}>{state.toUpperCase()}</span>
+    <div className="ctx" style={style} onClick={e => e.stopPropagation()}>
+      <div className="ctx-left">
+        <span className="ctx-k">{view.source === 'ao' ? 'AO' : 'BOARD'}</span>
+        <span className="ctx-v">{label ?? (view.source === 'ao' ? 'declared' : 'home ground')}{view.radius_km ? ` · ${Math.round(view.radius_km)} km` : ''}</span>
+        {weather && (
+          <>
+            <span className="ctx-sep" />
+            <button
+              type="button"
+              className={`ctx-weather-btn ${showWeather ? 'on' : ''} ${weather.flight_category.toLowerCase()} ${weather.active_advisories.length ? 'has-advisory' : ''}`}
+              onClick={onToggleWeather}
+              title={`${weather.station_id} · ${weather.condition} · ${weather.flight_category} · Click for tactical forecast & operational impact`}
+            >
+              <span className="wx-tag">WX</span>
+              <span className="wx-temp">{weather.temp_f}°F</span>
+              <span className="wx-wind mono">{weather.wind_speed_kt}KT{weather.wind_gust_kt ? ` G${weather.wind_gust_kt}` : ''}</span>
+              <span className={`chip small wx-cat ${weather.flight_category.toLowerCase()}`}>{weather.flight_category}</span>
+              {weather.active_advisories.length > 0 && <span className="wx-warn-dot" title="Active weather advisories in AO">⚠</span>}
+            </button>
+          </>
+        )}
+      </div>
+      <div className="ctx-right">
+        <span className="ctx-k">BMNT</span><span className="ctx-v mono">{hhmmZ(t.bmnt)}</span>
+        <span className="ctx-k">SR</span><span className="ctx-v mono">{hhmmZ(t.sunrise)}</span>
+        <span className="ctx-k">SS</span><span className="ctx-v mono">{hhmmZ(t.sunset)}</span>
+        <span className="ctx-k">EENT</span><span className="ctx-v mono">{hhmmZ(t.eent)}</span>
+        <span className={`chip small sun-${state}`}>{state.toUpperCase()}</span>
+      </div>
     </div>)
 }
 
