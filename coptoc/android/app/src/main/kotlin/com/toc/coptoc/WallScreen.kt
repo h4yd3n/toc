@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -366,6 +367,7 @@ fun PhoneScreen(st: WallState, store: Store) {
     var headerPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     var overlayOpen by remember { mutableStateOf(false) }
+    var activeWorkspaceSection by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(Palette.bg)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {  // the picture runs under the header on every tab; each section's sheet stops below it
@@ -382,11 +384,11 @@ fun PhoneScreen(st: WallState, store: Store) {
                         )
                         if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
-                    Tab.S1 -> SectionTab(st, store, "S1", headerPx) { S1Panel(st, store) }
-                    Tab.S2 -> SectionTab(st, store, "S2", headerPx) { S2Panel(st, store) }
-                    Tab.S3 -> SectionTab(st, store, "S3", headerPx) { S3Phone(st, store) }
-                    Tab.S4 -> SectionTab(st, store, "S4", headerPx) { S4Phone(st, store) }
-                    Tab.S6 -> SectionTab(st, store, "S6", headerPx) { S6Phone(st, store) }
+                    Tab.S1 -> SectionTab(st, store, "S1", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S1" }) { S1Panel(st, store) }
+                    Tab.S2 -> SectionTab(st, store, "S2", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S2" }) { S2Panel(st, store) }
+                    Tab.S3 -> SectionTab(st, store, "S3", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S3" }) { S3Phone(st, store) }
+                    Tab.S4 -> SectionTab(st, store, "S4", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S4" }) { S4Phone(st, store) }
+                    Tab.S6 -> SectionTab(st, store, "S6", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S6" }) { S6Phone(st, store) }
                 }
                 if (tab == Tab.COP) {
                     st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
@@ -448,6 +450,43 @@ fun PhoneScreen(st: WallState, store: Store) {
                         if (badge > 0) Text("$badge", Modifier.offset(x = 14.dp, y = (-6).dp).background(Palette.red, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp), color = Color.White, fontSize = 9.sp)
                         dot?.let { Box(Modifier.offset(x = 16.dp, y = (-3).dp).size(8.dp).background(healthColor(it), RoundedCornerShape(50))) } }
                     androidx.compose.animation.AnimatedVisibility(!c) { Text(if (t == Tab.COP) "COP" else sectionLabel(snap, t.label), color = if (on) Palette.blue2 else Palette.dim, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal) }
+                }
+            }
+        }
+        if (activeWorkspaceSection != null) {
+            Box(Modifier.fillMaxSize().background(Palette.bg).zIndex(100f)) {
+                Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                    Row(
+                        Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${activeWorkspaceSection} WORKSPACE",
+                            color = Palette.text,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Row(
+                            Modifier
+                                .background(Palette.panel2, RoundedCornerShape(4.dp))
+                                .border(0.5.dp, Palette.line, RoundedCornerShape(4.dp))
+                                .clickable { activeWorkspaceSection = null }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("← Back to COP", color = Palette.dim, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        NativeWorkspace(
+                            baseUrl = store.api.baseUrl,
+                            userId = st.userId,
+                            section = activeWorkspaceSection!!,
+                            onClose = { activeWorkspaceSection = null }
+                        )
+                    }
                 }
             }
         }
@@ -780,7 +819,7 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
 
 /** §3 the map-first sections: the picture behind with the section's layer, the section's list on a sheet with three rests — peek, half, full. */
 @Composable
-fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, content: @Composable ColumnScope.() -> Unit) {
+fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, onOpenWorkspace: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = androidx.compose.ui.platform.LocalDensity.current
         // The map is composed here and not again while the sheet moves. It used to share a scope with the drag
@@ -794,7 +833,7 @@ fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, cont
                 .align(Alignment.TopStart)
                 .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
         )
-        SectionSheet(headerPx, section, content)
+        SectionSheet(headerPx, section, onOpenWorkspace, content)
     }
 }
 
@@ -819,7 +858,7 @@ object SheetRaise {
 
 /** The sheet: it owns the drag, so a drag recomposes this and nothing else. */
 @Composable
-private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSheet(headerPx: Int, section: String, content: @Composable ColumnScope.() -> Unit) {
+private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSheet(headerPx: Int, section: String, onOpenWorkspace: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val totalPx = with(density) { maxHeight.toPx() }
     val avail = (totalPx - headerPx).coerceAtLeast(200f)
@@ -857,34 +896,58 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
         // Where the handle currently sits in the window. The gesture is measured against this rather than against the
         // handle's own coordinates, because the handle moves as the sheet moves: a drag measured locally is measured
         // against an origin the drag itself is shifting, and that feedback shows up as the header shaking.
-        var handleTop by remember { mutableStateOf(0f) }
-        Column(Modifier.fillMaxWidth()
-            .onGloballyPositioned { handleTop = it.positionInWindow().y }
-            .pointerInput(Unit) {  // own the pointer from the first touch: the map underneath would otherwise take it
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false); down.consume()
-                    val startY = handleTop + down.position.y      // the finger, in window space
-                    var delta = 0f; var moved = false
-                    while (true) {
-                        val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!ch.pressed) { ch.consume(); break }
-                        delta = (handleTop + ch.position.y) - startY
-                        if (kotlin.math.abs(delta) > 8f) moved = true
-                        if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
-                        ch.consume()
+        Box(Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            var handleTop by remember { mutableStateOf(0f) }
+            Column(Modifier.fillMaxWidth()
+                .padding(horizontal = 80.dp)
+                .onGloballyPositioned { handleTop = it.positionInWindow().y }
+                .pointerInput(Unit) {  // own the pointer from the first touch: the map underneath would otherwise take it
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false); down.consume()
+                        val startY = handleTop + down.position.y      // the finger, in window space
+                        var delta = 0f; var moved = false
+                        while (true) {
+                            val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!ch.pressed) { ch.consume(); break }
+                            delta = (handleTop + ch.position.y) - startY
+                            if (kotlin.math.abs(delta) > 8f) moved = true
+                            if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
+                            ch.consume()
+                        }
+                        val currentIdx = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
+                        val settledIdx = if (moved) stops.indices.minByOrNull { kotlin.math.abs(stops[it] - (rest - delta)) } ?: 1
+                                         else (currentIdx + 1) % stops.size
+                        SheetRaise.setStopIndex(section, settledIdx)
+                        rest = stops[settledIdx]
+                        drag = 0f
                     }
-                    val currentIdx = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
-                    val settledIdx = if (moved) stops.indices.minByOrNull { kotlin.math.abs(stops[it] - (rest - delta)) } ?: 1
-                                     else (currentIdx + 1) % stops.size
-                    SheetRaise.setStopIndex(section, settledIdx)
-                    rest = stops[settledIdx]
-                    drag = 0f
+                }
+                .padding(top = 14.dp, bottom = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(48.dp, 5.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
+                Text(if (rest <= stops[0] + 1f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+            }
+            if (onOpenWorkspace != null) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp)
+                        .background(Palette.blue2.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                        .border(1.dp, Palette.blue2.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .clickable { onOpenWorkspace() }
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "WORKSPACE ↗",
+                        color = Palette.blue2,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
-            .heightIn(min = 52.dp).padding(top = 14.dp, bottom = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(48.dp, 5.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
-            Text(if (rest <= stops[0] + 1f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
         }
         content()
     }

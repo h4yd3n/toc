@@ -72,6 +72,27 @@ struct ContentView: View {
         .sheet(item: Binding(get: { store.tab == "COP" ? store.selection : nil }, set: { store.selection = $0 })) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { store.activeWorkspaceSection != nil },
+            set: { if !$0 { store.activeWorkspaceSection = nil } }
+        )) {
+            if let ws = store.activeWorkspaceSection {
+                NavigationStack {
+                    WorkspaceBrowser(baseURL: store.client.baseURL, userId: store.client.userId, section: ws)
+                        .ignoresSafeArea(edges: .bottom)
+                        .navigationTitle("\(ws) Workspace")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Back to COP") {
+                                    store.activeWorkspaceSection = nil
+                                }
+                            }
+                        }
+                }
+                .onDisappear { Task { await store.load() } }
+            }
+        }
         .overlay(alignment: .bottom) {
             if let err = store.error {
                 HStack(spacing: 8) {

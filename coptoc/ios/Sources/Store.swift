@@ -58,6 +58,7 @@ final class COPStore {
     var warnings: [Warning] = []
     var cases: [CaseHead] = []
     var error: String?
+    var activeWorkspaceSection: String?
     var busy: String?
     var selection: Selection?
     /// Decision 1: the restricted layer (residences) is off by default.

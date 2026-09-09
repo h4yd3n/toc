@@ -129,30 +129,52 @@ private struct SectionSheet<Content: View>: View {
             let base = rest > 0 ? rest : targetRest
             let visible = min(max(base - drag, stops[0]), stops[2])
             VStack(spacing: 0) {
-                VStack(spacing: 5) {
-                    Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 48, height: 5)
-                    Text(base <= stops[0] + 1 ? "\(section) · pull up" : "\(section)")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim)
+                ZStack(alignment: .trailing) {
+                    VStack(spacing: 5) {
+                        Capsule().fill(Theme.dim.opacity(0.6)).frame(width: 48, height: 5)
+                        Text(base <= stops[0] + 1 ? "\(section) · pull up" : "\(section)")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.5).foregroundStyle(Theme.dim)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: grip)
+                    .padding(.horizontal, 90)
+                    .contentShape(Rectangle())
+                    // One gesture, not a drag and a tap competing: arbitration between them cost a beat at the start of
+                    // every drag. High priority, because the map underneath runs UIKit pan recognisers that were winning
+                    // a touch that started on the handle.
+                    // Global coordinates, not the sheet's own: the handle moves as the sheet moves, so a drag measured in
+                    // local space is measured against an origin the drag itself is shifting. That feedback is what made
+                    // the header shake — push up, the sheet rises, the origin rises with it, the next sample reads short.
+                    .highPriorityGesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                        .onChanged { v in if abs(v.translation.height) > 2 { drag = v.translation.height } }
+                        .onEnded { v in
+                            let moved = v.translation.height
+                            let currentIdx = stops.enumerated().min(by: { abs($0.element - base) < abs($1.element - base) })?.offset ?? 1
+                            let settledIdx: Int = abs(moved) < 6
+                                ? (currentIdx + 1) % stops.count      // a tap cycles the rests
+                                : (stops.enumerated().min(by: { abs($0.element - (base - moved)) < abs($1.element - (base - moved)) })?.offset ?? 1)
+                            let settled = stops[settledIdx]
+                            store.setSheetStopIndex(settledIdx, for: section)
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { rest = settled; drag = 0 }
+                        })
+
+                    Button {
+                        store.activeWorkspaceSection = section
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("WORKSPACE")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .foregroundStyle(Theme.blue)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Theme.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.blue.opacity(0.4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 14)
                 }
-                .frame(maxWidth: .infinity, minHeight: grip).contentShape(Rectangle())
-                // One gesture, not a drag and a tap competing: arbitration between them cost a beat at the start of
-                // every drag. High priority, because the map underneath runs UIKit pan recognisers that were winning
-                // a touch that started on the handle.
-                // Global coordinates, not the sheet's own: the handle moves as the sheet moves, so a drag measured in
-                // local space is measured against an origin the drag itself is shifting. That feedback is what made
-                // the header shake — push up, the sheet rises, the origin rises with it, the next sample reads short.
-                .highPriorityGesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { v in if abs(v.translation.height) > 2 { drag = v.translation.height } }
-                    .onEnded { v in
-                        let moved = v.translation.height
-                        let currentIdx = stops.enumerated().min(by: { abs($0.element - base) < abs($1.element - base) })?.offset ?? 1
-                        let settledIdx: Int = abs(moved) < 6
-                            ? (currentIdx + 1) % stops.count      // a tap cycles the rests
-                            : (stops.enumerated().min(by: { abs($0.element - (base - moved)) < abs($1.element - (base - moved)) })?.offset ?? 1)
-                        let settled = stops[settledIdx]
-                        store.setSheetStopIndex(settledIdx, for: section)
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { rest = settled; drag = 0 }
-                    })
                 content.frame(maxHeight: .infinity)
             }
             .frame(height: stops[2], alignment: .top)   // laid out once at full height and slid: resizing it on every

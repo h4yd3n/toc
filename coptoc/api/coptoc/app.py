@@ -6,7 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from sigtoc.api import router as s2_router
+from sigtoc.work import router as work_router, worker_loop
 from .routes import router as cop_router, startup as cop_startup
+from .ingestion import router as intake_router
+from . import intake_monitor  # register administrative checks on the intake router
 
 
 async def _intsum_clock() -> None:
@@ -43,12 +46,18 @@ async def lifespan(_app: FastAPI):
         await _settings.load(s)
         await _users.load(s)
     clocks = []
+    if os.environ.get("TOC_AI_WORKER", "on") != "off":
+        clocks.append(asyncio.create_task(worker_loop()))
     if os.environ.get("TOC_INTSUM_CLOCK", "on") != "off":
         clocks.append(asyncio.create_task(_intsum_clock()))
     if os.environ.get("TOC_ESCALATION_CLOCK", "on") != "off":
         clocks.append(asyncio.create_task(_escalation_clock()))
-    yield
-    for c in clocks: c.cancel()
+    try:
+        yield
+    finally:
+        for c in clocks:
+            c.cancel()
+        await asyncio.gather(*clocks, return_exceptions=True)
 
 
 app = FastAPI(title="Coptoc — Common Operating Picture API", version="0.3.0",
@@ -71,6 +80,8 @@ class MethodOverride:
 app.add_middleware(MethodOverride)
 from .users import Identity  # noqa: E402
 app.add_middleware(Identity)  # X-TOC-User → role + actor; outermost so every route sees the resolved identity
+app.include_router(work_router)
+app.include_router(intake_router)
 app.include_router(cop_router)
 app.include_router(s2_router)  # Sigtoc embedded (Decision 3a); also runs standalone via sigtoc.api:app
 
@@ -78,3 +89,23 @@ app.include_router(s2_router)  # Sigtoc embedded (Decision 3a); also runs standa
 @app.get("/v1/health")
 def health():
     return {"status": "ok", "service": "coptoc"}
+
+
+# The native workspace uses the same origin as the API, avoiding a second web server.
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+class NoCacheHtmlStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if path.endswith(".html") or path in ("", "/") or "html" in response.headers.get("content-type", ""):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+_web_dist = Path(__file__).resolve().parents[2] / "web" / "dist"
+if (_web_dist / "index.html").is_file():
+    app.mount("/console", NoCacheHtmlStaticFiles(directory=_web_dist, html=True), name="workspace-console")
+    if (_web_dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=_web_dist / "assets"), name="workspace-assets")
