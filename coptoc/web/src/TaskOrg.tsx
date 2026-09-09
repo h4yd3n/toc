@@ -4,7 +4,13 @@ import { useState } from 'react'
 import { MiniBar, Question } from './Headline'
 import type { Person, Selection, Team } from './types'
 
-export function TaskOrg({ teams, people, onSelect, sel }: { teams: Team[]; people: Person[]; onSelect: (s: Selection) => void; sel: Selection }) {
+export function TaskOrg({ teams, people, onSelect, sel, onOpenWorkspace }: {
+  teams: Team[];
+  people: Person[];
+  onSelect: (s: Selection) => void;
+  sel: Selection;
+  onOpenWorkspace?: (section: 'S1', tab?: string, record?: string) => void;
+}) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const roots = teams.filter(t => !t.parent_id && teams.some(c => c.parent_id === t.id))
   if (roots.length === 0) return null
@@ -14,7 +20,19 @@ export function TaskOrg({ teams, people, onSelect, sel }: { teams: Team[]; peopl
   const Row = ({ t, depth }: { t: Team; depth: number }) => {
     const s = stat(t.id); const ch = kids(t.id); const isOpen = open[t.id] ?? depth === 0
     return (<>
-      <li className={`row org d${depth} ${sel?.type === 'location' && sel.id === t.location_id ? 'active' : ''}`} onClick={() => ch.length ? setOpen(o => ({ ...o, [t.id]: !isOpen })) : onSelect({ type: 'location', id: t.location_id })} title={t.name}>
+      <li
+        className={`row org d${depth} ${sel?.type === 'location' && sel.id === t.location_id ? 'active' : ''}`}
+        onClick={() => {
+          if (ch.length) {
+            setOpen(o => ({ ...o, [t.id]: !isOpen }))
+          } else if (onOpenWorkspace) {
+            onOpenWorkspace('S1', 'personnel', t.name)
+          } else {
+            onSelect({ type: 'location', id: t.location_id })
+          }
+        }}
+        title={`${t.name}${!ch.length && onOpenWorkspace ? ' · click to open roster in S1 workspace' : ''}`}
+      >
         <span className="tw dim">{ch.length ? (isOpen ? '▾' : '▸') : ''}</span>
         <span className="short mono">{t.short ?? t.name}</span>
         <span className="name dim">{depth === 0 ? t.name : t.equipment ?? t.function}</span>

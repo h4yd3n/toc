@@ -7,13 +7,12 @@ import { AreaPanel } from './Area'
 import { IntsumPanel } from './Intsum'
 import { DistributionBox, OperationPanel } from './Operation'
 import { FlashStrip, WarningsSection } from './Warnings'
-import { ImportDrawer, PlanningPanel } from './Planning'
+import { PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
 import { S4Headline, S4Panel, S6Headline, S6Panel } from './Sections'
 import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
-import { UploadDrawer } from './Upload'
 import { TaskingBox } from './Taskings'
 import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
 import { ContextRow, RollCallStrip } from './Strips'
@@ -152,9 +151,6 @@ export default function App() {
   const [showIntsum, setShowIntsum] = useState(false)
   const [opId, setOpId] = useState<string | null>(null)
   const [showPlan, setShowPlan] = useState(false)
-  const [showImport, setShowImport] = useState(false)
-  const [upload, setUpload] = useState<'S1' | 'S3' | 'S4' | 'S6' | null>(null)
-  const [s3Tasks, setS3Tasks] = useState(false)
   const [briefReload, setBriefReload] = useState(0)
   const [cov, setCov] = useState<Coverage | null>(null)
   const [cmd, setCmd] = useState(false)
@@ -186,12 +182,37 @@ export default function App() {
   const onScrub = (t: number | null, pinned?: boolean) => setScrub(prev => pinned ? (prev?.pinned && t != null && Math.abs(prev.t - t) < 1 ? null : t == null ? null : { t, pinned: true }) : prev?.pinned ? prev : t == null ? null : { t, pinned: false })
 
   const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
-  useEffect(() => { api.session.role = role; load() }, [role, load])
-  useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}); api.getCoverage().then(setCov).catch(() => {}) }, [briefReload])
-  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } if (e.key === 'Escape') { setDraw(null); setDrawMenu(false); setOverlayMenuOpen(false) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) }
+      if (e.key === 'Escape') {
+        setDraw(null); setDrawMenu(false); setOverlayMenuOpen(false); setShowDefcon(false); setShowSettings(false);
+        setSel(null); setOpId(null); setShowIntsum(false); setShowPlan(false); setAreaId(null); setAreaMode(null); setShowBrief(false); setCmd(false);
+        if (!isCop && !workspaceDetail) navigate({ page: 'cop' })
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k)
+  }, [isCop, workspaceDetail, navigate])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
+
+  const handleRailClick = (sec: SectionCode) => {
+    if (!isCop) {
+      if (destination.section === sec) {
+        navigate({ page: 'cop' })
+      } else {
+        navigate({ page: 'workspace', section: sec, tab: 'overview' })
+      }
+      return
+    }
+    if (sec === 'S1') setLeftOpen(v => !v)
+    else if (sec === 'S3') { setS3Open(v => !v); if (!s3Open) setOverlay('S3') }
+    else if (sec === 'S2') toggleRight('right')
+    else if (sec === 'S4') toggleRight('s4')
+    else if (sec === 'S6') toggleRight('s6')
+  }
 
   useEffect(() => {
     let alive = true
@@ -200,6 +221,11 @@ export default function App() {
     void refresh(); const interval = window.setInterval(refresh, 15000)
     return () => { alive = false; clearInterval(interval) }
   }, [userId, briefReload])
+
+  useEffect(() => {
+    api.listUsers().then(r => setUsers(r.users)).catch(() => {})
+    api.getCoverage().then(setCov).catch(() => {})
+  }, [briefReload])
 
   const released = (section: SectionCode) => {
     const ids = new Set(workBoard?.assignments.filter(a => a.section === section).map(a => a.id))
@@ -243,12 +269,12 @@ export default function App() {
     {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
     {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
     {areaMode && snap && <RatedAreaPanel mode={areaMode} areas={snap.areas ?? []} locations={snap.locations} role={role} busy={busy} act={act} onClose={() => setAreaMode(null)} onSelect={s => { setSel(s); setAreaMode(null) }} />}
-    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && !areaMode && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} onArea={m => { setAreaMode(m); setShowBrief(false) }} />}
+    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && !areaMode && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} onArea={m => { setAreaMode(m); setShowBrief(false) }} onOpenWorkspace={openWorkspace} />}
     {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
   </>
 
   return (
-    <div className={`wall ${isCop ? '' : 'is-workspace'} ${!s3Open && !logOpen ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${isCop ? '' : 'is-workspace bottom-closed'} ${(!s3Open && !logOpen) || !isCop ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
@@ -295,24 +321,20 @@ export default function App() {
       {cmd && snap && <CommandBar commands={buildCommands(snap, { select: setSel, open: openPanel2 })} onClose={() => setCmd(false)} />}
 
       <nav className="rail rail-left">
-        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
-        {sectionOn('S3') && <button className={`rail-btn ${s3Open ? 'on' : ''}`} onClick={() => { setS3Open(v => !v); if (!s3Open) setOverlay('S3') }} title={`${sectionCode('S3')} ${sectionTitle('S3', 'OPERATIONS')}`}>{sectionLabel('S3')}{s && ((s.movement_risks ?? 0) > 0 ? badge(s.movement_risks, 'red', 'movement risks') : inbox('S3') ? badge(inbox('S3'), 'amber', 'taskings S3 owes') : badge(s.upcoming_events, 'dim', 'upcoming events'))}</button>}
-        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
+        {sectionOn('S1') && <button className={`rail-btn ${(!isCop && destination.section === 'S1') || (isCop && leftOpen) ? 'on' : ''}`} onClick={() => handleRailClick('S1')} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
+        {sectionOn('S3') && <button className={`rail-btn ${(!isCop && destination.section === 'S3') || (isCop && s3Open) ? 'on' : ''}`} onClick={() => handleRailClick('S3')} title={`${sectionCode('S3')} ${sectionTitle('S3', 'OPERATIONS')}`}>{sectionLabel('S3')}{s && ((s.movement_risks ?? 0) > 0 ? badge(s.movement_risks, 'red', 'movement risks') : inbox('S3') ? badge(inbox('S3'), 'amber', 'taskings S3 owes') : badge(s.upcoming_events, 'dim', 'upcoming events'))}</button>}
+        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => isCop ? setLeftOpen(true) : navigate({ page: 'workspace', section: 'S1', tab: 'accountability' })} title="open roll calls">S1</button>}
       </nav>
       <nav className="rail rail-right">
-        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
-        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
-        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
-        <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => setLogOpen(v => !v)} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
+        {sectionOn('S2') && <button className={`rail-btn ${(!isCop && destination.section === 'S2') || (isCop && rightPanel === 'right') ? 'on' : ''}`} onClick={() => handleRailClick('S2')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
+        {sectionOn('S4') && <button className={`rail-btn ${(!isCop && destination.section === 'S4') || (isCop && rightPanel === 's4') ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => handleRailClick('S4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
+        {sectionOn('S6') && <button className={`rail-btn ${(!isCop && destination.section === 'S6') || (isCop && rightPanel === 's6') ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => handleRailClick('S6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
+        <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => { if (!isCop) navigate({ page: 'cop' }); setLogOpen(v => !v) }} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
       </nav>
-      <aside className={`left ${leftOpen ? 'open' : ''}`} inert={!isCop || !leftOpen}>
+      <aside className={`left ${isCop && leftOpen ? 'open' : ''}`} inert={!isCop || !leftOpen}>
         <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>
           <button className="mini" onClick={() => openWorkspace('S1')} title="Open S1 Personnel Workspace">WORKSPACE →</button>
-          {can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}
-          {['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}
         </PanelHead>
-        {upload === 'S1' && <UploadDrawer section="S1" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-        {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
         {s && <Headline big={s.present.toLocaleString()} label="at post" sub={`of ${s.total_people.toLocaleString()} · ${s.traveling} traveling · ${s.checked_in_fresh} checked in`} pct={(100 * s.present) / Math.max(1, s.total_people)} tone="blue" />}
         {s && <Tiles items={[
           { v: s.unaccounted, l: 'UNACCOUNTED', tone: 'red', hide: s.unaccounted === 0, title: 'open roll calls: not yet accounted for' }, { v: s.unreachable, l: 'UNREACHABLE', tone: 'red', hide: s.unreachable === 0 },
@@ -332,7 +354,7 @@ export default function App() {
               </li>))}
           </ul>
         </>}
-        {snap && <TaskOrg teams={snap.teams ?? []} people={snap.people ?? []} onSelect={setSel} sel={sel} />}
+        {snap && <TaskOrg teams={snap.teams ?? []} people={snap.people ?? []} onSelect={setSel} sel={sel} onOpenWorkspace={openWorkspace} />}
         <Question q="Where we are" count={snap?.locations?.length ?? 0}>{can('S3', 'edit') && <button className="mini" title="Add a site — a CP the TOC jumped to, a new office" onClick={e => { e.stopPropagation(); setAddSite(v => !v) }}>{addSite ? '×' : '+ SITE'}</button>}</Question>
         {addSite && <SiteForm busy={busy} act={act} onDone={() => setAddSite(false)} />}
         <ul className="list">
@@ -364,104 +386,127 @@ export default function App() {
         {released('S1')}
       </aside>
 
-      <main className="center" inert={!isCop} onClick={() => { setShowSettings(false); setOverlayMenuOpen(false) }}>
-        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
-        <div className="ovbar" onClick={e => e.stopPropagation()}>
-          {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
-          {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
-          {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
-          {drawMenu && !draw && <div className="drawmenu">
-            {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
-            {catalog.filter(t => t.section === overlay).length === 0 && <div className="dim small" style={{ padding: 6 }}>Nothing in the catalog for {overlay}.</div>}
-          </div>}
-          {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
-          {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
-          <span className="ovsep" />
-          <button className={`ov ov-layers-btn ${overlayMenuOpen ? 'on' : ''}`} title="Toggle map layers and display style" onClick={e => { e.stopPropagation(); setOverlayMenuOpen(v => !v); setDrawMenu(false) }}>
-            OVERLAYS ▾
-          </button>
-          {overlayMenuOpen && (
-            <div className="overlay-dropdown" onClick={e => e.stopPropagation()}>
-              <div className="ov-dd-head">
-                <span>MAP OVERLAYS</span>
-                <div className="ov-dd-quick">
-                  <button className="ov-dd-btn" onClick={() => setLayers({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: true, s6: true })}>ALL ON</button>
-                  <button className="ov-dd-btn" onClick={() => setLayers({ locations: false, travelers: false, threats: false, routes: false, events: false, residences: false, s4: false, s6: false })}>ALL OFF</button>
-                </div>
-              </div>
-              <div className="ov-dd-style">
-                <span className="ov-dd-style-label">THREAT RADII</span>
-                <div className="ov-dd-style-btns">
-                  <button className={`ov-dd-btn ${!outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(false)}>FILL + OUTLINE</button>
-                  <button className={`ov-dd-btn ${outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(true)}>OUTLINE ONLY</button>
-                </div>
-              </div>
-              <div className="ov-dd-list">
-                {([
-                  { key: 'locations', label: 'Sites & Units', icon: '◆', desc: 'HQ, CPs, FOBs, Airfields' },
-                  { key: 'travelers', label: 'Moving Personnel', icon: '●', desc: 'Personnel in transit & VIPs' },
-                  { key: 'routes', label: 'Routes & Convoys', icon: '↗', desc: 'Active & planned movement arcs' },
-                  { key: 'threats', label: 'Threats & Hazards', icon: '⚠', desc: 'Observed threats & danger radii' },
-                  { key: 'events', label: 'Operations & Events', icon: '★', desc: 'Key exercises, gunnery, meetings' },
-                  { key: 's4', label: 'S4 Logistics Status', icon: '▦', desc: 'Supply health chips on sites' },
-                  { key: 's6', label: 'S6 Signal & Comms', icon: '⚡', desc: 'PACE net & system health chips' },
-                  { key: 'residences', label: 'Restricted Residences', icon: '⚿', desc: 'Personal residences (gated)' },
-                ] as const).map(item => {
-                  if (item.key === 's4' && !sectionOn('S4')) return null
-                  if (item.key === 's6' && !sectionOn('S6')) return null
-                  const on = layers[item.key]
-                  const denied = item.key === 'residences' && snap?.restricted_denied
-                  return (
-                    <div
-                      key={item.key}
-                      className={`ov-dd-item ${on ? 'on' : 'off'} ${denied ? 'denied' : ''}`}
-                      onClick={() => {
-                        if (denied) return
-                        toggle(item.key)
-                      }}
-                    >
-                      <span className={`ov-dd-check ${on ? 'checked' : ''}`}>{on ? '✓' : ''}</span>
-                      <span className="ov-dd-icon">{item.icon}</span>
-                      <div className="ov-dd-info">
-                        <span className="ov-dd-name">{item.label}{denied ? ' · DENIED' : ''}</span>
-                        <span className="ov-dd-desc">{item.desc}</span>
-                      </div>
+      <main className="center" onClick={() => { setShowSettings(false); setOverlayMenuOpen(false) }}>
+        {isCop ? (
+          <>
+            <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
+            <div className="ovbar" onClick={e => e.stopPropagation()}>
+              {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
+              {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
+              {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
+              {drawMenu && !draw && <div className="drawmenu">
+                {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
+                {catalog.filter(t => t.section === overlay).length === 0 && <div className="dim small" style={{ padding: 6 }}>Nothing in the catalog for {overlay}.</div>}
+              </div>}
+              {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
+              {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
+              <span className="ovsep" />
+              <button className={`ov ov-layers-btn ${overlayMenuOpen ? 'on' : ''}`} title="Toggle map layers and display style" onClick={e => { e.stopPropagation(); setOverlayMenuOpen(v => !v); setDrawMenu(false) }}>
+                OVERLAYS ▾
+              </button>
+              {overlayMenuOpen && (
+                <div className="overlay-dropdown" onClick={e => e.stopPropagation()}>
+                  <div className="ov-dd-head">
+                    <span>MAP OVERLAYS</span>
+                    <div className="ov-dd-quick">
+                      <button className="ov-dd-btn" onClick={() => setLayers({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: true, s6: true })}>ALL ON</button>
+                      <button className="ov-dd-btn" onClick={() => setLayers({ locations: false, travelers: false, threats: false, routes: false, events: false, residences: false, s4: false, s6: false })}>ALL OFF</button>
                     </div>
-                  )
-                })}
-              </div>
+                  </div>
+                  <div className="ov-dd-style">
+                    <span className="ov-dd-style-label">THREAT RADII</span>
+                    <div className="ov-dd-style-btns">
+                      <button className={`ov-dd-btn ${!outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(false)}>FILL + OUTLINE</button>
+                      <button className={`ov-dd-btn ${outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(true)}>OUTLINE ONLY</button>
+                    </div>
+                  </div>
+                  <div className="ov-dd-list">
+                    {([
+                      { key: 'locations', label: 'Sites & Units', icon: '◆', desc: 'HQ, CPs, FOBs, Airfields' },
+                      { key: 'travelers', label: 'Moving Personnel', icon: '●', desc: 'Personnel in transit & VIPs' },
+                      { key: 'routes', label: 'Routes & Convoys', icon: '↗', desc: 'Active & planned movement arcs' },
+                      { key: 'threats', label: 'Threats & Hazards', icon: '⚠', desc: 'Observed threats & danger radii' },
+                      { key: 'events', label: 'Operations & Events', icon: '★', desc: 'Key exercises, gunnery, meetings' },
+                      { key: 's4', label: 'S4 Logistics Status', icon: '▦', desc: 'Supply health chips on sites' },
+                      { key: 's6', label: 'S6 Signal & Comms', icon: '⚡', desc: 'PACE net & system health chips' },
+                      { key: 'residences', label: 'Restricted Residences', icon: '⚿', desc: 'Personal residences (gated)' },
+                    ] as const).map(item => {
+                      if (item.key === 's4' && !sectionOn('S4')) return null
+                      if (item.key === 's6' && !sectionOn('S6')) return null
+                      const on = layers[item.key]
+                      const denied = item.key === 'residences' && snap?.restricted_denied
+                      return (
+                        <div
+                          key={item.key}
+                          className={`ov-dd-item ${on ? 'on' : 'off'} ${denied ? 'denied' : ''}`}
+                          onClick={() => {
+                            if (denied) return
+                            toggle(item.key)
+                          }}
+                        >
+                          <span className={`ov-dd-check ${on ? 'checked' : ''}`}>{on ? '✓' : ''}</span>
+                          <span className="ov-dd-icon">{item.icon}</span>
+                          <div className="ov-dd-info">
+                            <span className="ov-dd-name">{item.label}{denied ? ' · DENIED' : ''}</span>
+                            <span className="ov-dd-desc">{item.desc}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        {isCop && recordDetails}
+            {recordDetails}
+          </>
+        ) : (
+          snap && (
+            <Workspaces
+              key={userId}
+              destination={destination}
+              navigate={next => { setWorkspaceDetail(false); navigate(next) }}
+              snap={snap}
+              role={role}
+              enabled={[...enabledSections]}
+              can={can}
+              act={act}
+              busy={busy}
+              reload={briefReload}
+              onReload={() => setBriefReload(n => n + 1)}
+              onSelect={s => { setSel(s); setWorkspaceDetail(true) }}
+              onArea={id => { setAreaId(id); setWorkspaceDetail(true) }}
+              onIntsum={() => { setShowIntsum(true); setWorkspaceDetail(true) }}
+              onOp={id => { setOpId(id); setWorkspaceDetail(true) }}
+              siteForm={<SiteForm busy={busy} act={act} onDone={() => setBriefReload(n=>n+1)} />}
+              onClose={() => navigate({ page: 'cop' })}
+            />
+          )
+        )}
+        {!isCop && !snap && <div className="loading">LOADING WORKSPACE…</div>}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
-        {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
+        {isCop && !snap && !err && <div className="loading">LOADING PICTURE…</div>}
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
-      <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'settings'}>
+      <aside className={`right wide ${isCop && rightPanel === 'settings' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'settings'}>
         <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
-      <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's4'}>
+      <aside className={`right ${isCop && rightPanel === 's4' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's4'}>
         <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => openWorkspace('S4')} title="Open S4 Logistics Workspace">WORKSPACE →</button>
-          {can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}
         </PanelHead>
-        {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <S4Headline board={snap?.s4} owed={inbox('S4')} />
         <EstimateLine e={snap?.estimates?.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
         {taskingsFor('S4')}
         <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
         {released('S4')}
       </aside>
-      <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's6'}>
+      <aside className={`right ${isCop && rightPanel === 's6' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's6'}>
         <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => openWorkspace('S6')} title="Open S6 Signal Workspace">WORKSPACE →</button>
-          {can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}
         </PanelHead>
-        {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <S6Headline board={snap?.s6} owed={inbox('S6')} />
         <EstimateLine e={snap?.estimates?.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
         {taskingsFor('S6')}
@@ -473,10 +518,10 @@ export default function App() {
         </>}
         {released('S6')}
       </aside>
-      <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'right'}>
+      <aside className={`right ${isCop && rightPanel === 'right' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'right'}>
         <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => openWorkspace('S2')} title="Open S2 Intelligence Workspace">WORKSPACE →</button>
-          <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
+          <button className="mini" onClick={() => openWorkspace('S2', 'products')} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
         {cov && <Headline big={`${cov.avg_coverage_pct}%`} label="collection coverage" sub={`${cov.fully_covered} of ${cov.requirements} requirements fully covered · ${cov.gaps.length} indicator${cov.gaps.length === 1 ? '' : 's'} nobody collects`} pct={cov.avg_coverage_pct} tone={toneFor(cov.avg_coverage_pct, 90, 70)} />}
@@ -562,9 +607,8 @@ export default function App() {
           <div className="s3">
             <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>
               <button className="mini" onClick={() => openWorkspace('S3')} title="Open S3 Operations Workspace">WORKSPACE →</button>
-              {can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}
-              <button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings?.per_section?.S3?.inbox}</i>}</button>
-              <button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button>
+              <button className="mini" onClick={() => openWorkspace('S3', 'tasks')} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings?.per_section?.S3?.inbox}</i>}</button>
+              <button className="mini" onClick={() => openWorkspace('S3', 'planning')} title="the next 90 days by week, coverage per event">PLAN 90d</button>
               {s && <Tiles inline items={[
                 { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
                 { v: (snap?.trips ?? []).filter(t => t.status === 'active').length, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
@@ -573,8 +617,6 @@ export default function App() {
                 { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
               ]} />}
             </PanelHead>
-            {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
-            {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
             <EstimateLine e={snap?.estimates?.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
             <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
           </div>
@@ -593,9 +635,6 @@ export default function App() {
           </div>
         )}
       </footer>
-      {!isCop && !snap && <main className="workspace"><p role="status">Loading your workspace…</p></main>}
-      {!isCop && snap && <div inert={workspaceDetail}><Workspaces key={userId} destination={destination} navigate={next => { setWorkspaceDetail(false); navigate(next) }} snap={snap} role={role} enabled={[...enabledSections]} can={can} act={act} busy={busy} reload={briefReload}
-        onSelect={s => { setSel(s); setWorkspaceDetail(true) }} onArea={id => { setAreaId(id); setWorkspaceDetail(true) }} onIntsum={() => { setShowIntsum(true); setWorkspaceDetail(true) }} onOp={id => { setOpId(id); setWorkspaceDetail(true) }} siteForm={<SiteForm busy={busy} act={act} onDone={() => setBriefReload(n=>n+1)} />} /></div>}
       {!isCop && workspaceDetail && <div className="workspace-dialog" role="dialog" aria-modal="true" aria-label="Record details" onKeyDown={e=>{if(e.key==='Escape')setWorkspaceDetail(false)}}><button className="workspace-dialog-backdrop" aria-label="Close record" onClick={() => { setWorkspaceDetail(false); setOpId(null); setAreaId(null); setShowIntsum(false) }} />{recordDetails}</div>}
       {!isCop && err && <div className="workspace-toast" role="alert"><span>{err}</span><button onClick={()=>setErr(null)}>Dismiss</button></div>}
       {!isCop && busy && <div className="workspace-toast" role="status">{busy}…</div>}
@@ -652,9 +691,10 @@ function SiteForm({ busy, act, onDone, site }: { busy: string | null; act: (l: s
 }
 
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
-function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, role, onOp }: {
+function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, role, onOp, onOpenWorkspace }: {
   sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
   act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void; onArea?: (m: AreaMode) => void; role: Role; onOp: (id: string) => void
+  onOpenWorkspace?: (section: SectionCode, tab?: string, record?: string) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -738,7 +778,6 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, ro
   }
   if (sel.type === 'location') {
     const l = byId.loc.get(sel.id); if (!l) return null
-    const teams = snap.teams.filter(t => t.location_id === l.id)
     const visiting = snap.people.filter(p => p.location_id === l.id && p.home_location_id !== l.id)
     return (
       <div className="detail" onClick={e => e.stopPropagation()}>
@@ -768,15 +807,29 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, ro
           </>}
         </div>
         {editing && <SiteForm busy={busy} act={act} site={l} onDone={() => setEditing(false)} />}
-        {visiting.length > 0 && <><div className="section-label">VISITING</div>
-          <ul className="people">{visiting.map(p => <PersonRow key={p.id} p={p} onClick={() => onSelect({ type: 'person', id: p.id })} />)}</ul></>}
-        {teams.map(t => {
-          const members = snap.people.filter(p => p.team_id === t.id); const away = members.filter(p => p.status === 'traveling').length
-          return (<div key={t.id} className="team">
-            <div className="team-head">{t.is_security && <span className="shield">⛨</span>}{t.name}<span className="dim"> · {members.length - away}/{members.length}{t.is_security ? ` · ${members.filter(p => p.on_shift && p.status !== 'traveling').length} on shift` : ''}</span></div>
-            <ul className="people">{members.map(p => <PersonRow key={p.id} p={p} onClick={() => onSelect({ type: 'person', id: p.id })} />)}</ul>
-          </div>)
-        })}
+        <div className="location-workspace-actions">
+          <button className="ws-primary loc-roster-btn" onClick={() => onOpenWorkspace?.('S1', 'personnel', l.name)}>
+            VIEW ROSTER IN S1 WORKSPACE ({l.present}/{l.assigned}) →
+          </button>
+          <div className="location-ws-subactions">
+            <button className="mini" onClick={() => onOpenWorkspace?.('S4', 'inventory')}>
+              S4 LOGISTICS →
+            </button>
+            <button className="mini" onClick={() => onOpenWorkspace?.('S6', 'systems')}>
+              S6 COMMS →
+            </button>
+          </div>
+        </div>
+        {visiting.filter(p => p.is_vip).length > 0 && (
+          <>
+            <div className="section-label">VISITING VIPS</div>
+            <ul className="people">
+              {visiting.filter(p => p.is_vip).map(p => (
+                <PersonRow key={p.id} p={p} onClick={() => onSelect({ type: 'person', id: p.id })} />
+              ))}
+            </ul>
+          </>
+        )}
       </div>)
   }
   if (sel.type === 'person') {
