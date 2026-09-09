@@ -32,7 +32,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
   const t0 = now
   const watchStart = snap?.watch ? +new Date(snap.watch.started_at) : t0 - 8 * HOUR
   const tBack = Math.min(watchStart, t0 - HOUR)   // never a zero-width left half at the top of a watch
-  const lastEnd = Math.max(...(snap?.events.map(e => +new Date(e.end_at)) ?? []), ...(snap?.trips.filter(t => !t.event_id).map(t => +new Date(t.return_at)) ?? []), t0 + MIN_DAYS * DAY)
+  const lastEnd = Math.max(...((snap?.events ?? []).map(e => +new Date(e.end_at))), ...((snap?.trips ?? []).filter(t => !t.event_id).map(t => +new Date(t.return_at))), t0 + MIN_DAYS * DAY)
   const tFar = Math.min(t0 + MAX_DAYS * DAY, lastEnd + 2 * DAY)
   const tNear = Math.min(t0 + NEAR_H * HOUR, tFar)
   const days = Math.max(1, (tFar - t0) / DAY)
@@ -58,12 +58,12 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
     return tNear + ((c - wBack - wNear) / Math.max(1, wFar)) * (tFar - tNear)
   }
 
-  const tripsOf = (e: CopEvent) => snap?.trips.filter(t => t.event_id === e.id).length ?? 0
+  const tripsOf = (e: CopEvent) => (snap?.trips ?? []).filter(t => t.event_id === e.id).length
   const spans: Span[] = !snap ? [] : [
-    ...snap.events.map((e: CopEvent): Span => ({ id: e.id, kind: 'event', label: `★ ${e.name}`, sub: e.venue_name, start: +new Date(e.start_at), end: +new Date(e.end_at), sel: { type: 'event', id: e.id },
+    ...(snap.events ?? []).map((e: CopEvent): Span => ({ id: e.id, kind: 'event', label: `★ ${e.name}`, sub: e.venue_name, start: +new Date(e.start_at), end: +new Date(e.end_at), sel: { type: 'event', id: e.id },
       cls: `ev ${e.status === 'active' ? 'live' : ''} ${e.coverage && e.coverage.gap > 0 ? 'gap' : ''} ${e.threat_ids_in_area.length ? 'threat' : ''}`,
       title: `${e.name} · ${e.venue_name} · ${e.attendee_count} attending · ${e.vip_count} VIP · ${tripsOf(e)} trips` + (e.coverage ? ` · cover ${e.coverage.assigned}/${e.coverage.required}` : '') + (e.operation ? ` · OP ${e.operation.tasks_done}/${e.operation.tasks_total}` : '') })),
-    ...snap.trips.filter(t => !t.event_id).map((t: Trip): Span => ({ id: t.id, kind: 'trip', label: `${t.is_vip ? '★ ' : ''}${t.person_short ?? t.person_name.split(' ')[0]} → ${t.dest_name.split(',')[0]}`, sub: t.current_leg ? `${LEG_ICON[t.current_leg.kind]} ${t.current_leg.label || t.current_leg.to_name}` : t.purpose, start: +new Date(t.depart_at), end: +new Date(t.return_at), sel: { type: 'person', id: t.person_id },
+    ...(snap.trips ?? []).filter(t => !t.event_id).map((t: Trip): Span => ({ id: t.id, kind: 'trip', label: `${t.is_vip ? '★ ' : ''}${t.person_short ?? t.person_name.split(' ')[0]} → ${t.dest_name.split(',')[0]}`, sub: t.current_leg ? `${LEG_ICON[t.current_leg.kind]} ${t.current_leg.label || t.current_leg.to_name}` : t.purpose, start: +new Date(t.depart_at), end: +new Date(t.return_at), sel: { type: 'person', id: t.person_id },
       cls: `tr ${t.status} ${t.is_vip ? 'vip' : ''}`, title: `${t.person_name} · ${t.origin_name} → ${t.dest_name} · ${t.purpose}` })),
   ].filter(s => s.end >= tBack && s.start <= tFar).sort((a, b) => a.start - b.start)
 

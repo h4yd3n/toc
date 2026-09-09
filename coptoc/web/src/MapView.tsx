@@ -151,15 +151,15 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     // threats: on the COP and the S2 overlay in full, faded with age; a quarter-strength context under the other sections
     const threats = m.getSource('threats') as maplibregl.GeoJSONSource
     const tWeight = cop || s2 ? 1 : DIM
-    threats.setData({ type: 'FeatureCollection', features: layers.threats ? snapshot.threats.filter(t => cut == null || +new Date(t.observed_at) >= cut).map(t => { const a = ageFactor(t.observed_at, now) * tWeight; return {
+    threats.setData({ type: 'FeatureCollection', features: layers.threats ? (snapshot.threats ?? []).filter(t => cut == null || +new Date(t.observed_at) >= cut).map(t => { const a = ageFactor(t.observed_at, now) * tWeight; return {
       type: 'Feature', properties: { id: t.id, color: SEV_COLOR[t.severity], fo: outlineOnly ? 0 : 0.06 + 0.16 * a, lo: 0.3 + 0.65 * a, confirmed: t.confirmed_links.length > 0 },
       geometry: { type: 'Polygon', coordinates: [circle(t.lat, t.lon, t.radius_km)] },
     } }) : [] })
     // confirmed and suggested links, threat → site or person, on the S2 overlay
     const links = m.getSource('links') as maplibregl.GeoJSONSource
-    const at = (type: string, id: string): [number, number] | null => { if (type === 'location') { const l = snapshot.locations.find(x => x.id === id); return l ? [l.lon, l.lat] : null } const p = snapshot.people.find(x => x.id === id); return p ? [p.lon, p.lat] : null }
+    const at = (type: string, id: string): [number, number] | null => { if (type === 'location') { const l = (snapshot.locations ?? []).find(x => x.id === id); return l ? [l.lon, l.lat] : null } const p = (snapshot.people ?? []).find(x => x.id === id); return p ? [p.lon, p.lat] : null }
     const linkFeatures: { type: 'Feature'; properties: Record<string, unknown>; geometry: { type: 'LineString'; coordinates: [number, number][] } }[] = []
-    if (s2 || cop) for (const t of snapshot.threats) {
+    if (s2 || cop) for (const t of (snapshot.threats ?? [])) {
       if (cut != null && +new Date(t.observed_at) < cut) continue
       for (const l of t.confirmed_links) { const to = at(l.target_type, l.target_id); if (to) linkFeatures.push({ type: 'Feature', properties: { confirmed: true, lo: s2 ? 0.9 : 0.5 }, geometry: { type: 'LineString', coordinates: [[t.lon, t.lat], to] } }) }
       if (s2) for (const sg of t.suggested_targets) if (!t.confirmed_links.some(c => c.target_id === sg.target_id)) { const to = at(sg.target_type, sg.target_id); if (to) linkFeatures.push({ type: 'Feature', properties: { confirmed: false, lo: 0.45 }, geometry: { type: 'LineString', coordinates: [[t.lon, t.lat], to] } }) }
@@ -189,7 +189,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     m.getCanvas().style.cursor = d ? 'crosshair' : ''
     if (d) m.doubleClickZoom.disable(); else m.doubleClickZoom.enable()
     const incidents = m.getSource('incidents') as maplibregl.GeoJSONSource
-    incidents.setData({ type: 'FeatureCollection', features: snapshot.incidents.filter(i => i.status === 'open').map(i => ({
+    incidents.setData({ type: 'FeatureCollection', features: (snapshot.incidents ?? []).filter(i => i.status === 'open').map(i => ({
       type: 'Feature', properties: { id: i.id }, geometry: { type: 'Polygon', coordinates: [circle(i.lat, i.lon, i.radius_km)] },
     })) })
     // movements, leg by leg: what is not moving at the scrubbed moment dims; under other overlays everything that moves is context
@@ -220,18 +220,18 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     const movements = snapshot.movements ?? []
     const activeAt = (mv: Movement, t: number) => (mv.depart_at ? +new Date(mv.depart_at) <= t : true) && +new Date(mv.return_at) >= t
     const movementOf = (pid: string) => movements.find(mv => mv.person_ids.includes(pid))
-    const inbound = (lid: string) => movements.filter(mv => mv.kind === 'shipment' && snapshot.locations.find(l => l.id === lid && l.name === mv.dest_name))
+    const inbound = (lid: string) => movements.filter(mv => mv.kind === 'shipment' && (snapshot.locations ?? []).find(l => l.id === lid && l.name === mv.dest_name))
     // what dims under this overlay: a person is S1's and S3's, an event S3's, a site everyone's base
     const dimPerson = (p: Person) => (overlay === 'S2' || overlay === 'S4' || overlay === 'S6') || (scrub != null && (() => { const mv = movementOf(p.id); return mv ? !activeAt(mv, scrub) : false })())
     const dimEvent = (e: CopEvent) => (overlay !== 'COP' && overlay !== 'S3') || (scrub != null && !(+new Date(e.start_at) <= scrub && +new Date(e.end_at) >= scrub))
     const pts: Point[] = []
-    if (layers.locations) for (const l of snapshot.locations) {
+    if (layers.locations) for (const l of (snapshot.locations ?? [])) {
       if (l.sensitivity === 'restricted' && !layers.residences) continue
       pts.push({ kind: 'location', id: l.id, lat: l.lat, lon: l.lon, loc: l })
     }
-    if (layers.travelers) for (const p of snapshot.people) if (p.status === 'traveling')
+    if (layers.travelers) for (const p of (snapshot.people ?? [])) if (p.status === 'traveling')
       pts.push({ kind: 'person', id: p.id, lat: p.lat, lon: p.lon, person: p })
-    if (layers.events) for (const e of snapshot.events) if (!e.venue_location_id)
+    if (layers.events) for (const e of (snapshot.events ?? [])) if (!e.venue_location_id)
       pts.push({ kind: 'event', id: e.id, lat: e.venue_lat, lon: e.venue_lon, event: e })
 
     const clusters: Cluster[] = []
@@ -378,12 +378,12 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
   useEffect(() => {
     const m = map.current; if (!m || !snapshot || !selection) return
     let target: { lat: number; lon: number; zoom: number } | null = null
-    if (selection.type === 'location') { const l = snapshot.locations.find(x => x.id === selection.id); if (l) target = { lat: l.lat, lon: l.lon, zoom: 11 } }
-    if (selection.type === 'person') { const p = snapshot.people.find(x => x.id === selection.id); if (p) target = { lat: p.lat, lon: p.lon, zoom: 9 } }
-    if (selection.type === 'incident') { const i = snapshot.incidents.find(x => x.id === selection.id); if (i) target = { lat: i.lat, lon: i.lon, zoom: 12 } }
-    if (selection.type === 'event') { const e = snapshot.events.find(x => x.id === selection.id); if (e) target = { lat: e.venue_lat, lon: e.venue_lon, zoom: 11 } }
-    if (selection.type === 'threat') { const t = snapshot.threats.find(x => x.id === selection.id); if (t) target = { lat: t.lat, lon: t.lon, zoom: Math.max(6, 11 - Math.log2(Math.max(t.radius_km, 1))) } }
-    if (selection.type === 'graphic') { const g = snapshot.graphics?.find(x => x.id === selection.id); if (g) target = { lat: g.center[1], lon: g.center[0], zoom: g.kind === 'point' ? 12 : 10 } }
+    if (selection.type === 'location') { const l = (snapshot.locations ?? []).find(x => x.id === selection.id); if (l) target = { lat: l.lat, lon: l.lon, zoom: 11 } }
+    if (selection.type === 'person') { const p = (snapshot.people ?? []).find(x => x.id === selection.id); if (p) target = { lat: p.lat, lon: p.lon, zoom: 9 } }
+    if (selection.type === 'incident') { const i = (snapshot.incidents ?? []).find(x => x.id === selection.id); if (i) target = { lat: i.lat, lon: i.lon, zoom: 12 } }
+    if (selection.type === 'event') { const e = (snapshot.events ?? []).find(x => x.id === selection.id); if (e) target = { lat: e.venue_lat, lon: e.venue_lon, zoom: 11 } }
+    if (selection.type === 'threat') { const t = (snapshot.threats ?? []).find(x => x.id === selection.id); if (t) target = { lat: t.lat, lon: t.lon, zoom: Math.max(6, 11 - Math.log2(Math.max(t.radius_km, 1))) } }
+    if (selection.type === 'graphic') { const g = (snapshot.graphics ?? []).find(x => x.id === selection.id); if (g) target = { lat: g.center[1], lon: g.center[0], zoom: g.kind === 'point' ? 12 : 10 } }
     if (target) m.flyTo({ center: [target.lon, target.lat], zoom: target.zoom, speed: 1.2, curve: 1.4 })
     if (loaded.current) renderMarkers(m)
     // eslint-disable-next-line react-hooks/exhaustive-deps

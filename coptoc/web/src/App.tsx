@@ -56,6 +56,218 @@ const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreach
 type UiPrefs = { labels: 'full' | 'lean'; header: 'counters' | 'posture' }
 const UI_DEFAULTS: UiPrefs = { labels: 'lean', header: 'posture' }
 
+function S1Strip({ snap, s, onExpand, onClose }: { snap: Snapshot | null; s: Snapshot['summary'] | undefined; onExpand: () => void; onClose: () => void }) {
+  const est = snap?.estimates?.find(e => e.section === 'S1')?.assessment || 'No estimate recorded'
+  return (
+    <aside className="left strip" inert={false}>
+      <div className="strip-head">
+        <span className="code">S1</span>
+        <span className="title truncate">PERS</span>
+        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
+        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
+      </div>
+      <div className="strip-body">
+        <div className="strip-est-section">
+          <span className="strip-kicker">ESTIMATE</span>
+          <p className="strip-est" title={est}>{est}</p>
+        </div>
+        <div className="strip-stats">
+          <span className="strip-kicker">STATUS</span>
+          {s && s.unaccounted > 0 ? (
+            <button className="strip-badge-pill red pulse" onClick={onExpand}>
+              <span>UNACCOUNTED</span>
+              <span className="strip-num">! {s.unaccounted}</span>
+            </button>
+          ) : s && s.unreachable > 0 ? (
+            <button className="strip-badge-pill amber" onClick={onExpand}>
+              <span>UNREACHABLE</span>
+              <span className="strip-num">! {s.unreachable}</span>
+            </button>
+          ) : (
+            <div className="strip-badge-pill normal">
+              <span>AT POST</span>
+              <span className="strip-num">{s?.present ?? 0}</span>
+            </div>
+          )}
+          <div className="strip-mini-row">
+            <span>Moving</span>
+            <span style={{ color: 'var(--blue-2)' }}>{s?.traveling ?? 0}</span>
+          </div>
+          <div className="strip-mini-row">
+            <span>VIPs Out</span>
+            <span style={{ color: 'var(--gold)' }}>{s?.vips_traveling ?? 0}</span>
+          </div>
+          <div className="strip-mini-row">
+            <span>Sec Shift</span>
+            <span style={{ color: 'var(--green)' }}>{s?.security_on_shift ?? 0}</span>
+          </div>
+        </div>
+        <button className="strip-expand-btn" onClick={onExpand}>
+          EXPAND ⤢
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+function S2Strip({ snap, s, cov, onExpand, onClose }: { snap: Snapshot | null; s: Snapshot['summary'] | undefined; cov: Coverage | null; onExpand: () => void; onClose: () => void }) {
+  const est = snap?.estimates?.find(e => e.section === 'S2')?.assessment || 'No estimate recorded'
+  return (
+    <aside className="right strip" inert={false}>
+      <div className="strip-head">
+        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
+        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
+        <span className="title truncate">INTEL</span>
+        <span className="code s2">S2</span>
+      </div>
+      <div className="strip-body">
+        <div className="strip-est-section">
+          <span className="strip-kicker">ESTIMATE</span>
+          <p className="strip-est" title={est}>{est}</p>
+        </div>
+        <div className="strip-stats">
+          <span className="strip-kicker">PRIORITY</span>
+          {s && s.flash > 0 ? (
+            <button className="strip-badge-pill red pulse" onClick={onExpand}>
+              <span>1 FLASH LIVE</span>
+              <span className="strip-num">!</span>
+            </button>
+          ) : s && s.warnings_pending > 0 ? (
+            <button className="strip-badge-pill red" onClick={onExpand}>
+              <span>TO RELEASE</span>
+              <span className="strip-num">{s.warnings_pending}</span>
+            </button>
+          ) : (
+            <div className="strip-badge-pill normal">
+              <span>THREATS</span>
+              <span className="strip-num">{s?.active_threats ?? 0}</span>
+            </div>
+          )}
+          <div className="strip-mini-row">
+            <span>Coverage</span>
+            <span style={{ color: 'var(--green)' }}>{cov?.avg_coverage_pct ?? 0}%</span>
+          </div>
+          <div className="strip-mini-row">
+            <span>Gaps</span>
+            <span style={{ color: 'var(--amber)' }}>{cov?.gaps.length ?? 0}</span>
+          </div>
+          <div className="strip-mini-row">
+            <span>Confirmed</span>
+            <span style={{ color: 'var(--red)' }}>{s?.confirmed_links ?? 0}</span>
+          </div>
+        </div>
+        <button className="strip-expand-btn s2" onClick={onExpand}>
+          EXPAND ⤢
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+function S4Strip({ snap, onExpand, onClose }: { snap: Snapshot | null; onExpand: () => void; onClose: () => void }) {
+  const est = snap?.estimates?.find(e => e.section === 'S4')?.assessment || 'No estimate recorded'
+  const counts = snap?.s4?.counts
+  return (
+    <aside className="right strip" inert={false}>
+      <div className="strip-head">
+        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
+        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
+        <span className="title truncate">LOG</span>
+        <span className="code">S4</span>
+      </div>
+      <div className="strip-body">
+        <div className="strip-est-section">
+          <span className="strip-kicker">ESTIMATE</span>
+          <p className="strip-est" title={est}>{est}</p>
+        </div>
+        <div className="strip-stats">
+          <span className="strip-kicker">STATUS</span>
+          {counts && (counts.red > 0 || counts.late > 0) ? (
+            <button className="strip-badge-pill red pulse" onClick={onExpand}>
+              <span>SHORTAGE / LATE</span>
+              <span className="strip-num">! {counts.red + counts.late}</span>
+            </button>
+          ) : counts && counts.amber > 0 ? (
+            <button className="strip-badge-pill amber" onClick={onExpand}>
+              <span>ATTENTION</span>
+              <span className="strip-num">{counts.amber}</span>
+            </button>
+          ) : (
+            <div className="strip-badge-pill normal">
+              <span>SUPPLY</span>
+              <span className="strip-num" style={{ color: 'var(--green)' }}>HEALTHY</span>
+            </div>
+          )}
+          <div className="strip-mini-row">
+            <span>Lines</span>
+            <span>{snap?.s4?.supplies?.length ?? 0}</span>
+          </div>
+          <div className="strip-mini-row">
+            <span>Shipments</span>
+            <span>{snap?.s4?.shipments?.length ?? 0}</span>
+          </div>
+        </div>
+        <button className="strip-expand-btn" onClick={onExpand}>
+          EXPAND ⤢
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+function S6Strip({ snap, onExpand, onClose }: { snap: Snapshot | null; onExpand: () => void; onClose: () => void }) {
+  const est = snap?.estimates?.find(e => e.section === 'S6')?.assessment || 'No estimate recorded'
+  const counts = snap?.s6?.counts
+  const openRollcalls = snap?.incidents?.filter(i => i.status === 'open').length ?? 0
+  return (
+    <aside className="right strip" inert={false}>
+      <div className="strip-head">
+        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
+        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
+        <span className="title truncate">SIGNAL</span>
+        <span className="code">S6</span>
+      </div>
+      <div className="strip-body">
+        <div className="strip-est-section">
+          <span className="strip-kicker">ESTIMATE</span>
+          <p className="strip-est" title={est}>{est}</p>
+        </div>
+        <div className="strip-stats">
+          <span className="strip-kicker">STATUS</span>
+          {openRollcalls > 0 ? (
+            <button className="strip-badge-pill red pulse" onClick={onExpand}>
+              <span>ROLL CALL OPEN</span>
+              <span className="strip-num">! {openRollcalls}</span>
+            </button>
+          ) : counts && counts.down > 0 ? (
+            <button className="strip-badge-pill red" onClick={onExpand}>
+              <span>SYSTEMS DOWN</span>
+              <span className="strip-num">! {counts.down}</span>
+            </button>
+          ) : counts && counts.degraded > 0 ? (
+            <button className="strip-badge-pill amber" onClick={onExpand}>
+              <span>DEGRADED</span>
+              <span className="strip-num">{counts.degraded}</span>
+            </button>
+          ) : (
+            <div className="strip-badge-pill normal">
+              <span>SYSTEMS</span>
+              <span className="strip-num" style={{ color: 'var(--green)' }}>ALL UP</span>
+            </div>
+          )}
+          <div className="strip-mini-row">
+            <span>Comms Nets</span>
+            <span>{snap?.s6?.systems?.length ?? 0}</span>
+          </div>
+        </div>
+        <button className="strip-expand-btn" onClick={onExpand}>
+          EXPAND ⤢
+        </button>
+      </div>
+    </aside>
+  )
+}
+
 export default function App() {
   const { destination, navigate } = useDestination()
   const isCop = destination.page === 'cop'
@@ -71,22 +283,77 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection>(null)
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
+  type PanelMode = 'closed' | 'strip' | 'full'
   type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
   const [addSite, setAddSite] = useState(false)
-  const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
-  const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
+  const [leftMode, setLeftMode] = useState<PanelMode>(() => {
+    try {
+      const saved = localStorage.getItem('toc.panel.left_mode')
+      if (saved === 'closed' || saved === 'strip' || saved === 'full') return saved as PanelMode
+      return 'strip'
+    } catch { return 'strip' }
+  })
+  const [rightPanel, setRightPanel] = useState<RightPanel>(() => {
+    try {
+      const saved = localStorage.getItem('toc.panel.right') as RightPanel
+      return (saved === 'right' || saved === 's4' || saved === 's6' || saved === 'settings') ? saved : 'right'
+    } catch { return 'right' }
+  })
+  const [rightMode, setRightMode] = useState<PanelMode>(() => {
+    try {
+      const saved = localStorage.getItem('toc.panel.right_mode')
+      if (saved === 'closed' || saved === 'strip' || saved === 'full') return saved as PanelMode
+      return 'strip'
+    } catch { return 'strip' }
+  })
   const [s3Open, setS3Open] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.s3') !== 'closed' } catch { return true } })
   const [logOpen, setLogOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.log') !== 'closed' } catch { return true } })
-  useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? ''); localStorage.setItem('toc.panel.s3', s3Open ? 'open' : 'closed'); localStorage.setItem('toc.panel.log', logOpen ? 'open' : 'closed') } catch { /* private mode */ } }, [leftOpen, rightPanel, s3Open, logOpen])
-  const toggleRight = (p: Exclude<RightPanel, null>) => {
-    const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true }))
-    setOverlay(next === 'right' ? 'S2' : next === 's4' ? 'S4' : next === 's6' ? 'S6' : 'COP')
+  useEffect(() => {
+    try {
+      localStorage.setItem('toc.panel.left_mode', leftMode)
+      localStorage.setItem('toc.panel.right', rightPanel ?? '')
+      localStorage.setItem('toc.panel.right_mode', rightMode)
+      localStorage.setItem('toc.panel.s3', s3Open ? 'open' : 'closed')
+      localStorage.setItem('toc.panel.log', logOpen ? 'open' : 'closed')
+    } catch { /* private mode */ }
+  }, [leftMode, rightPanel, rightMode, s3Open, logOpen])
+
+  const cycleLeft = () => {
+    setLeftMode(m => m === 'closed' ? 'strip' : m === 'strip' ? 'full' : 'closed')
   }
-  const openPanel = rightPanel ?? (leftOpen ? 'left' : null)
+
+  const toggleRight = (p: Exclude<RightPanel, null>) => {
+    if (p === 'settings') {
+      if (rightPanel === 'settings' && rightMode === 'full') {
+        setRightMode('closed')
+      } else {
+        setRightPanel('settings')
+        setRightMode('full')
+      }
+      return
+    }
+    if (rightPanel !== p) {
+      setRightPanel(p)
+      setRightMode('strip')
+      if (p === 's4') setLayers(l => ({ ...l, s4: true }))
+      if (p === 's6') setLayers(l => ({ ...l, s6: true }))
+      setOverlay(p === 'right' ? 'S2' : p === 's4' ? 'S4' : p === 's6' ? 'S6' : 'COP')
+      return
+    }
+    if (rightMode === 'closed') {
+      setRightMode('strip')
+    } else if (rightMode === 'strip') {
+      setRightMode('full')
+    } else {
+      setRightMode('closed')
+    }
+  }
+
+  const openPanel = (rightMode === 'full' ? rightPanel : null) ?? (leftMode === 'full' ? 'left' : null)
   const [s3Flash, setS3Flash] = useState(false)
   const jump = (section: 'S1' | 'S2' | 'S3') => {
-    if (section === 'S1') setLeftOpen(true)
-    else if (section === 'S2') setRightPanel('right')
+    if (section === 'S1') setLeftMode('full')
+    else if (section === 'S2') { setRightPanel('right'); setRightMode('full') }
     else { setS3Open(true); setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
   }
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
@@ -170,9 +437,12 @@ export default function App() {
   }
 
   const byId = useMemo<ById>(() => ({
-    loc: new Map(snap?.locations.map(l => [l.id, l]) ?? []), person: new Map(snap?.people.map(p => [p.id, p]) ?? []),
-    threat: new Map(snap?.threats.map(t => [t.id, t]) ?? []), trip: new Map(snap?.trips.map(t => [t.id, t]) ?? []),
-    event: new Map(snap?.events.map(e => [e.id, e]) ?? []), incident: new Map(snap?.incidents.map(i => [i.id, i]) ?? []),
+    loc: new Map((snap?.locations ?? []).map(l => [l.id, l])),
+    person: new Map((snap?.people ?? []).map(p => [p.id, p])),
+    threat: new Map((snap?.threats ?? []).map(t => [t.id, t])),
+    trip: new Map((snap?.trips ?? []).map(t => [t.id, t])),
+    event: new Map((snap?.events ?? []).map(e => [e.id, e])),
+    incident: new Map((snap?.incidents ?? []).map(i => [i.id, i])),
   }), [snap])
 
   const act = async (label: string, fn: () => Promise<unknown>) => {
@@ -181,16 +451,20 @@ export default function App() {
   }
   const toggle = (k: keyof Layers) => setLayers(l => ({ ...l, [k]: !l[k] }))
   const s = snap?.summary
-  const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
-  const alert = (s?.defcon === 1) || (snap?.warnings.some(w => w.status === 'released' && w.severity === 'critical') ?? false)
+  const travelers = (snap?.people ?? []).filter(p => p.status === 'traveling')
+  const alert = (s?.defcon === 1) || ((snap?.warnings ?? []).some(w => w.status === 'released' && w.severity === 'critical'))
   const inbox = (sec: string) => snap?.taskings?.per_section?.[sec]?.inbox ?? 0
   const badge = (n: number | undefined, tone: 'red' | 'amber' | 'dim', title: string) => n ? <i className={`badge ${tone}`} title={title}>{n}</i> : null
   const openPanel2 = (p: 'S1' | 'S2' | 'S3' | 'S4' | 'S6' | 'brief' | 'settings' | 'plan' | 'intsum') => {
-    if (p === 'S1' || p === 'S2' || p === 'S3') jump(p); else if (p === 'S4' || p === 'S6') setRightPanel(p.toLowerCase() as 's4' | 's6'); else if (p === 'settings') setRightPanel('settings')
-    else if (p === 'brief') setShowBrief(true); else if (p === 'plan') setShowPlan(true); else if (p === 'intsum') { setRightPanel('right'); setShowIntsum(true) }
+    if (p === 'S1' || p === 'S2' || p === 'S3') jump(p);
+    else if (p === 'S4' || p === 'S6') { setRightPanel(p.toLowerCase() as 's4' | 's6'); setRightMode('full') }
+    else if (p === 'settings') { setRightPanel('settings'); setRightMode('full') }
+    else if (p === 'brief') setShowBrief(true);
+    else if (p === 'plan') setShowPlan(true);
+    else if (p === 'intsum') { setRightPanel('right'); setRightMode('full'); setShowIntsum(true) }
   }
-  const eventsWithCover = snap?.events.filter(e => e.coverage) ?? []
-  const nextEvent = snap?.events.find(e => e.status === 'upcoming')
+  const eventsWithCover = (snap?.events ?? []).filter(e => e.coverage)
+  const nextEvent = snap?.events?.find(e => e.status === 'upcoming')
 
   const recordDetails = <>
     {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
@@ -250,18 +524,22 @@ export default function App() {
       {cmd && snap && <CommandBar commands={buildCommands(snap, { select: setSel, open: openPanel2 })} onClose={() => setCmd(false)} />}
 
       <nav className="rail rail-left">
-        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
+        {sectionOn('S1') && <button className={`rail-btn ${leftMode !== 'closed' ? 'on' : ''}`} onClick={cycleLeft} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
         {sectionOn('S3') && <button className={`rail-btn ${s3Open ? 'on' : ''}`} onClick={() => { setS3Open(v => !v); if (!s3Open) setOverlay('S3') }} title={`${sectionCode('S3')} ${sectionTitle('S3', 'OPERATIONS')}`}>{sectionLabel('S3')}{s && ((s.movement_risks ?? 0) > 0 ? badge(s.movement_risks, 'red', 'movement risks') : inbox('S3') ? badge(inbox('S3'), 'amber', 'taskings S3 owes') : badge(s.upcoming_events, 'dim', 'upcoming events'))}</button>}
-        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
+        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftMode('full')} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
-        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
-        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
+        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' && rightMode !== 'closed' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
+        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' && rightMode !== 'closed' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
+        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' && rightMode !== 'closed' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
         <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => setLogOpen(v => !v)} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
       </nav>
-      <aside className={`left ${leftOpen ? 'open' : ''}`} inert={!isCop}>
-        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>
+      {leftMode === 'strip' && (
+        <S1Strip snap={snap} s={s} onExpand={() => setLeftMode('full')} onClose={() => setLeftMode('closed')} />
+      )}
+      <aside className={`left ${leftMode === 'full' ? 'open' : ''}`} inert={!isCop || leftMode !== 'full'}>
+        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftMode('closed')}>
+          <button className="mini" onClick={() => setLeftMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
           <button className="mini" onClick={() => openWorkspace('S1')} title="Open S1 Personnel Workspace">WORKSPACE →</button>
           {can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}
           {['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}
@@ -274,24 +552,24 @@ export default function App() {
           { v: s.traveling, l: 'TRAVELING', tone: 'blue', onClick: () => jump('S3') }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 }, { v: s.security_on_shift, l: 'SEC ON SHIFT', tone: 'green' },
           { v: inbox('S1'), l: 'OWED', tone: 'amber', hide: inbox('S1') === 0, title: 'taskings S1 owes' },
         ]} />}
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
+        <EstimateLine e={snap?.estimates?.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
         {taskingsFor('S1')}
-        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
-          <Question q="Who is not accounted for" count={snap.incidents.filter(i => i.status === 'open').length + ' open'} />
-          <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
+        {snap && (snap.incidents ?? []).filter(i => i.status === 'open').length > 0 && <>
+          <Question q="Who is not accounted for" count={(snap.incidents ?? []).filter(i => i.status === 'open').length + ' open'} />
+          <EstimateLine e={snap?.estimates?.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
           <ul className="list">
-            {snap.incidents.filter(i => i.status === 'open').map(i => (
+            {(snap.incidents ?? []).filter(i => i.status === 'open').map(i => (
               <li key={i.id} className={`row rollcall ${sel?.type === 'incident' && sel.id === i.id ? 'active' : ''}`} onClick={() => setSel({ type: 'incident', id: i.id })}>
                 <div className="rc-head"><span className="name">☎ {i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></div>
                 <div className="bar"><span style={{ width: `${i.pct}%` }} className={i.pct === 100 ? 'ok' : ''} /></div>
               </li>))}
           </ul>
         </>}
-        {snap && <TaskOrg teams={snap.teams} people={snap.people} onSelect={setSel} sel={sel} />}
-        <Question q="Where we are" count={snap?.locations.length}>{can('S3', 'edit') && <button className="mini" title="Add a site — a CP the TOC jumped to, a new office" onClick={e => { e.stopPropagation(); setAddSite(v => !v) }}>{addSite ? '×' : '+ SITE'}</button>}</Question>
+        {snap && <TaskOrg teams={snap.teams ?? []} people={snap.people ?? []} onSelect={setSel} sel={sel} />}
+        <Question q="Where we are" count={snap?.locations?.length ?? 0}>{can('S3', 'edit') && <button className="mini" title="Add a site — a CP the TOC jumped to, a new office" onClick={e => { e.stopPropagation(); setAddSite(v => !v) }}>{addSite ? '×' : '+ SITE'}</button>}</Question>
         {addSite && <SiteForm busy={busy} act={act} onDone={() => setAddSite(false)} />}
         <ul className="list">
-          {snap?.locations.map(l => (
+          {(snap?.locations ?? []).map(l => (
             <li key={l.id} className={`row ${sel?.type === 'location' && sel.id === l.id ? 'active' : ''}`} onClick={() => setSel({ type: 'location', id: l.id })}>
               <span className={`dot posture-${l.effective_posture}`} />
               <span className="name">{l.is_toc && <span className="tocmark" title="the TOC is running from here">◈</span>}{l.name}{l.sensitivity === 'restricted' && <span className="lock">⚿</span>}</span>
@@ -394,62 +672,74 @@ export default function App() {
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
-      <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`} inert={!isCop}>
-        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
+      <aside className={`right wide ${rightPanel === 'settings' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'settings' || rightMode !== 'full'}>
+        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightMode('closed')} />
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
-      <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`} inert={!isCop}>
-        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>
+      {rightPanel === 's4' && rightMode === 'strip' && (
+        <S4Strip snap={snap} onExpand={() => setRightMode('full')} onClose={() => setRightMode('closed')} />
+      )}
+      <aside className={`right ${rightPanel === 's4' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's4' || rightMode !== 'full'}>
+        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightMode('closed')}>
+          <button className="mini" onClick={() => setRightMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
           <button className="mini" onClick={() => openWorkspace('S4')} title="Open S4 Logistics Workspace">WORKSPACE →</button>
           {can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}
         </PanelHead>
         {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <S4Headline board={snap?.s4} owed={inbox('S4')} />
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
+        <EstimateLine e={snap?.estimates?.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
         {taskingsFor('S4')}
         <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
         {released('S4')}
       </aside>
-      <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`} inert={!isCop}>
-        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>
+      {rightPanel === 's6' && rightMode === 'strip' && (
+        <S6Strip snap={snap} onExpand={() => setRightMode('full')} onClose={() => setRightMode('closed')} />
+      )}
+      <aside className={`right ${rightPanel === 's6' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's6' || rightMode !== 'full'}>
+        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightMode('closed')}>
+          <button className="mini" onClick={() => setRightMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
           <button className="mini" onClick={() => openWorkspace('S6')} title="Open S6 Signal Workspace">WORKSPACE →</button>
           {can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}
         </PanelHead>
         {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
         <S6Headline board={snap?.s6} owed={inbox('S6')} />
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
+        <EstimateLine e={snap?.estimates?.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
         {taskingsFor('S6')}
         <S6Panel board={snap?.s6} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s6} toggleMap={() => toggle('s6')} />
-        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
-          <Question q="Accountability · open roll calls" count={snap.incidents.filter(i => i.status === 'open').length} />
-          <ul className="list">{snap.incidents.filter(i => i.status === 'open').map(i => (
+        {snap && (snap.incidents ?? []).filter(i => i.status === 'open').length > 0 && <>
+          <Question q="Accountability · open roll calls" count={(snap.incidents ?? []).filter(i => i.status === 'open').length} />
+          <ul className="list">{(snap.incidents ?? []).filter(i => i.status === 'open').map(i => (
             <li key={i.id} className="row rollcall" onClick={() => setSel({ type: 'incident', id: i.id })}><span className="name">{i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></li>))}</ul>
         </>}
         {released('S6')}
       </aside>
-      <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`} inert={!isCop}>
-        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>
+      {rightPanel === 'right' && rightMode === 'strip' && (
+        <S2Strip snap={snap} s={s} cov={cov} onExpand={() => setRightMode('full')} onClose={() => setRightMode('closed')} />
+      )}
+      <aside className={`right ${rightPanel === 'right' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'right' || rightMode !== 'full'}>
+        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightMode('closed')}>
+          <button className="mini" onClick={() => setRightMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
           <button className="mini" onClick={() => openWorkspace('S2')} title="Open S2 Intelligence Workspace">WORKSPACE →</button>
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
         </PanelHead>
         {cov && <Headline big={`${cov.avg_coverage_pct}%`} label="collection coverage" sub={`${cov.fully_covered} of ${cov.requirements} requirements fully covered · ${cov.gaps.length} indicator${cov.gaps.length === 1 ? '' : 's'} nobody collects`} pct={cov.avg_coverage_pct} tone={toneFor(cov.avg_coverage_pct, 90, 70)} />}
-        {snap && <SevBlocks threats={snap.threats} />}
+        {snap && <SevBlocks threats={snap.threats ?? []} />}
         {s && <Tiles items={[
           { v: s.warnings_pending, l: 'TO RELEASE', tone: 'red', hide: s.warnings_pending === 0, title: 'warnings awaiting the Battle Captain' }, { v: s.flash, l: 'FLASH LIVE', tone: 'red', hide: s.flash === 0 },
           { v: s.confirmed_links, l: 'CONFIRMED', tone: s.confirmed_links ? 'red' : 'neutral', title: 'confirmed threat links' }, { v: s.real_threats, l: 'LIVE', title: 'threats from a live source, not the sample' },
           { v: s.s2_actors ?? 0, l: 'ACTORS', tone: (s.s2_actors ?? 0) ? 'red' : 'neutral' }, { v: s.s2_reports_pending ?? 0, l: 'REPORTS', tone: (s.s2_reports_pending ?? 0) ? 'amber' : 'neutral', hide: (s.s2_reports_pending ?? 0) === 0 },
           { v: s.movement_risks ?? 0, l: 'ROUTE RISK', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
-          { v: s.open_pirs, l: 'OPEN PIRs', tone: 'amber' }, { v: snap?.assessments.filter(a => a.status === 'review').length ?? 0, l: 'IN REVIEW', hide: !snap?.assessments.some(a => a.status === 'review') },
+          { v: s.open_pirs, l: 'OPEN PIRs', tone: 'amber' }, { v: (snap?.assessments ?? []).filter(a => a.status === 'review').length, l: 'IN REVIEW', hide: !(snap?.assessments ?? []).some(a => a.status === 'review') },
           { v: inbox('S2'), l: 'OWED', tone: 'amber', hide: inbox('S2') === 0, title: 'taskings S2 owes' },
         ]} />}
-        <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
+        <EstimateLine e={snap?.estimates?.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
         {taskingsFor('S2')}
         <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
         <Question q="Who is out there" count={snap?.s2_actors?.length ?? 0} />
         <ul className="list cards">
-          {snap?.s2_actors.map(a => (
+          {(snap?.s2_actors ?? []).map(a => (
             <li key={a.id} className="card actor">
               <div className="card-head"><span className="id">{a.kind.toUpperCase()}</span><span className="name">{a.name}</span><span className={`chip ${a.status}`}>{a.status.toUpperCase()}</span></div>
               <div className="est"><b>{a.strength || 'unknown strength'}</b>{a.place ? <span className="dim"> · {a.place}</span> : null}</div>
@@ -457,9 +747,9 @@ export default function App() {
               <div className="card-foot dim">{a.sighting_ids.length} sighting{a.sighting_ids.length === 1 ? '' : 's'}{a.last_seen_at ? ` · last ${rel(a.last_seen_at, now)}` : ''}</div>
             </li>))}
         </ul>
-        <Question q="Field reports" count={`${snap?.s2_reports?.filter(r => r.status === 'filed').length ?? 0} open`} />
+        <Question q="Field reports" count={`${(snap?.s2_reports ?? []).filter(r => r.status === 'filed').length} open`} />
         <ul className="list">
-          {snap?.s2_reports.filter(r => r.status === 'filed').slice(0, 6).map(r => (
+          {(snap?.s2_reports ?? []).filter(r => r.status === 'filed').slice(0, 6).map(r => (
             <li key={r.id} className="row">
               <span className="sev moderate">{r.grade}</span>
               <span className="name">{r.place ?? r.reported_by}</span>
@@ -468,16 +758,16 @@ export default function App() {
         </ul>
         <Question q="Movement risk" count={snap?.movement_risks?.length ?? 0} />
         <ul className="list">
-          {snap?.movement_risks.slice(0, 6).map(r => (
+          {(snap?.movement_risks ?? []).slice(0, 6).map(r => (
             <li key={r.id} className="row">
               <span className={`sev ${r.severity}`}>{r.severity.slice(0, 3).toUpperCase()}</span>
               <span className="name">{r.movement_name}</span>
               <span className="meta dim">{r.graphic_name}</span>
             </li>))}
         </ul>
-        <Question q="What is threatening us" count={`${snap?.threats.length ?? 0} · ${s?.real_threats ?? 0} live`} />
+        <Question q="What is threatening us" count={`${snap?.threats?.length ?? 0} · ${s?.real_threats ?? 0} live`} />
         <ul className="list">
-          {snap?.threats.map(t => (
+          {(snap?.threats ?? []).map(t => (
             <li key={t.id} className={`row ${sel?.type === 'threat' && sel.id === t.id ? 'active' : ''}`} onClick={() => setSel({ type: 'threat', id: t.id })}>
               <span className={`sev ${t.severity}`}>{t.severity.slice(0, 3).toUpperCase()}</span>
               <span className="name">{t.title}</span>
@@ -487,9 +777,9 @@ export default function App() {
             </li>))}
         </ul>
         <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
-        <Question q="What we assess" count={snap?.assessments.length} />
+        <Question q="What we assess" count={snap?.assessments?.length ?? 0} />
         <ul className="list cards">
-          {snap?.assessments.map(a => (
+          {(snap?.assessments ?? []).map(a => (
             <li key={a.id} className={`card ${a.confidence === 'insufficient' ? 'gap' : ''}`}>
               <div className="card-head"><span className="id">{a.id}</span><span className="name">{a.title}</span><span className={`chip ${a.status}`}>{a.status.toUpperCase()}</span></div>
               {a.confidence === 'insufficient'
@@ -499,10 +789,10 @@ export default function App() {
               <AssessmentActions a={a} busy={busy} act={act} />
             </li>))}
         </ul>
-        {snap && <AreasSection areas={snap.areas ?? []} locations={snap.locations} role={role} onOpen={m => { setAreaMode(m); setShowBrief(false) }} onSelect={setSel} />}
+        {snap && <AreasSection areas={snap.areas ?? []} locations={snap.locations ?? []} role={role} onOpen={m => { setAreaMode(m); setShowBrief(false) }} onSelect={setSel} />}
         <Question q="What we still need to know" count={`${s?.open_pirs ?? 0} open PIRs`} />
         <ul className="list cards">
-          {snap?.pirs.map(p => (
+          {(snap?.pirs ?? []).map(p => (
             <li key={p.id} className="card pir" onClick={() => p.subject_type && p.subject_id && byId[p.subject_type === 'trip' ? 'trip' : p.subject_type === 'event' ? 'event' : p.subject_type === 'location' ? 'loc' : 'person'].has(p.subject_id) && setSel(p.subject_type === 'trip' ? { type: 'person', id: byId.trip.get(p.subject_id)!.person_id } : { type: p.subject_type as 'event' | 'location' | 'person', id: p.subject_id })}>
               <div className="card-head"><span className="id">{p.id}</span><span className="prio">P{p.priority}</span><span className={`chip ${p.status.toLowerCase()}`}>{p.status}</span></div>
               <div className="q">{p.question}</div>
@@ -518,11 +808,11 @@ export default function App() {
             <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>
               <button className="mini" onClick={() => openWorkspace('S3')} title="Open S3 Operations Workspace">WORKSPACE →</button>
               {can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}
-              <button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button>
+              <button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings?.per_section?.S3?.inbox}</i>}</button>
               <button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button>
               {s && <Tiles inline items={[
                 { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
-                { v: snap?.trips.filter(t => t.status === 'active').length ?? 0, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
+                { v: (snap?.trips ?? []).filter(t => t.status === 'active').length, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
                 { v: s.movement_risks ?? 0, l: 'RISK FLAGS', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
                 { v: nextEvent ? `${nextEvent.name.split(' — ')[0]} · ${nextEvent.days_until}d` : '—', l: 'NEXT', hide: !nextEvent, onClick: () => nextEvent && setSel({ type: 'event', id: nextEvent.id }) },
                 { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
@@ -530,7 +820,7 @@ export default function App() {
             </PanelHead>
             {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
             {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
-            <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
+            <EstimateLine e={snap?.estimates?.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
             <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
           </div>
         )}
@@ -538,12 +828,12 @@ export default function App() {
           <div className={`oplog ${!s3Open ? 'solo' : ''}`}>
             <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />
             <ul className="logs">
-              {snap?.log.map(e => (
+              {(snap?.log ?? []).slice(0, 8).map(e => (
                 <li key={e.id} className={`log ${e.actor_type}`}>
                   <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
                   <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
                 </li>))}
-              {snap && snap.log.length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
+              {snap && (snap.log ?? []).length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
             </ul>
           </div>
         )}

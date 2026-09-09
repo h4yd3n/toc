@@ -36,6 +36,10 @@ ADDED_COLUMNS = [
     ("s2_reports", "disposed_by", "TEXT"),
     ("s2_reports", "disposed_at", "DATETIME"),
     ("s2_reports", "disposition_note", "TEXT"),
+    ("cop_taskings", "created_type", "VARCHAR"),
+    ("cop_taskings", "created_id", "VARCHAR"),
+    ("cop_taskings", "created_parent", "VARCHAR"),
+    ("cop_taskings", "created_name", "VARCHAR DEFAULT ''"),
 ]
 
 
