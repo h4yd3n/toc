@@ -31,20 +31,53 @@ final class COPStore {
         guard let r, r.span.latitudeDelta > 0, r.span.latitudeDelta <= 180 else { return }
         UserDefaults.standard.set([r.center.latitude, r.center.longitude, r.span.latitudeDelta, r.span.longitudeDelta], forKey: boardKey)
     }
+
+    var viewportWidthKm: Double {
+        guard let b = board else { return 0 }
+        let lat = b.center.latitude
+        let metersPerDegLon = 111_319.5 * cos(lat * Double.pi / 180.0)
+        let meters = max(1.0, b.span.longitudeDelta * metersPerDegLon)
+        return meters / 1000.0
+    }
+
+    var viewportWidthMiles: Double {
+        viewportWidthKm * 0.621371
+    }
+
+    var viewportHeightKm: Double {
+        guard let b = board else { return 0 }
+        let meters = max(1.0, b.span.latitudeDelta * 111_139.0)
+        return meters / 1000.0
+    }
+
+    var viewportHeightMiles: Double {
+        viewportHeightKm * 0.621371
+    }
     var requirements: [Requirement] = []
     var intsums: [IntsumHead] = []
     var warnings: [Warning] = []
     var cases: [CaseHead] = []
     var error: String?
+    var activeWorkspaceSection: String?
     var busy: String?
     var selection: Selection?
     /// Decision 1: the restricted layer (residences) is off by default.
     var showRestricted = false { didSet { Task { await load() } } }
+    // §3.4 Overlay toggles
+    var showSites: Bool = true
+    var showTravelers: Bool = true
+    var showRoutes: Bool = true
+    var showThreats: Bool = true
+    var showEvents: Bool = true
+    var showGraphics: Bool = true
+    var outlineOnlyThreats: Bool = false
     var now = Date()
     /// DISPLAY toggles, the same two as the wall. Lean labels drop hints and empty estimate lines; the posture header
     /// leads with posture and keeps five counters. Both default on; persisted per device.
     var leanLabels: Bool = UserDefaults.standard.object(forKey: "toc.leanLabels") as? Bool ?? true { didSet { UserDefaults.standard.set(leanLabels, forKey: "toc.leanLabels") } }
     var postureHeader: Bool = UserDefaults.standard.object(forKey: "toc.postureHeader") as? Bool ?? true { didSet { UserDefaults.standard.set(postureHeader, forKey: "toc.postureHeader") } }
+    /// Units toggle: "mi" for Miles (default) or "km" for Kilometers. Persisted per device.
+    var distanceUnit: String = UserDefaults.standard.string(forKey: "toc.distanceUnit") ?? "mi" { didSet { UserDefaults.standard.set(distanceUnit, forKey: "toc.distanceUnit") } }
 
     var client = COPClient()
     var users: [UserInfo] = []
@@ -52,6 +85,23 @@ final class COPStore {
     /// Bumped when the section's own tab is tapped again: the sheet takes it as "raise me a step", so a sheet resting
     /// down by the dock can be brought back without finding the handle.
     var sheetRaise = 0
+
+    /// In-memory session tracking of sheet rest stops (0 = peek, 1 = half/regular, 2 = high).
+    /// Kept in memory across tab switches within the same session; resets on cold app restart.
+    var sheetStopIndexBySection: [String: Int] = [:]
+    var defaultSheetStopIndex: Int = 1
+
+    func sheetStopIndex(for section: String) -> Int {
+        sheetStopIndexBySection[section] ?? defaultSheetStopIndex
+    }
+
+    func setSheetStopIndex(_ index: Int, for section: String) {
+        let clamped = max(0, min(2, index))
+        sheetStopIndexBySection[section] = clamped
+        defaultSheetStopIndex = clamped
+    }
+    /// Bottom Y coordinate of the horizontal tactical ruler, measured in global coordinates.
+    var rulerBottom: CGFloat = 0
     func signIn(_ id: String) { client.userId = id; UserDefaults.standard.set(id, forKey: "toc.user"); Task { await load() } }
     func loadUsers() async { users = (try? await client.users()) ?? [] }
     var me: Me? { snapshot?.me }

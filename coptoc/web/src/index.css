@@ -6,7 +6,7 @@
   --sans: -apple-system, "Inter", "Segoe UI", Roboto, sans-serif;
 }
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; }
+html, body, #root { width: 100%; max-width: 100vw; height: 100%; margin: 0; overflow: hidden; overflow-x: clip; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 ul { list-style: none; margin: 0; padding: 0; }
 a { color: var(--blue-2); cursor: pointer; }
@@ -14,7 +14,7 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .dim { color: var(--dim); }
 
 /* ---- wall grid ---- */
-.wall { height: 100vh; display: grid; grid-template-columns: 46px 1fr 46px; grid-template-rows: 54px 1fr 176px;
+.wall { width: 100vw; max-width: 100vw; height: 100vh; overflow: hidden; overflow: clip; display: grid; grid-template-columns: 46px 1fr 46px; grid-template-rows: 54px 1fr 176px;
   grid-template-areas: "top top top" "left center right" "bottom bottom bottom"; gap: 1px; background: var(--line); }
 .top { grid-area: top; } .left { grid-area: left; } .center { grid-area: center; } .right { grid-area: right; } .bottom { grid-area: bottom; }
 .left, .right, .top, .bottom { background: var(--panel); overflow: hidden; min-width: 0; min-height: 0; }
@@ -387,7 +387,7 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .left, .right { grid-area: center; z-index: 8; width: 380px; height: 100%; overflow-y: auto; background: rgba(13,18,25,.95); backdrop-filter: blur(3px); transition: transform .18s ease-out; box-shadow: 0 0 40px rgba(0,0,0,.45); }
 .left { justify-self: start; transform: translateX(-102%); border-right: 1px solid var(--line-2); }
 .right { justify-self: end; transform: translateX(102%); border-left: 1px solid var(--line-2); }
-.left:not(.open), .right:not(.open) { visibility: hidden; }  /* off-screen and out of the rail's way */
+.left:not(.open), .right:not(.open) { visibility: hidden; pointer-events: none; }  /* off-screen and out of the rail's way */
 .left.open, .right.open { transform: none; }
 .center .detail { z-index: 9; }
 /* C — lean labels */
@@ -689,7 +689,38 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .ws-person-row > button:first-child { flex: 1; min-width: 0; }
 .ws-person-row > .ws-link { width: auto; flex: 0 0 auto; }
 
+.native-workspace html, .native-workspace body, .native-workspace #root, .native-workspace .wall {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
 .native-workspace .wall > header, .native-workspace .global-nav, .native-workspace .workspace-sidebar > button:last-child { display:none; }
 
-.native-workspace .workspace { height:100dvh; padding-top:0; }
-.native-workspace .workspace { inset:0; }
+.native-workspace .workspace {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding-top: 0 !important;
+  z-index: 20 !important;
+}
+
+.native-workspace .workspace-sidebar {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  overflow-x: auto !important;
+}
+
+.native-workspace .workspace-body {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding: 16px 14px 60px !important;
+}

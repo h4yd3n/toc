@@ -2,7 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(COPStore.self) private var store
-    @State private var workspaceOpen = false
+    @State private var rulerBottom: CGFloat = 0
+    @State private var showOverlayMenu = false
 
     var body: some View {
         @Bindable var store = store
@@ -10,43 +11,102 @@ struct ContentView: View {
             ZStack(alignment: .bottom) {
                 Group {
                     switch store.tab {
-                    case "COP": MapScreen()
-                    case "S1": SectionTab(section: "S1") { PersonnelScreen() }
-                    case "S2": SectionTab(section: "S2") { IntelScreen() }
-                    case "S3": SectionTab(section: "S3") { OpsScreen() }
-                    case "S4": SectionTab(section: "S4") { LogisticsScreen() }
-                    default: SectionTab(section: "S6") { SignalScreen() }
+                    case "COP":
+                        ZStack(alignment: .topLeading) {
+                            MapScreen(rulerBottom: rulerBottom)
+                            if rulerBottom > 0 {
+                                TacticalRulerVertical(heightMiles: store.viewportHeightMiles, heightKm: store.viewportHeightKm, unit: store.distanceUnit)
+                                    .padding(.top, rulerBottom)
+                                    .padding(.bottom, 80)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    case "S1": SectionTab(section: "S1", rulerBottom: rulerBottom) { PersonnelScreen() }
+                    case "S2": SectionTab(section: "S2", rulerBottom: rulerBottom) { IntelScreen() }
+                    case "S3": SectionTab(section: "S3", rulerBottom: rulerBottom) { OpsScreen() }
+                    case "S4": SectionTab(section: "S4", rulerBottom: rulerBottom) { LogisticsScreen() }
+                    default: SectionTab(section: "S6", rulerBottom: rulerBottom) { SignalScreen() }
                     }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                .safeAreaInset(edge: .top, spacing: 0) { VStack(spacing: 0) { PostureBar(); FlashStrip() } }  // the map runs under the header; lists start below it
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(edges: .top)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    VStack(spacing: 0) {
+                        PostureTopBar()
+                        TacticalRuler(widthMiles: store.viewportWidthMiles, widthKm: store.viewportWidthKm, unit: store.distanceUnit)
+                            .background(GeometryReader { geo in
+                                Color.clear.preference(key: RulerBottomPreferenceKey.self, value: geo.frame(in: .global).maxY)
+                            })
+                        FlashStrip()
+                        if store.tab == "COP" {
+                            StatusOverlayCard()
+                        }
+                    }
+                }  // the map runs under the header; lists start below it
                 TabBar(tab: Binding(get: { store.tab }, set: { store.tab = $0 }))
+
+                // Tap background to dismiss overlay menu when open
+                if showOverlayMenu {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.snappy(duration: 0.18)) { showOverlayMenu = false }
+                        }
+                }
+
+                // Floating layers icon button & dropdown menu on ALL tabs
+                if rulerBottom > 0 {
+                    OverlayMenu(open: $showOverlayMenu)
+                        .padding(.top, rulerBottom + 6)
+                        .padding(.trailing, 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .ignoresSafeArea(edges: .top)
+                }
             }
+            .coordinateSpace(name: "contentRoot")
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack {
-                Text("COP TALK").font(.caption.bold())
-                Spacer()
-                Button("Workspaces") { workspaceOpen = true }
-            }.padding(.horizontal).padding(.vertical, 8).background(Theme.panel)
+        .onPreferenceChange(RulerBottomPreferenceKey.self) {
+            rulerBottom = $0
+            store.rulerBottom = $0
         }
-        .fullScreenCover(isPresented: $workspaceOpen) {
-            NavigationStack {
-                WorkspaceBrowser(baseURL: store.client.baseURL, userId: store.client.userId,
-                                 section: store.tab == "COP" ? (store.me?.sectionsVisible.first(where: { store.me?.perms[$0] == "edit" }) ?? store.me?.sectionsVisible.first ?? "S1") : store.tab)
-                    .ignoresSafeArea(edges: .bottom)
-                    .navigationTitle("Workspaces")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .topBarLeading) { Button("Back to COP") { workspaceOpen = false } } }
-            }.onDisappear { Task { await store.load() } }
-        }
-        .sheet(item: $store.selection) { sel in
+        .sheet(item: Binding(get: { store.tab == "COP" ? store.selection : nil }, set: { store.selection = $0 })) { sel in
             DetailView(selection: sel).presentationDetents([.medium, .large]).presentationBackground(Theme.panel)
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { store.activeWorkspaceSection != nil },
+            set: { if !$0 { store.activeWorkspaceSection = nil } }
+        )) {
+            if let ws = store.activeWorkspaceSection {
+                NavigationStack {
+                    WorkspaceBrowser(baseURL: store.client.baseURL, userId: store.client.userId, section: ws)
+                        .ignoresSafeArea(edges: .bottom)
+                        .navigationTitle("\(ws) Workspace")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Back to COP") {
+                                    store.activeWorkspaceSection = nil
+                                }
+                            }
+                        }
+                }
+                .onDisappear { Task { await store.load() } }
+            }
         }
         .overlay(alignment: .bottom) {
             if let err = store.error {
-                Text(err).font(.system(size: 11, design: .monospaced)).lineLimit(2).padding(8)
-                    .background(Theme.red.opacity(0.9), in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
-                    .onTapGesture { store.error = nil }
+                HStack(spacing: 8) {
+                    Text(err).font(.system(size: 11, design: .monospaced)).lineLimit(2)
+                    Button {
+                        Task { await store.load() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(8)
+                .background(Theme.red.opacity(0.9), in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
+                .onTapGesture { Task { await store.load() } }
             } else if let busy = store.busy {
                 Text(busy.uppercased()).font(.system(size: 10, weight: .semibold, design: .monospaced)).tracking(1.5).padding(8)
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
@@ -56,18 +116,13 @@ struct ContentView: View {
     }
 }
 
-struct PostureBar: View {
+struct PostureTopBar: View {
     @Environment(COPStore.self) private var store
     @State private var pendingProfile: String? = nil
-    var body: some View { bar.alert("Switch profile?", isPresented: Binding(get: { pendingProfile != nil }, set: { if !$0 { pendingProfile = nil } })) {
-        Button("Switch", role: .destructive) { if let p = pendingProfile { store.act("switching to \(p)") { try await store.client.setProfile(p) }; pendingProfile = nil } }
-        Button("Cancel", role: .cancel) { pendingProfile = nil }
-    } message: { Text(pendingProfile == "military" ? "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." : "S1–S3 and the executive-protection sample. This reloads the sample data.") } }
-    @ViewBuilder var bar: some View {
+    var body: some View {
         let s = store.snapshot?.summary
         let posture = s?.posture ?? "normal"
-        VStack(spacing: 0) {
-            ZStack {
+        ZStack {
             Menu {
                 ForEach((s?.defconLevels ?? []).sorted { $0.defcon > $1.defcon }) { l in
                     Button { } label: { Label("DEFCON \(l.defcon) · \(l.posture.uppercased())" + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
@@ -105,14 +160,23 @@ struct PostureBar: View {
                     }
                 } label: { Image(systemName: "gearshape.fill").font(.system(size: 17)).foregroundStyle(Theme.dim).padding(6) }
             }
-            }
-            .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
-            .background(Theme.panel.opacity(0.88))   // the header: darker, less translucent
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
-            // §3 — the watch and the counters belong to the COP, where the picture has room for them. A section's
-            // sheet needs the height more than it needs a summary it is one tap away from.
-            if store.tab == "COP" {
-            VStack(spacing: 6) {
+        }
+        .padding(.horizontal, 14).padding(.top, 4).padding(.bottom, 8)
+        .background(Theme.panel.opacity(0.88))   // the header: darker, less translucent
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 0.5) }
+        .alert("Switch profile?", isPresented: Binding(get: { pendingProfile != nil }, set: { if !$0 { pendingProfile = nil } })) {
+            Button("Switch", role: .destructive) { if let p = pendingProfile { store.act("switching to \(p)") { try await store.client.setProfile(p) }; pendingProfile = nil } }
+            Button("Cancel", role: .cancel) { pendingProfile = nil }
+        } message: { Text(pendingProfile == "military" ? "S1–S6 and the Combat Aviation Brigade. This reloads the sample data." : "S1–S3 and the executive-protection sample. This reloads the sample data.") }
+    }
+    func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
+}
+
+struct StatusOverlayCard: View {
+    @Environment(COPStore.self) private var store
+    var body: some View {
+        let s = store.snapshot?.summary
+        VStack(spacing: 6) {
             if let w = store.snapshot?.watch {
                 HStack(spacing: 8) {
                     Text("\(w.name.uppercased()) WATCH").font(.system(size: 10, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.blue)
@@ -135,18 +199,13 @@ struct PostureBar: View {
                     }
                 }
             }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
-            .padding(.horizontal, 10).padding(.top, 8)
-            }
         }
-        .padding(.bottom, 6)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Theme.panel.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))   // the watch and the counters: a lighter card floating over the picture (dark enough to read over bright map)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line, lineWidth: 0.5))
+        .padding(.leading, 24).padding(.trailing, 56).padding(.top, 6).padding(.bottom, 4)
     }
     func hm(_ h: Double) -> String { let a = abs(h); return "\(Int(a))h\(String(format: "%02d", Int((a - Double(Int(a))) * 60)))" }
-    func clock(_ d: Date) -> String { let f = DateFormatter(); f.dateFormat = "HH:mm:ss'Z'"; f.timeZone = TimeZone(identifier: "UTC"); return f.string(from: d) }
 }
 
 /// §5.6 — released warnings, red, under the header, with the reader's acknowledgement.

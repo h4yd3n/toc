@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import CoreLocation
 
 // Mirrors apps/coptoc/COP_API_CONTRACT.md. Decoded with .convertFromSnakeCase.
@@ -79,7 +80,50 @@ struct Snapshot: Decodable {
     var log: [LogEntry]
     var warnings: [Warning]?
     var operations: [OperationSummary]?
+    var nais: [NAI]?, movements: [Movement]?   // §3.4 the derived overlays
+    var graphics: [Graphic]?                    // §3.4 the control measures a section drew
 }
+
+/// §3.4 a control measure a section drew by hand: a point, a line, or a polygon, typed from the catalog.
+struct Graphic: Decodable, Identifiable, Hashable {
+    var id: String, type: String, kind: String, section: String, name: String, label: String, geometry: Geometry, center: [Double]
+    var windowFrom: String?, windowTo: String?, inWindow: Bool, status: String, note: String, subjectType: String?, subjectId: String?, createdBy: String
+    var color: String, dash: Bool, glyph: String
+    enum Geometry: Decodable, Hashable {
+        case point([Double]), path([[Double]])
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if let p = try? c.decode([[Double]].self) { self = .path(p) } else { self = .point(try c.decode([Double].self)) }
+        }
+        var coordinates: [CLLocationCoordinate2D] { switch self { case .point(let p): return [.init(latitude: p[1], longitude: p[0])]; case .path(let ps): return ps.map { .init(latitude: $0[1], longitude: $0[0]) } } }
+    }
+    var centerCoordinate: CLLocationCoordinate2D { .init(latitude: center[1], longitude: center[0]) }
+    var swiftColor: Color { Color(hex: color) }
+}
+
+extension Color {
+    /// "#rrggbb" → Color; the catalog's colors come over the wire as hex.
+    init(hex: String) {
+        var v: UInt64 = 0; Scanner(string: hex.replacingOccurrences(of: "#", with: "")).scanHexInt64(&v)
+        self.init(red: Double((v >> 16) & 0xff) / 255, green: Double((v >> 8) & 0xff) / 255, blue: Double(v & 0xff) / 255)
+    }
+}
+
+/// §3.4 an active requirement as a named area of interest: where S2 is looking, why, and how well.
+struct NAI: Decodable, Identifiable, Hashable {
+    var id: String, nai: Int, name: String, subjectName: String, subjectType: String, subjectId: String?, kind: String, lat: Double, lon: Double, radiusKm: Double, priority: Int
+    var windowFrom: String?, windowTo: String?, question: String, coveragePct: Int, gaps: Int, pirIds: [String], health: String
+    var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
+    var labelCoordinate: CLLocationCoordinate2D { .init(latitude: lat + radiusKm / 111.0, longitude: lon) }
+}
+struct MovementLeg: Decodable, Hashable { var kind: String, label: String, fromLat: Double?, fromLon: Double?, toLat: Double, toLon: Double, startAt: String?, endAt: String?, status: String }
+/// §3.4 everything that moves: a serial, a delegation, one named person, or a shipment (Decision Z).
+struct Movement: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, owner: String, name: String, unit: String?, pax: Int, personIds: [String], isVip: Bool, purpose: String, originName: String, destName: String, destLat: Double, destLon: Double
+    var departAt: String?, returnAt: String, hoursToEta: Double?, status: String, mode: String, headLat: Double?, headLon: Double?, currentLeg: String?, legs: [MovementLeg], health: String
+    var head: CLLocationCoordinate2D? { headLat.flatMap { la in headLon.map { .init(latitude: la, longitude: $0) } } }
+}
+struct AreaCompact: Decodable, Hashable { var id: String, place: String, worst: String, worstIndicator: String?, strip: [String], assessedBy: String, assessedAt: String, ageDays: Double, stale: Bool }
 
 struct Summary: Decodable {
     var totalPeople: Int, present: Int, traveling: Int, vipsTraveling: Int, securityOnShift: Int
@@ -99,6 +143,7 @@ struct Site: Decodable, Identifiable, Hashable {
     var isToc: Bool? = nil   // §3.1 the CP the TOC is running from; home station stays the site typed "hq"
     var assigned: Int, present: Int, securityOnShift: Int, vipsPresent: Int
     var threatIdsInArea: [String], confirmedThreatIds: [String]
+    var area: AreaCompact?   // §5.6a what S2 judges about this place
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
 }
 

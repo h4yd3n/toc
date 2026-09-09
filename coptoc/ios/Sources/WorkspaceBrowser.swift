@@ -19,7 +19,9 @@ struct WorkspaceBrowser: UIViewRepresentable {
         var components = URLComponents(url: baseURL.appending(path: "console/"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "embedded", value: "1"), URLQueryItem(name: "profile", value: userId)]
         components.fragment = "/workspace/\(section)/overview"
-        view.load(URLRequest(url: components.url!))
+        var req = URLRequest(url: components.url!)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        view.load(req)
         return view
     }
     func updateUIView(_ uiView: WKWebView, context: Context) {}

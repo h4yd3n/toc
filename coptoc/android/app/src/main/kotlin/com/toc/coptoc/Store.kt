@@ -13,6 +13,11 @@ data class WallState(
     val users: List<UserInfo> = emptyList(), val userId: String = Ui.userId,
     val role: String = "battle_captain", val restricted: Boolean = true, val busy: String? = null, val error: String? = null,
     val selection: Selection? = null, val lastRefresh: Long = 0L,
+    val showSites: Boolean = true, val showTravelers: Boolean = true, val showRoutes: Boolean = true,
+    val showThreats: Boolean = true, val showEvents: Boolean = true, val showGraphics: Boolean = true, val outlineOnlyThreats: Boolean = false,
+    val viewportWidthMiles: Double = 0.0, val viewportWidthKm: Double = 0.0,
+    val viewportHeightMiles: Double = 0.0, val viewportHeightKm: Double = 0.0,
+    val distanceUnit: String = "mi",
 )
 
 /** The wall's state on the phone: one snapshot, refreshed every 15 s and after every write. */
@@ -29,6 +34,55 @@ class Store : ViewModel() {
     fun select(sel: Selection?) = _state.update { it.copy(selection = sel) }
     fun openOperation(id: String?) { if (id == null) _state.update { it.copy(operation = null) } else viewModelScope.launch { runCatching { api.operation(id) }.onSuccess { op -> _state.update { it.copy(operation = op) } }.onFailure { e -> _state.update { it.copy(error = "operation: ${e.message}") } } } }
     fun dismissError() = _state.update { it.copy(error = null) }
+    fun setViewportWidth(miles: Double, km: Double) {
+        _state.update {
+            if (it.viewportWidthMiles == miles && it.viewportWidthKm == km) it
+            else it.copy(viewportWidthMiles = miles, viewportWidthKm = km)
+        }
+    }
+    fun setViewportDimensions(wMiles: Double, wKm: Double, hMiles: Double, hKm: Double) {
+        _state.update {
+            if (it.viewportWidthMiles == wMiles && it.viewportWidthKm == wKm &&
+                it.viewportHeightMiles == hMiles && it.viewportHeightKm == hKm) it
+            else it.copy(viewportWidthMiles = wMiles, viewportWidthKm = wKm,
+                         viewportHeightMiles = hMiles, viewportHeightKm = hKm)
+        }
+    }
+    fun toggleLayer(key: String) {
+        _state.update {
+            when (key) {
+                "sites" -> it.copy(showSites = !it.showSites)
+                "travelers" -> it.copy(showTravelers = !it.showTravelers)
+                "routes" -> it.copy(showRoutes = !it.showRoutes)
+                "threats" -> it.copy(showThreats = !it.showThreats)
+                "events" -> it.copy(showEvents = !it.showEvents)
+                "graphics" -> it.copy(showGraphics = !it.showGraphics)
+                "outline" -> it.copy(outlineOnlyThreats = !it.outlineOnlyThreats)
+                "restricted" -> {
+                    val next = !it.restricted
+                    viewModelScope.launch { refresh() }
+                    it.copy(restricted = next)
+                }
+                else -> it
+            }
+        }
+    }
+    fun setAllLayers(enabled: Boolean) {
+        _state.update { it.copy(showSites = enabled, showTravelers = enabled, showRoutes = enabled, showThreats = enabled, showEvents = enabled, showGraphics = enabled) }
+    }
+    fun setThreatMode(mode: String) {
+        _state.update {
+            when (mode) {
+                "fill" -> it.copy(showThreats = true, outlineOnlyThreats = false)
+                "outline" -> it.copy(showThreats = true, outlineOnlyThreats = true)
+                "off" -> it.copy(showThreats = false)
+                else -> it
+            }
+        }
+    }
+    fun setDistanceUnit(unit: String) {
+        _state.update { it.copy(distanceUnit = unit) }
+    }
 
     suspend fun refresh() {
         try {

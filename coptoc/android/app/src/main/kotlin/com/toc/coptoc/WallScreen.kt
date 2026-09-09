@@ -1,5 +1,9 @@
 package com.toc.coptoc
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.horizontalScroll
@@ -36,10 +40,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,20 +55,7 @@ val ROLES = listOf("battle_captain", "ep", "security", "analyst", "ea")
 @Composable
 fun WallScreen(store: Store) {
     val st by store.state.collectAsStateWithLifecycle()
-    var workspace by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(Palette.bg).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("COP TALK", color = Palette.text, fontSize = 12.sp)
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = { workspace = !workspace }) { Text(if (workspace) "Back to COP" else "Workspaces") }
-        }
-        Box(Modifier.weight(1f)) {
-            Box(if (workspace) Modifier.fillMaxSize().clearAndSetSemantics {} else Modifier.fillMaxSize()) {
-                if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840) TabletWall(st, store) else PhoneScreen(st, store)
-            }
-            if (workspace) NativeWorkspace(store.api.baseUrl, st.userId, (enabledTabs(st.snap).firstOrNull { it != Tab.COP && can(st.snap, it.label, "edit") } ?: enabledTabs(st.snap).firstOrNull { it != Tab.COP })?.label ?: "S1") { workspace = false }
-        }
-    }
+    if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 840) TabletWall(st, store) else PhoneScreen(st, store)
 }
 
 /** The wall on a tablet: header strip, map in the middle, S1 left, S2 right, S3 + log below. */
@@ -78,9 +69,18 @@ fun TabletWall(st: WallState, store: Store) {
             val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 1100
             Panel(Modifier.width(if (wide) 260.dp else 210.dp).fillMaxHeight()) { S1Panel(st, store) }
             Box(Modifier.weight(1f).fillMaxHeight()) {
-                WallMap(snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize())
+                WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), onViewportChanged = store::setViewportDimensions)
+                TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopCenter))
+                TacticalRulerVertical(miles = st.viewportHeightMiles, km = st.viewportHeightKm, unit = st.distanceUnit, modifier = Modifier.align(Alignment.TopStart).padding(top = 20.dp))
                 st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
                 st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
+                var overlayOpen by remember { mutableStateOf(false) }
+                if (overlayOpen) {
+                    Box(Modifier.fillMaxSize().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { overlayOpen = false })
+                }
+                Box(Modifier.align(Alignment.TopEnd).padding(top = 26.dp, end = 10.dp)) {
+                    OverlayMenu(st = st, store = store, open = overlayOpen, onToggle = { overlayOpen = !overlayOpen })
+                }
                 st.busy?.let { Text(it.uppercase() + "…", Modifier.align(Alignment.BottomCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).padding(6.dp), color = Palette.blue2, fontSize = 10.sp, fontFamily = FontFamily.Monospace) }
                 st.error?.let { Text(it, Modifier.align(Alignment.TopCenter).padding(8.dp).background(Palette.panel, RoundedCornerShape(4.dp)).border(1.dp, Palette.red, RoundedCornerShape(4.dp)).padding(8.dp).clickable { store.dismissError() }, color = Palette.red, fontSize = 11.sp) }
                 if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
@@ -366,26 +366,67 @@ fun PhoneScreen(st: WallState, store: Store) {
     val snap = st.snap
     var headerPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
+    var overlayOpen by remember { mutableStateOf(false) }
+    var activeWorkspaceSection by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize().background(Palette.bg)) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth()) {  // the picture runs under the header on every tab; each section's sheet stops below it
                 when (tab) {
                     Tab.COP -> {
-                        WallMap(snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize())
+                        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), headerPx = headerPx, onViewportChanged = store::setViewportDimensions)
+                        TacticalRulerVertical(
+                            miles = st.viewportHeightMiles,
+                            km = st.viewportHeightKm,
+                            unit = st.distanceUnit,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
+                        )
                         if (snap == null && st.error == null) Text("LOADING PICTURE…", Modifier.align(Alignment.Center), color = Palette.dim, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
-                    Tab.S1 -> SectionTab(st, store, "S1", headerPx) { S1Panel(st, store) }
-                    Tab.S2 -> SectionTab(st, store, "S2", headerPx) { S2Panel(st, store) }
-                    Tab.S3 -> SectionTab(st, store, "S3", headerPx) { S3Phone(st, store) }
-                    Tab.S4 -> SectionTab(st, store, "S4", headerPx) { S4Phone(st, store) }
-                    Tab.S6 -> SectionTab(st, store, "S6", headerPx) { S6Phone(st, store) }
+                    Tab.S1 -> SectionTab(st, store, "S1", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S1" }) { S1Panel(st, store) }
+                    Tab.S2 -> SectionTab(st, store, "S2", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S2" }) { S2Panel(st, store) }
+                    Tab.S3 -> SectionTab(st, store, "S3", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S3" }) { S3Phone(st, store) }
+                    Tab.S4 -> SectionTab(st, store, "S4", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S4" }) { S4Phone(st, store) }
+                    Tab.S6 -> SectionTab(st, store, "S6", headerPx, onOpenWorkspace = { activeWorkspaceSection = "S6" }) { S6Phone(st, store) }
                 }
-                st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+                if (tab == Tab.COP) {
+                    st.selection?.let { sel -> DetailSheet(sel, st, store, onClose = { store.select(null) }) }
+                }
             }
         }
-        Column(Modifier.align(Alignment.TopCenter).fillMaxWidth().onSizeChanged { headerPx = it.height }) {  // the header, floating over the picture
-            PhoneHeader(st, store, tab = tab, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
-            FlashStrip(st, store)
+        var topOverlayPx by remember { mutableStateOf(0) }
+        Column(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { topOverlayPx = it.height }
+        ) {  // the header, scale, and status overlay floating over the picture
+            Column(Modifier.fillMaxWidth().onSizeChanged { headerPx = it.height }) {
+                PhoneTopBar(st, store)
+                TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit)
+                FlashStrip(st, store)
+            }
+            if (tab == Tab.COP) {
+                StatusOverlayCard(st, store, onJump = { t -> tab = t; store.select(null); NavBarChrome.expand() })
+            }
+        }
+        if (overlayOpen) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { overlayOpen = false }
+            )
+        }
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = with(density) { headerPx.toDp() } + 6.dp, end = 12.dp)
+        ) {
+            OverlayMenu(st = st, store = store, open = overlayOpen, onToggle = { overlayOpen = !overlayOpen })
         }
         Box(Modifier.fillMaxSize()) { Box(Modifier.fillMaxSize()) {  // (kept: the sheets and toasts below sit in this scope)
                 st.operation?.let { op -> OperationSheet(op, st, store, onClose = { store.openOperation(null) }) }
@@ -412,32 +453,75 @@ fun PhoneScreen(st: WallState, store: Store) {
                 }
             }
         }
+        if (activeWorkspaceSection != null) {
+            Box(Modifier.fillMaxSize().background(Palette.bg).zIndex(100f)) {
+                Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                    Row(
+                        Modifier.fillMaxWidth().background(Palette.panel).padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${activeWorkspaceSection} WORKSPACE",
+                            color = Palette.text,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Row(
+                            Modifier
+                                .background(Palette.panel2, RoundedCornerShape(4.dp))
+                                .border(0.5.dp, Palette.line, RoundedCornerShape(4.dp))
+                                .clickable { activeWorkspaceSection = null }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("← Back to COP", color = Palette.dim, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        NativeWorkspace(
+                            baseUrl = store.api.baseUrl,
+                            userId = st.userId,
+                            section = activeWorkspaceSection!!,
+                            onClose = { activeWorkspaceSection = null }
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
-/** The iOS posture bar, on Android: TOC · DEFCON · clock; the watch line; the counters. Drawn under the status bar. */
+/** The iOS posture bar, on Android: TOC · DEFCON · clock and settings. Drawn under the status bar. */
 @Composable
-fun PhoneHeader(st: WallState, store: Store, tab: Tab = Tab.COP, onJump: (Tab) -> Unit = {}) {
-    @Composable fun J(n: String, label: String, color: Color = Palette.text) = Stat(n, label, color, onClick = STAT_TAB[label]?.let { t -> { onJump(t) } })
-    val s = st.snap?.summary; val w = st.snap?.watch
-    var roleMenu by remember { mutableStateOf(false) }
+fun PhoneTopBar(st: WallState, store: Store) {
+    val s = st.snap?.summary
     var defconMenu by remember { mutableStateOf(false) }
     var dispMenu by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) } }
     val clock = java.text.SimpleDateFormat("HH:mm:ss'Z'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(now))
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        Box(Modifier.fillMaxWidth().background(Palette.panel.copy(alpha = .88f)).statusBarsPadding().padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)) {  // the header: darker, less translucent
-        Box(Modifier.align(Alignment.Center)) {
-            s?.let { Box {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Palette.panel.copy(alpha = .88f))
+            .statusBarsPadding()
+            .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            Text(clock, color = Palette.dim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+        }
+        s?.let {
+            Box {
                 if (Ui.posture) Text("DEFCON ${it.defcon}", Modifier.clickable { defconMenu = true }.border(2.dp, Palette.posture(it.posture), RoundedCornerShape(4.dp)).padding(horizontal = 12.dp, vertical = 6.dp), color = Palette.posture(it.posture), fontSize = 14.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, letterSpacing = 2.5.sp)
                 else Chip("DEFCON ${it.defcon}", Palette.posture(it.posture), onClick = { defconMenu = true })
-                DropdownMenu(defconMenu, { defconMenu = false }) { it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}", color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) } } } }
+                DropdownMenu(defconMenu, { defconMenu = false }) { it.defconLevels.sortedByDescending { l -> l.defcon }.forEach { l -> DropdownMenuItem({ Column { Text((if (l.defcon == it.defcon) "● " else "○ ") + "DEFCON ${l.defcon} · ${l.posture.uppercase()}", color = Palette.posture(l.posture), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = if (l.defcon == it.defcon) FontWeight.Bold else FontWeight.Normal); Text(l.meaning, color = Palette.dim, fontSize = 10.sp) } }, { defconMenu = false }) } }
+            }
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(clock, color = Palette.dim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-            Spacer(Modifier.weight(1f))
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
             var pendingProfile by remember { mutableStateOf<String?>(null) }
             pendingProfile?.let { prof -> AlertDialog(onDismissRequest = { pendingProfile = null }, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
                 title = { Text("Switch to ${prof.uppercase()}?", fontSize = 14.sp) },
@@ -461,12 +545,26 @@ fun PhoneHeader(st: WallState, store: Store, tab: Tab = Tab.COP, onJump: (Tab) -
                 DropdownMenu(sub == "display", { sub = null }) {
                     DropdownMenuItem({ Text((if (Ui.lean) "✓ " else "   ") + "Lean labels", fontSize = 12.sp) }, { Ui.lean = !Ui.lean; Ui.save(ctx) })
                     DropdownMenuItem({ Text((if (Ui.posture) "✓ " else "   ") + "Posture header", fontSize = 12.sp) }, { Ui.posture = !Ui.posture; Ui.save(ctx) }) } }
+            }
         }
-        }
-        // §3 — the watch and the counters belong to the COP, where the picture has room for them. A section's sheet
-        // needs the height more than it needs a summary it is one tap away from.
-        if (tab == Tab.COP)
-        Column(Modifier.padding(horizontal = 10.dp).padding(top = 8.dp, bottom = 6.dp).fillMaxWidth().background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp)).border(0.5.dp, Palette.line, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {  // the watch and the counters: a lighter card floating over the picture
+    }
+
+/** §3 — the watch line and the personnel/threat counters: a card floating over the picture below the tactical ruler. */
+@Composable
+fun StatusOverlayCard(st: WallState, store: Store, onJump: (Tab) -> Unit = {}) {
+    @Composable fun J(n: String, label: String, color: Color = Palette.text) = Stat(n, label, color, onClick = STAT_TAB[label]?.let { t -> { onJump(t) } })
+    val s = st.snap?.summary
+    val w = st.snap?.watch
+    Column(
+        Modifier
+            .padding(start = 24.dp, end = 56.dp)
+            .padding(top = 6.dp, bottom = 4.dp)
+            .fillMaxWidth()
+            .background(Palette.panel.copy(alpha = .62f), RoundedCornerShape(12.dp))
+            .border(0.5.dp, Palette.line, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         w?.let { Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("${it.name.uppercase()} WATCH", color = Palette.blue2, fontSize = 10.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace)
             Text(it.battleCaptain?.let { bc -> "BC $bc" } ?: "UNASSIGNED", color = Palette.text, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
@@ -478,7 +576,14 @@ fun PhoneHeader(st: WallState, store: Store, tab: Tab = Tab.COP, onJump: (Tab) -
             J("${it.realThreats}", "THREATS", Palette.red); J("${it.confirmedLinks}", "CONFIRMED", Palette.red)
             if (it.flash > 0) J("${it.flash}", "FLASH", Palette.red); if (it.unaccounted > 0) J("${it.unaccounted}", "UNACCOUNTED", Palette.red)
             if (!Ui.posture) { J("${it.present}", "PRESENT"); J("${it.checkedInFresh}", "CHECKED IN", Palette.green); J("${it.securityOnShift}", "SEC ON SHIFT", Palette.green); J("${it.openPirs}", "OPEN PIRS", Palette.amber); J("${it.upcomingEvents}", "EVENTS") } } }
-        }
+    }
+}
+
+@Composable
+fun PhoneHeader(st: WallState, store: Store, tab: Tab = Tab.COP, onJump: (Tab) -> Unit = {}) {
+    Column(Modifier.fillMaxWidth()) {
+        PhoneTopBar(st, store)
+        if (tab == Tab.COP) StatusOverlayCard(st, store, onJump)
     }
 }
 
@@ -714,37 +819,71 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
 
 /** §3 the map-first sections: the picture behind with the section's layer, the section's list on a sheet with three rests — peek, half, full. */
 @Composable
-fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, content: @Composable ColumnScope.() -> Unit) {
+fun SectionTab(st: WallState, store: Store, section: String, headerPx: Int, onOpenWorkspace: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
         // The map is composed here and not again while the sheet moves. It used to share a scope with the drag
         // state, so every frame of a drag re-ran the map's update block and rebuilt every feature on it.
-        WallMap(st.snap, st.restricted, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section)
-        SectionSheet(headerPx, section, content)
+        WallMap(st, onSelect = store::select, modifier = Modifier.fillMaxSize(), layer = section, headerPx = headerPx, onViewportChanged = store::setViewportDimensions)
+        TacticalRulerVertical(
+            miles = st.viewportHeightMiles,
+            km = st.viewportHeightKm,
+            unit = st.distanceUnit,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = with(density) { headerPx.toDp() }, bottom = 80.dp)
+        )
+        SectionSheet(headerPx, section, onOpenWorkspace, content)
     }
 }
 
 /** Bumped when a section's own tab is tapped again: the sheet takes it as "raise me a step". */
 object SheetRaise {
-    var count by androidx.compose.runtime.mutableStateOf(0)
+    var count by mutableStateOf(0)
         private set
     fun bump() { count += 1 }
+
+    private val sectionStops = mutableStateMapOf<String, Int>()
+    var defaultStopIndex by mutableStateOf(1)
+        private set
+
+    fun getStopIndex(section: String): Int = sectionStops[section] ?: defaultStopIndex
+
+    fun setStopIndex(section: String, index: Int) {
+        val clamped = index.coerceIn(0, 2)
+        sectionStops[section] = clamped
+        defaultStopIndex = clamped
+    }
 }
 
 /** The sheet: it owns the drag, so a drag recomposes this and nothing else. */
 @Composable
-private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSheet(headerPx: Int, section: String, content: @Composable ColumnScope.() -> Unit) {
+private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSheet(headerPx: Int, section: String, onOpenWorkspace: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val totalPx = with(density) { maxHeight.toPx() }
     val avail = (totalPx - headerPx).coerceAtLeast(200f)
     val grip = 52f * density.density      // the handle is a comfortable target, not a hairline
     val dock = 104f * density.density     // the floating tab bar and a thumb of clearance above it
-    // Peek leaves the handle above the tab bar rather than behind it; half and full are fractions of the wall.
-    val stops = listOf(grip + dock, avail * 0.55f, avail * 0.92f)
-    var rest by remember { mutableStateOf(stops[1]) }
+    // Peek leaves the handle above the tab bar rather than behind it; half is mid-screen; high stops right under the scale at the top.
+    val highStop = (totalPx - headerPx - 8f * density.density).coerceAtLeast(avail * 0.6f)
+    val stops = listOf(grip + dock, avail * 0.55f, highStop)
+    val savedIdx = SheetRaise.getStopIndex(section).coerceIn(0, stops.size - 1)
+    var rest by remember(section) { mutableStateOf(stops[savedIdx]) }
     var drag by remember { mutableStateOf(0f) }
     val restAnim by androidx.compose.animation.core.animateFloatAsState(rest, label = "sheetRest")
+    var lastBump by remember { mutableStateOf(SheetRaise.count) }
+    androidx.compose.runtime.LaunchedEffect(stops) {
+        val idx = SheetRaise.getStopIndex(section).coerceIn(0, stops.size - 1)
+        rest = stops[idx]
+    }
     androidx.compose.runtime.LaunchedEffect(SheetRaise.count) {
-        if (SheetRaise.count > 0) rest = stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1).coerceAtMost(stops.size - 1)]
+        if (SheetRaise.count > lastBump) {
+            lastBump = SheetRaise.count
+            val i = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
+            val nextIdx = (i + 1) % stops.size
+            SheetRaise.setStopIndex(section, nextIdx)
+            rest = stops[nextIdx]
+        }
     }
     val visible = (restAnim - drag).coerceIn(stops[0], stops[2])
     // Laid out once at full height and slid to the rest it should sit at: resizing it on every frame of a drag
@@ -757,31 +896,58 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
         // Where the handle currently sits in the window. The gesture is measured against this rather than against the
         // handle's own coordinates, because the handle moves as the sheet moves: a drag measured locally is measured
         // against an origin the drag itself is shifting, and that feedback shows up as the header shaking.
-        var handleTop by remember { mutableStateOf(0f) }
-        Column(Modifier.fillMaxWidth()
-            .onGloballyPositioned { handleTop = it.positionInWindow().y }
-            .pointerInput(Unit) {  // own the pointer from the first touch: the map underneath would otherwise take it
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false); down.consume()
-                    val startY = handleTop + down.position.y      // the finger, in window space
-                    var delta = 0f; var moved = false
-                    while (true) {
-                        val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!ch.pressed) { ch.consume(); break }
-                        delta = (handleTop + ch.position.y) - startY
-                        if (kotlin.math.abs(delta) > 8f) moved = true
-                        if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
-                        ch.consume()
+        Box(Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+            var handleTop by remember { mutableStateOf(0f) }
+            Column(Modifier.fillMaxWidth()
+                .padding(horizontal = 80.dp)
+                .onGloballyPositioned { handleTop = it.positionInWindow().y }
+                .pointerInput(Unit) {  // own the pointer from the first touch: the map underneath would otherwise take it
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false); down.consume()
+                        val startY = handleTop + down.position.y      // the finger, in window space
+                        var delta = 0f; var moved = false
+                        while (true) {
+                            val ev = awaitPointerEvent(); val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!ch.pressed) { ch.consume(); break }
+                            delta = (handleTop + ch.position.y) - startY
+                            if (kotlin.math.abs(delta) > 8f) moved = true
+                            if (moved) drag = delta    // follow the finger; without this it stood still and then jumped
+                            ch.consume()
+                        }
+                        val currentIdx = stops.indices.minByOrNull { kotlin.math.abs(stops[it] - rest) } ?: 1
+                        val settledIdx = if (moved) stops.indices.minByOrNull { kotlin.math.abs(stops[it] - (rest - delta)) } ?: 1
+                                         else (currentIdx + 1) % stops.size
+                        SheetRaise.setStopIndex(section, settledIdx)
+                        rest = stops[settledIdx]
+                        drag = 0f
                     }
-                    rest = if (moved) stops.minByOrNull { kotlin.math.abs(it - (rest - delta)) }!!
-                           else stops[(stops.indexOfFirst { it == rest }.coerceAtLeast(0) + 1) % stops.size]
-                    drag = 0f
+                }
+                .padding(top = 14.dp, bottom = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(48.dp, 5.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
+                Text(if (rest <= stops[0] + 1f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
+            }
+            if (onOpenWorkspace != null) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 12.dp)
+                        .background(Palette.blue2.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                        .border(1.dp, Palette.blue2.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .clickable { onOpenWorkspace() }
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "WORKSPACE ↗",
+                        color = Palette.blue2,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
-            .heightIn(min = 52.dp).padding(top = 14.dp, bottom = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(Modifier.size(48.dp, 5.dp).background(Palette.dim.copy(alpha = .6f), RoundedCornerShape(50)))
-            Text(if (rest <= stops[0] + 1f) "$section · pull up" else section, color = Palette.dim, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp)
         }
         content()
     }
@@ -834,3 +1000,576 @@ fun TaskingDialogs(st: WallState, store: Store, section: String, raising: Boolea
         confirmButton = { TextButton({ if (reason.isNotBlank()) { val r = reason; store.act("declining") { answerTasking(t.id, "declined", r) }; reason = ""; onDeclined() } }) { Text("DECLINE", color = Palette.red) } },
         dismissButton = { TextButton(onDeclined) { Text("CANCEL", color = Palette.dim) } }) }
 }
+
+@Composable
+fun OverlayMenu(
+    st: WallState,
+    store: Store,
+    open: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.End) {
+        // Floating icon-only button (stacked sheets of paper icon)
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (open) Palette.blue2 else Palette.panel.copy(alpha = 0.94f))
+                .border(1.dp, if (open) Palette.blue2 else Palette.line, RoundedCornerShape(8.dp))
+                .clickable { onToggle() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_layers),
+                contentDescription = "Overlays",
+                tint = if (open) Color.White else Palette.text,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        if (open) {
+            Spacer(Modifier.height(6.dp))
+            Column(
+                modifier = Modifier
+                    .width(220.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Palette.panel.copy(alpha = 0.96f))
+                    .border(1.dp, Palette.line, RoundedCornerShape(8.dp))
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val allOn = st.showSites && st.showTravelers && st.showRoutes && st.showThreats && st.showEvents && st.showGraphics
+                val threatMode = when {
+                    !st.showThreats -> "OFF"
+                    st.outlineOnlyThreats -> "OUTLINE"
+                    else -> "FILL"
+                }
+
+                // Single line: 2-stage LAYERS toggle and multi-stage THREAT toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // 2-stage LAYERS toggle
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (allOn) Palette.blue2.copy(alpha = 0.2f) else Palette.panel2)
+                            .border(1.dp, if (allOn) Palette.blue2 else Palette.line, RoundedCornerShape(6.dp))
+                            .clickable { store.setAllLayers(!allOn) }
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (allOn) Palette.blue2 else Palette.dim.copy(alpha = 0.4f))
+                            )
+                            Text(
+                                if (allOn) "LAYERS · ON" else "LAYERS · OFF",
+                                color = if (allOn) Color.White else Palette.dim,
+                                fontSize = 7.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = if (allOn) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    // Multi-stage THREAT toggle (FILL -> OUTLINE -> OFF)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                when (threatMode) {
+                                    "FILL" -> Palette.amber.copy(alpha = 0.2f)
+                                    "OUTLINE" -> Palette.blue2.copy(alpha = 0.12f)
+                                    else -> Palette.panel2
+                                }
+                            )
+                            .border(
+                                1.dp,
+                                when (threatMode) {
+                                    "FILL" -> Palette.amber
+                                    "OUTLINE" -> Palette.blue2
+                                    else -> Palette.line
+                                },
+                                RoundedCornerShape(6.dp)
+                            )
+                            .clickable {
+                                when (threatMode) {
+                                    "FILL" -> store.setThreatMode("outline")
+                                    "OUTLINE" -> store.setThreatMode("off")
+                                    else -> store.setThreatMode("fill")
+                                }
+                            }
+                            .padding(vertical = 6.dp, horizontal = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                when (threatMode) {
+                                    "FILL" -> "●"
+                                    "OUTLINE" -> "○"
+                                    else -> "✕"
+                                },
+                                color = when (threatMode) {
+                                    "FILL" -> Palette.amber
+                                    "OUTLINE" -> Palette.blue2
+                                    else -> Palette.dim.copy(alpha = 0.4f)
+                                },
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "THREAT · $threatMode",
+                                color = if (threatMode != "OFF") Color.White else Palette.dim,
+                                fontSize = 7.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = if (threatMode != "OFF") FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                // Miles or Kilometers toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Palette.panel2)
+                        .border(1.dp, Palette.line, RoundedCornerShape(6.dp))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    val isMi = st.distanceUnit == "mi"
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isMi) Palette.blue2 else Color.Transparent)
+                            .clickable { store.setDistanceUnit("mi") }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "MILES",
+                            color = if (isMi) Color.White else Palette.dim,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = if (isMi) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (!isMi) Palette.blue2 else Color.Transparent)
+                            .clickable { store.setDistanceUnit("km") }
+                            .padding(vertical = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "KILOMETERS",
+                            color = if (!isMi) Color.White else Palette.dim,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = if (!isMi) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+
+                Box(Modifier.fillMaxWidth().height(0.5.dp).background(Palette.line))
+
+                // Selectable layer pills
+                LayerPill("Sites & Facilities", "◆", st.showSites) { store.toggleLayer("sites") }
+                LayerPill("Moving Personnel", "●", st.showTravelers) { store.toggleLayer("travelers") }
+                LayerPill("Routes & Convoys", "↗", st.showRoutes) { store.toggleLayer("routes") }
+                LayerPill("Threats & Hazards", "⚠", st.showThreats) { store.toggleLayer("threats") }
+                LayerPill("Operations & Events", "★", st.showEvents) { store.toggleLayer("events") }
+                LayerPill("Control Measures", "⚑", st.showGraphics) { store.toggleLayer("graphics") }
+                LayerPill(
+                    if (st.snap?.restrictedDenied == true) "Residences · DENIED" else "Residences",
+                    "⚿",
+                    st.restricted,
+                    disabled = st.snap?.restrictedDenied == true
+                ) {
+                    if (st.snap?.restrictedDenied != true) store.toggleLayer("restricted")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LayerPill(
+    label: String,
+    icon: String,
+    checked: Boolean,
+    disabled: Boolean = false,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (disabled) Palette.panel.copy(alpha = 0.4f) else if (checked) Palette.blue2.copy(alpha = 0.18f) else Palette.panel2.copy(alpha = 0.6f))
+            .border(1.dp, if (disabled) Palette.line else if (checked) Palette.blue2 else Palette.line, RoundedCornerShape(6.dp))
+            .clickable(enabled = !disabled) { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            icon,
+            color = if (disabled) Palette.dim.copy(alpha = 0.4f) else if (checked) Palette.amber else Palette.dim,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            label,
+            color = if (disabled) Palette.dim.copy(alpha = 0.4f) else if (checked) Color.White else Palette.dim,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+fun TacticalRuler(
+    miles: Double,
+    km: Double,
+    unit: String = "mi",
+    modifier: Modifier = Modifier
+) {
+    val candidateSteps = remember {
+        listOf(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0)
+    }
+    val activeDist = if (unit == "km") km else miles
+    val step = remember(activeDist) {
+        candidateSteps.firstOrNull { (activeDist / it) in 2.5..7.0 }
+            ?: candidateSteps.firstOrNull { activeDist / it < 3.0 }
+            ?: 10.0
+    }
+
+    fun formatDist(d: Double): String {
+        return if (d >= 10) String.format(java.util.Locale.US, "%.0f", d)
+        else if (d >= 1) {
+            if (d % 1.0 == 0.0) String.format(java.util.Locale.US, "%.0f", d)
+            else String.format(java.util.Locale.US, "%.1f", d)
+        } else String.format(java.util.Locale.US, "%.2f", d)
+    }
+
+    fun formatBadge(v: Double): String {
+        return if (v >= 100) String.format(java.util.Locale.US, "%.0f", v)
+        else String.format(java.util.Locale.US, "%.1f", v)
+    }
+
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .height(20.dp)
+            .background(Color(0xE00A0E14))
+    ) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val textPaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(180, 255, 255, 255)
+                textSize = with(density) { 7.5.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.MONOSPACE
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+        }
+
+        val maxDist = activeDist.coerceAtLeast(0.001)
+        val cutoffPx = with(density) { (maxWidth - 70.dp).toPx() }
+
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val originX = with(density) { 18.dp.toPx() }
+            val availableW = (w - originX).coerceAtLeast(1f)
+
+            // Bottom hairline
+            drawLine(
+                color = Color.White.copy(alpha = 0.2f),
+                start = androidx.compose.ui.geometry.Offset(0f, h),
+                end = androidx.compose.ui.geometry.Offset(w, h),
+                strokeWidth = 1f
+            )
+
+            // Zero tick and label at start (meeting left vertical ruler at originX)
+            drawLine(
+                color = Color.White.copy(alpha = 0.6f),
+                start = androidx.compose.ui.geometry.Offset(originX, h - 6.dp.toPx()),
+                end = androidx.compose.ui.geometry.Offset(originX, h),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawText("0", originX, 8.dp.toPx(), textPaint)
+            }
+
+            var d = step
+            while (d < maxDist) {
+                val x = originX + (d / maxDist).toFloat() * availableW
+                if (x > cutoffPx) break
+
+                // Major tick
+                drawLine(
+                    color = Color.White.copy(alpha = 0.7f),
+                    start = androidx.compose.ui.geometry.Offset(x, h - 6.dp.toPx()),
+                    end = androidx.compose.ui.geometry.Offset(x, h),
+                    strokeWidth = 1.dp.toPx()
+                )
+
+                // Minor tick
+                val midD = d - step / 2.0
+                if (midD > 0) {
+                    val midX = originX + (midD / maxDist).toFloat() * availableW
+                    if (midX < cutoffPx) {
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.35f),
+                            start = androidx.compose.ui.geometry.Offset(midX, h - 3.5.dp.toPx()),
+                            end = androidx.compose.ui.geometry.Offset(midX, h),
+                            strokeWidth = 0.75.dp.toPx()
+                        )
+                    }
+                }
+
+                // Text label
+                drawIntoCanvas { canvas ->
+                    canvas.nativeCanvas.drawText(formatDist(d), x, 8.dp.toPx(), textPaint)
+                }
+
+                d += step
+            }
+        }
+
+        // Trailing AO badge
+        Row(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 6.dp)
+                .background(Palette.panel2.copy(alpha = 0.85f), RoundedCornerShape(3.dp))
+                .border(0.5.dp, Palette.line, RoundedCornerShape(3.dp))
+                .padding(horizontal = 5.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text("AO:", color = Palette.blue2, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+            Text(
+                if (unit == "km") "${formatBadge(km)} km"
+                else "${formatBadge(miles)} mi",
+                color = Color.White, fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/** Edge-to-edge Vertical Tactical Edge Ruler running down the right side of the screen. */
+@Composable
+fun TacticalRulerVertical(
+    miles: Double,
+    km: Double,
+    unit: String = "mi",
+    modifier: Modifier = Modifier
+) {
+    val candidateSteps = remember {
+        listOf(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0)
+    }
+    val activeDist = if (unit == "km") km else miles
+    val step = remember(activeDist) {
+        candidateSteps.firstOrNull { (activeDist / it) in 3.0..9.0 }
+            ?: candidateSteps.firstOrNull { activeDist / it < 4.0 }
+            ?: 10.0
+    }
+
+    fun formatDist(d: Double): String {
+        return if (d >= 10) String.format(java.util.Locale.US, "%.0f", d)
+        else if (d >= 1) {
+            if (d % 1.0 == 0.0) String.format(java.util.Locale.US, "%.0f", d)
+            else String.format(java.util.Locale.US, "%.1f", d)
+        } else String.format(java.util.Locale.US, "%.2f", d)
+    }
+
+    fun formatBadge(v: Double): String {
+        return if (v >= 100) String.format(java.util.Locale.US, "%.0f", v)
+        else String.format(java.util.Locale.US, "%.1f", v)
+    }
+
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier
+            .width(18.dp)
+            .fillMaxHeight()
+            .background(Color(0xE00A0E14))
+    ) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val textPaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(180, 255, 255, 255)
+                textSize = with(density) { 6.8.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.MONOSPACE
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+        }
+        val badgeBluePaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#58A6FF")
+                textSize = with(density) { 6.5.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            }
+        }
+        val badgeWhitePaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = with(density) { 7.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+            }
+        }
+        val badgeDimPaint = remember(density) {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(180, 139, 148, 158)
+                textSize = with(density) { 6.sp.toPx() }
+                isAntiAlias = true
+                typeface = android.graphics.Typeface.MONOSPACE
+            }
+        }
+        val badgeBgPaint = remember {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb((0.88f * 255).toInt(), 22, 27, 34)
+                style = android.graphics.Paint.Style.FILL
+                isAntiAlias = true
+            }
+        }
+        val badgeBorderPaint = remember {
+            android.graphics.Paint().apply {
+                color = android.graphics.Color.argb(120, 48, 54, 61)
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = 1f
+                isAntiAlias = true
+            }
+        }
+
+        val maxDist = activeDist.coerceAtLeast(0.001)
+        val textX = with(density) { 7.5.dp.toPx() }
+        val vOffset = (textPaint.descent() + textPaint.ascent()) / 2f
+
+        // Badge dimensions
+        val vText = "V"
+        val distText = formatBadge(activeDist)
+        val unitText = if (unit == "km") "km" else "mi"
+        val spaceW = badgeWhitePaint.measureText(" ")
+        val vW = badgeBluePaint.measureText(vText)
+        val distW = badgeWhitePaint.measureText(distText)
+        val unitW = badgeDimPaint.measureText(unitText)
+        val totalTextW = vW + spaceW + distW + spaceW + unitW
+        val padX = with(density) { 3.dp.toPx() }
+        val badgeW = totalTextW + padX * 2f
+        val badgeH = with(density) { 13.dp.toPx() }
+        val cornerRadius = with(density) { 2.5.dp.toPx() }
+
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val badgeCenterY = h - with(density) { 6.dp.toPx() } - (badgeW / 2f)
+            val cutoffPx = badgeCenterY - (badgeW / 2f) - with(density) { 4.dp.toPx() }
+
+            // Right hairline (facing map)
+            drawLine(
+                color = Color.White.copy(alpha = 0.2f),
+                start = androidx.compose.ui.geometry.Offset(w, 0f),
+                end = androidx.compose.ui.geometry.Offset(w, h),
+                strokeWidth = 1f
+            )
+
+            // Zero tick at top edge (meeting top ruler at (w, 0))
+            drawLine(
+                color = Color.White.copy(alpha = 0.6f),
+                start = androidx.compose.ui.geometry.Offset(w, 0f),
+                end = androidx.compose.ui.geometry.Offset(w - 3.5.dp.toPx(), 0f),
+                strokeWidth = 1.dp.toPx()
+            )
+
+            var d = step
+            while (d < maxDist) {
+                val y = (d / maxDist).toFloat() * h
+                if (y > cutoffPx) break
+
+                // Major tick
+                drawLine(
+                    color = Color.White.copy(alpha = 0.7f),
+                    start = androidx.compose.ui.geometry.Offset(w, y),
+                    end = androidx.compose.ui.geometry.Offset(w - 3.5.dp.toPx(), y),
+                    strokeWidth = 1.dp.toPx()
+                )
+
+                // Minor tick
+                val midD = d - step / 2.0
+                if (midD > 0) {
+                    val midY = (midD / maxDist).toFloat() * h
+                    if (midY < cutoffPx) {
+                        drawLine(
+                            color = Color.White.copy(alpha = 0.35f),
+                            start = androidx.compose.ui.geometry.Offset(w, midY),
+                            end = androidx.compose.ui.geometry.Offset(w - 2.0.dp.toPx(), midY),
+                            strokeWidth = 0.75.dp.toPx()
+                        )
+                    }
+                }
+
+                // Text label aligned vertically with screen edge
+                drawIntoCanvas { canvas ->
+                    val native = canvas.nativeCanvas
+                    native.save()
+                    native.rotate(90f, textX, y)
+                    native.drawText(formatDist(d), textX, y - vOffset, textPaint)
+                    native.restore()
+                }
+
+                d += step
+            }
+
+            // Bottom distance badge aligned vertically with screen edge
+            drawIntoCanvas { canvas ->
+                val native = canvas.nativeCanvas
+                native.save()
+                native.translate(textX, badgeCenterY)
+                native.rotate(90f)
+
+                val rect = android.graphics.RectF(-badgeW / 2f, -badgeH / 2f, badgeW / 2f, badgeH / 2f)
+                native.drawRoundRect(rect, cornerRadius, cornerRadius, badgeBgPaint)
+                native.drawRoundRect(rect, cornerRadius, cornerRadius, badgeBorderPaint)
+
+                var curX = -badgeW / 2f + padX
+                val textBaseline = -(badgeWhitePaint.descent() + badgeWhitePaint.ascent()) / 2f
+                native.drawText(vText, curX, textBaseline, badgeBluePaint)
+                curX += vW + spaceW
+                native.drawText(distText, curX, textBaseline, badgeWhitePaint)
+                curX += distW + spaceW
+                native.drawText(unitText, curX, textBaseline, badgeDimPaint)
+
+                native.restore()
+            }
+        }
+    }
+}
+

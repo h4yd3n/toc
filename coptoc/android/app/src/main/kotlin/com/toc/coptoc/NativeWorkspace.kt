@@ -33,9 +33,11 @@ fun NativeWorkspace(baseUrl: String, userId: String, section: String, onClose: (
     AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
         WebView(context).apply {
             browser = this
+            clearCache(true)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = false
+            settings.cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val target = request.url

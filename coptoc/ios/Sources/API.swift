@@ -4,9 +4,28 @@ import Foundation
 struct COPClient {
     // Simulator reaches the Mac's FastAPI on localhost. Override with TOC_API in the scheme environment.
     // Scheme environment first (Xcode runs), then the value baked into Info.plist at build time (device installs), then the Mac's localhost (simulator).
-    var baseURL: URL = URL(string: ProcessInfo.processInfo.environment["TOC_API"]
-        ?? (Bundle.main.object(forInfoDictionaryKey: "TOC_API") as? String).flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }
-        ?? "http://localhost:8000")!
+    var baseURL: URL = {
+        if let env = ProcessInfo.processInfo.environment["TOC_API"], !env.isEmpty, let url = URL(string: env) {
+            return url
+        }
+        if let stored = UserDefaults.standard.string(forKey: "toc.api"), !stored.isEmpty, let url = URL(string: stored) {
+            return url
+        }
+        if let baked = (Bundle.main.object(forInfoDictionaryKey: "TOC_API") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !baked.isEmpty, !baked.hasPrefix("$(") {
+            #if !targetEnvironment(simulator)
+            if baked.contains("localhost") || baked.contains("127.0.0.1") {
+                return URL(string: "http://10.8.12.32:8000")!
+            }
+            #endif
+            if let url = URL(string: baked) { return url }
+        }
+        #if targetEnvironment(simulator)
+        return URL(string: "http://localhost:8000")!
+        #else
+        return URL(string: "http://10.8.12.32:8000")!
+        #endif
+    }()
     var actor = "Battle Captain (iOS)"
     var role = "battle_captain"  // Decision C: only battle_captain / ep may see the restricted layer
     var userId: String = UserDefaults.standard.string(forKey: "toc.user") ?? "u_battle_captain"  // the sign-in profile; the Battle Captain until someone picks another  // §9: signed in as; the server derives role and actor from it

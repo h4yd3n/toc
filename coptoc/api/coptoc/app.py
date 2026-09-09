@@ -94,6 +94,18 @@ def health():
 # The native workspace uses the same origin as the API, avoiding a second web server.
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
+
+class NoCacheHtmlStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if path.endswith(".html") or path in ("", "/") or "html" in response.headers.get("content-type", ""):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
 _web_dist = Path(__file__).resolve().parents[2] / "web" / "dist"
 if (_web_dist / "index.html").is_file():
-    app.mount("/console", StaticFiles(directory=_web_dist, html=True), name="workspace-console")
+    app.mount("/console", NoCacheHtmlStaticFiles(directory=_web_dist, html=True), name="workspace-console")
+    if (_web_dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=_web_dist / "assets"), name="workspace-assets")
