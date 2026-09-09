@@ -37,6 +37,19 @@ const LOG_LABEL: Record<string, string> = {
   'cop.graphic.drawn': 'GRAPHIC', 'cop.graphic.updated': 'GRAPHIC', 'cop.graphic.retired': 'GRAPHIC ✗',
   'cop.operation.opened': 'OP', 'cop.operation.status': 'OP', 'cop.operation.task': 'OP TASK', 'cop.s4.shipment': 'S4', 'cop.s4.supply': 'S4', 'cop.s6.system': 'S6',
   'cop.tasking.raised': 'TASKING', 'cop.tasking.accepted': 'TASKING', 'cop.tasking.scheduled': 'TASKING', 'cop.tasking.complete': 'TASKING ✓', 'cop.tasking.declined': 'TASKING ✗', 'cop.tasking.amended': 'TASKING',
+  's2.intsum.drafted': 'INTSUM', 's2.intsum.published': 'INTSUM', 's2.intsum.released': 'INTSUM',
+  's2.case.created': 'CASE', 's2.case.updated': 'CASE', 's2.case.closed': 'CASE',
+}
+
+function formatLogType(type: string): string {
+  if (LOG_LABEL[type]) return LOG_LABEL[type]
+  const parts = type.split('.')
+  const last = parts[parts.length - 1]
+  if (parts.includes('intsum')) return 'INTSUM'
+  if (parts.includes('case')) return 'CASE'
+  if (parts.includes('warning')) return 'WARN'
+  if (parts.includes('requirement')) return 'REQ'
+  return last ? last.toUpperCase().slice(0, 8) : type.slice(0, 8).toUpperCase()
 }
 
 function rel(iso: string | null, now: number): string {
@@ -56,218 +69,6 @@ const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreach
 type UiPrefs = { labels: 'full' | 'lean'; header: 'counters' | 'posture' }
 const UI_DEFAULTS: UiPrefs = { labels: 'lean', header: 'posture' }
 
-function S1Strip({ snap, s, onExpand, onClose }: { snap: Snapshot | null; s: Snapshot['summary'] | undefined; onExpand: () => void; onClose: () => void }) {
-  const est = snap?.estimates?.find(e => e.section === 'S1')?.assessment || 'No estimate recorded'
-  return (
-    <aside className="left strip" inert={false}>
-      <div className="strip-head">
-        <span className="code">S1</span>
-        <span className="title truncate">PERS</span>
-        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
-        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
-      </div>
-      <div className="strip-body">
-        <div className="strip-est-section">
-          <span className="strip-kicker">ESTIMATE</span>
-          <p className="strip-est" title={est}>{est}</p>
-        </div>
-        <div className="strip-stats">
-          <span className="strip-kicker">STATUS</span>
-          {s && s.unaccounted > 0 ? (
-            <button className="strip-badge-pill red pulse" onClick={onExpand}>
-              <span>UNACCOUNTED</span>
-              <span className="strip-num">! {s.unaccounted}</span>
-            </button>
-          ) : s && s.unreachable > 0 ? (
-            <button className="strip-badge-pill amber" onClick={onExpand}>
-              <span>UNREACHABLE</span>
-              <span className="strip-num">! {s.unreachable}</span>
-            </button>
-          ) : (
-            <div className="strip-badge-pill normal">
-              <span>AT POST</span>
-              <span className="strip-num">{s?.present ?? 0}</span>
-            </div>
-          )}
-          <div className="strip-mini-row">
-            <span>Moving</span>
-            <span style={{ color: 'var(--blue-2)' }}>{s?.traveling ?? 0}</span>
-          </div>
-          <div className="strip-mini-row">
-            <span>VIPs Out</span>
-            <span style={{ color: 'var(--gold)' }}>{s?.vips_traveling ?? 0}</span>
-          </div>
-          <div className="strip-mini-row">
-            <span>Sec Shift</span>
-            <span style={{ color: 'var(--green)' }}>{s?.security_on_shift ?? 0}</span>
-          </div>
-        </div>
-        <button className="strip-expand-btn" onClick={onExpand}>
-          EXPAND ⤢
-        </button>
-      </div>
-    </aside>
-  )
-}
-
-function S2Strip({ snap, s, cov, onExpand, onClose }: { snap: Snapshot | null; s: Snapshot['summary'] | undefined; cov: Coverage | null; onExpand: () => void; onClose: () => void }) {
-  const est = snap?.estimates?.find(e => e.section === 'S2')?.assessment || 'No estimate recorded'
-  return (
-    <aside className="right strip" inert={false}>
-      <div className="strip-head">
-        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
-        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
-        <span className="title truncate">INTEL</span>
-        <span className="code s2">S2</span>
-      </div>
-      <div className="strip-body">
-        <div className="strip-est-section">
-          <span className="strip-kicker">ESTIMATE</span>
-          <p className="strip-est" title={est}>{est}</p>
-        </div>
-        <div className="strip-stats">
-          <span className="strip-kicker">PRIORITY</span>
-          {s && s.flash > 0 ? (
-            <button className="strip-badge-pill red pulse" onClick={onExpand}>
-              <span>1 FLASH LIVE</span>
-              <span className="strip-num">!</span>
-            </button>
-          ) : s && s.warnings_pending > 0 ? (
-            <button className="strip-badge-pill red" onClick={onExpand}>
-              <span>TO RELEASE</span>
-              <span className="strip-num">{s.warnings_pending}</span>
-            </button>
-          ) : (
-            <div className="strip-badge-pill normal">
-              <span>THREATS</span>
-              <span className="strip-num">{s?.active_threats ?? 0}</span>
-            </div>
-          )}
-          <div className="strip-mini-row">
-            <span>Coverage</span>
-            <span style={{ color: 'var(--green)' }}>{cov?.avg_coverage_pct ?? 0}%</span>
-          </div>
-          <div className="strip-mini-row">
-            <span>Gaps</span>
-            <span style={{ color: 'var(--amber)' }}>{cov?.gaps.length ?? 0}</span>
-          </div>
-          <div className="strip-mini-row">
-            <span>Confirmed</span>
-            <span style={{ color: 'var(--red)' }}>{s?.confirmed_links ?? 0}</span>
-          </div>
-        </div>
-        <button className="strip-expand-btn s2" onClick={onExpand}>
-          EXPAND ⤢
-        </button>
-      </div>
-    </aside>
-  )
-}
-
-function S4Strip({ snap, onExpand, onClose }: { snap: Snapshot | null; onExpand: () => void; onClose: () => void }) {
-  const est = snap?.estimates?.find(e => e.section === 'S4')?.assessment || 'No estimate recorded'
-  const counts = snap?.s4?.counts
-  return (
-    <aside className="right strip" inert={false}>
-      <div className="strip-head">
-        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
-        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
-        <span className="title truncate">LOG</span>
-        <span className="code">S4</span>
-      </div>
-      <div className="strip-body">
-        <div className="strip-est-section">
-          <span className="strip-kicker">ESTIMATE</span>
-          <p className="strip-est" title={est}>{est}</p>
-        </div>
-        <div className="strip-stats">
-          <span className="strip-kicker">STATUS</span>
-          {counts && (counts.red > 0 || counts.late > 0) ? (
-            <button className="strip-badge-pill red pulse" onClick={onExpand}>
-              <span>SHORTAGE / LATE</span>
-              <span className="strip-num">! {counts.red + counts.late}</span>
-            </button>
-          ) : counts && counts.amber > 0 ? (
-            <button className="strip-badge-pill amber" onClick={onExpand}>
-              <span>ATTENTION</span>
-              <span className="strip-num">{counts.amber}</span>
-            </button>
-          ) : (
-            <div className="strip-badge-pill normal">
-              <span>SUPPLY</span>
-              <span className="strip-num" style={{ color: 'var(--green)' }}>HEALTHY</span>
-            </div>
-          )}
-          <div className="strip-mini-row">
-            <span>Lines</span>
-            <span>{snap?.s4?.supplies?.length ?? 0}</span>
-          </div>
-          <div className="strip-mini-row">
-            <span>Shipments</span>
-            <span>{snap?.s4?.shipments?.length ?? 0}</span>
-          </div>
-        </div>
-        <button className="strip-expand-btn" onClick={onExpand}>
-          EXPAND ⤢
-        </button>
-      </div>
-    </aside>
-  )
-}
-
-function S6Strip({ snap, onExpand, onClose }: { snap: Snapshot | null; onExpand: () => void; onClose: () => void }) {
-  const est = snap?.estimates?.find(e => e.section === 'S6')?.assessment || 'No estimate recorded'
-  const counts = snap?.s6?.counts
-  const openRollcalls = snap?.incidents?.filter(i => i.status === 'open').length ?? 0
-  return (
-    <aside className="right strip" inert={false}>
-      <div className="strip-head">
-        <button className="mini-icon" onClick={onClose} title="Close panel">×</button>
-        <button className="mini-icon" onClick={onExpand} title="Expand to full width (380px)">⤢</button>
-        <span className="title truncate">SIGNAL</span>
-        <span className="code">S6</span>
-      </div>
-      <div className="strip-body">
-        <div className="strip-est-section">
-          <span className="strip-kicker">ESTIMATE</span>
-          <p className="strip-est" title={est}>{est}</p>
-        </div>
-        <div className="strip-stats">
-          <span className="strip-kicker">STATUS</span>
-          {openRollcalls > 0 ? (
-            <button className="strip-badge-pill red pulse" onClick={onExpand}>
-              <span>ROLL CALL OPEN</span>
-              <span className="strip-num">! {openRollcalls}</span>
-            </button>
-          ) : counts && counts.down > 0 ? (
-            <button className="strip-badge-pill red" onClick={onExpand}>
-              <span>SYSTEMS DOWN</span>
-              <span className="strip-num">! {counts.down}</span>
-            </button>
-          ) : counts && counts.degraded > 0 ? (
-            <button className="strip-badge-pill amber" onClick={onExpand}>
-              <span>DEGRADED</span>
-              <span className="strip-num">{counts.degraded}</span>
-            </button>
-          ) : (
-            <div className="strip-badge-pill normal">
-              <span>SYSTEMS</span>
-              <span className="strip-num" style={{ color: 'var(--green)' }}>ALL UP</span>
-            </div>
-          )}
-          <div className="strip-mini-row">
-            <span>Comms Nets</span>
-            <span>{snap?.s6?.systems?.length ?? 0}</span>
-          </div>
-        </div>
-        <button className="strip-expand-btn" onClick={onExpand}>
-          EXPAND ⤢
-        </button>
-      </div>
-    </aside>
-  )
-}
-
 export default function App() {
   const { destination, navigate } = useDestination()
   const isCop = destination.page === 'cop'
@@ -283,15 +84,13 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection>(null)
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
-  type PanelMode = 'closed' | 'strip' | 'full'
   type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
   const [addSite, setAddSite] = useState(false)
-  const [leftMode, setLeftMode] = useState<PanelMode>(() => {
+  const [leftOpen, setLeftOpen] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem('toc.panel.left_mode')
-      if (saved === 'closed' || saved === 'strip' || saved === 'full') return saved as PanelMode
-      return 'strip'
-    } catch { return 'strip' }
+      const saved = localStorage.getItem('toc.panel.left')
+      return saved !== 'closed'
+    } catch { return true }
   })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => {
     try {
@@ -299,61 +98,33 @@ export default function App() {
       return (saved === 'right' || saved === 's4' || saved === 's6' || saved === 'settings') ? saved : 'right'
     } catch { return 'right' }
   })
-  const [rightMode, setRightMode] = useState<PanelMode>(() => {
-    try {
-      const saved = localStorage.getItem('toc.panel.right_mode')
-      if (saved === 'closed' || saved === 'strip' || saved === 'full') return saved as PanelMode
-      return 'strip'
-    } catch { return 'strip' }
-  })
   const [s3Open, setS3Open] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.s3') !== 'closed' } catch { return true } })
   const [logOpen, setLogOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.log') !== 'closed' } catch { return true } })
   useEffect(() => {
     try {
-      localStorage.setItem('toc.panel.left_mode', leftMode)
+      localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed')
       localStorage.setItem('toc.panel.right', rightPanel ?? '')
-      localStorage.setItem('toc.panel.right_mode', rightMode)
       localStorage.setItem('toc.panel.s3', s3Open ? 'open' : 'closed')
       localStorage.setItem('toc.panel.log', logOpen ? 'open' : 'closed')
     } catch { /* private mode */ }
-  }, [leftMode, rightPanel, rightMode, s3Open, logOpen])
-
-  const cycleLeft = () => {
-    setLeftMode(m => m === 'closed' ? 'strip' : m === 'strip' ? 'full' : 'closed')
-  }
+  }, [leftOpen, rightPanel, s3Open, logOpen])
 
   const toggleRight = (p: Exclude<RightPanel, null>) => {
-    if (p === 'settings') {
-      if (rightPanel === 'settings' && rightMode === 'full') {
-        setRightMode('closed')
-      } else {
-        setRightPanel('settings')
-        setRightMode('full')
-      }
-      return
-    }
-    if (rightPanel !== p) {
+    if (rightPanel === p) {
+      setRightPanel(null)
+    } else {
       setRightPanel(p)
-      setRightMode('strip')
       if (p === 's4') setLayers(l => ({ ...l, s4: true }))
       if (p === 's6') setLayers(l => ({ ...l, s6: true }))
       setOverlay(p === 'right' ? 'S2' : p === 's4' ? 'S4' : p === 's6' ? 'S6' : 'COP')
-      return
-    }
-    if (rightMode === 'closed') {
-      setRightMode('strip')
-    } else if (rightMode === 'strip') {
-      setRightMode('full')
-    } else {
-      setRightMode('closed')
     }
   }
 
-  const openPanel = (rightMode === 'full' ? rightPanel : null) ?? (leftMode === 'full' ? 'left' : null)
+  const openPanel = rightPanel ?? (leftOpen ? 'left' : null)
   const [s3Flash, setS3Flash] = useState(false)
   const jump = (section: 'S1' | 'S2' | 'S3') => {
-    if (section === 'S1') setLeftMode('full')
-    else if (section === 'S2') { setRightPanel('right'); setRightMode('full') }
+    if (section === 'S1') setLeftOpen(true)
+    else if (section === 'S2') setRightPanel('right')
     else { setS3Open(true); setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
   }
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
@@ -457,11 +228,11 @@ export default function App() {
   const badge = (n: number | undefined, tone: 'red' | 'amber' | 'dim', title: string) => n ? <i className={`badge ${tone}`} title={title}>{n}</i> : null
   const openPanel2 = (p: 'S1' | 'S2' | 'S3' | 'S4' | 'S6' | 'brief' | 'settings' | 'plan' | 'intsum') => {
     if (p === 'S1' || p === 'S2' || p === 'S3') jump(p);
-    else if (p === 'S4' || p === 'S6') { setRightPanel(p.toLowerCase() as 's4' | 's6'); setRightMode('full') }
-    else if (p === 'settings') { setRightPanel('settings'); setRightMode('full') }
+    else if (p === 'S4' || p === 'S6') setRightPanel(p.toLowerCase() as 's4' | 's6');
+    else if (p === 'settings') setRightPanel('settings');
     else if (p === 'brief') setShowBrief(true);
     else if (p === 'plan') setShowPlan(true);
-    else if (p === 'intsum') { setRightPanel('right'); setRightMode('full'); setShowIntsum(true) }
+    else if (p === 'intsum') { setRightPanel('right'); setShowIntsum(true) }
   }
   const eventsWithCover = (snap?.events ?? []).filter(e => e.coverage)
   const nextEvent = snap?.events?.find(e => e.status === 'upcoming')
@@ -524,22 +295,18 @@ export default function App() {
       {cmd && snap && <CommandBar commands={buildCommands(snap, { select: setSel, open: openPanel2 })} onClose={() => setCmd(false)} />}
 
       <nav className="rail rail-left">
-        {sectionOn('S1') && <button className={`rail-btn ${leftMode !== 'closed' ? 'on' : ''}`} onClick={cycleLeft} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
+        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
         {sectionOn('S3') && <button className={`rail-btn ${s3Open ? 'on' : ''}`} onClick={() => { setS3Open(v => !v); if (!s3Open) setOverlay('S3') }} title={`${sectionCode('S3')} ${sectionTitle('S3', 'OPERATIONS')}`}>{sectionLabel('S3')}{s && ((s.movement_risks ?? 0) > 0 ? badge(s.movement_risks, 'red', 'movement risks') : inbox('S3') ? badge(inbox('S3'), 'amber', 'taskings S3 owes') : badge(s.upcoming_events, 'dim', 'upcoming events'))}</button>}
-        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftMode('full')} title="open roll calls">S6</button>}
+        {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' && rightMode !== 'closed' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
-        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' && rightMode !== 'closed' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
-        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' && rightMode !== 'closed' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
+        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
+        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
+        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
         <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => setLogOpen(v => !v)} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
       </nav>
-      {leftMode === 'strip' && (
-        <S1Strip snap={snap} s={s} onExpand={() => setLeftMode('full')} onClose={() => setLeftMode('closed')} />
-      )}
-      <aside className={`left ${leftMode === 'full' ? 'open' : ''}`} inert={!isCop || leftMode !== 'full'}>
-        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftMode('closed')}>
-          <button className="mini" onClick={() => setLeftMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
+      <aside className={`left ${leftOpen ? 'open' : ''}`} inert={!isCop || !leftOpen}>
+        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>
           <button className="mini" onClick={() => openWorkspace('S1')} title="Open S1 Personnel Workspace">WORKSPACE →</button>
           {can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}
           {['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}
@@ -672,17 +439,13 @@ export default function App() {
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
-      <aside className={`right wide ${rightPanel === 'settings' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'settings' || rightMode !== 'full'}>
-        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightMode('closed')} />
+      <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'settings'}>
+        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
-      {rightPanel === 's4' && rightMode === 'strip' && (
-        <S4Strip snap={snap} onExpand={() => setRightMode('full')} onClose={() => setRightMode('closed')} />
-      )}
-      <aside className={`right ${rightPanel === 's4' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's4' || rightMode !== 'full'}>
-        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightMode('closed')}>
-          <button className="mini" onClick={() => setRightMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
+      <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's4'}>
+        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => openWorkspace('S4')} title="Open S4 Logistics Workspace">WORKSPACE →</button>
           {can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}
         </PanelHead>
@@ -693,12 +456,8 @@ export default function App() {
         <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
         {released('S4')}
       </aside>
-      {rightPanel === 's6' && rightMode === 'strip' && (
-        <S6Strip snap={snap} onExpand={() => setRightMode('full')} onClose={() => setRightMode('closed')} />
-      )}
-      <aside className={`right ${rightPanel === 's6' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's6' || rightMode !== 'full'}>
-        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightMode('closed')}>
-          <button className="mini" onClick={() => setRightMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
+      <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's6'}>
+        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => openWorkspace('S6')} title="Open S6 Signal Workspace">WORKSPACE →</button>
           {can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}
         </PanelHead>
@@ -714,12 +473,8 @@ export default function App() {
         </>}
         {released('S6')}
       </aside>
-      {rightPanel === 'right' && rightMode === 'strip' && (
-        <S2Strip snap={snap} s={s} cov={cov} onExpand={() => setRightMode('full')} onClose={() => setRightMode('closed')} />
-      )}
-      <aside className={`right ${rightPanel === 'right' && rightMode === 'full' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'right' || rightMode !== 'full'}>
-        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightMode('closed')}>
-          <button className="mini" onClick={() => setRightMode('strip')} title="Collapse to 140px strip">STRIP ⤡</button>
+      <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'right'}>
+        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>
           <button className="mini" onClick={() => openWorkspace('S2')} title="Open S2 Intelligence Workspace">WORKSPACE →</button>
           <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
           <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
@@ -830,7 +585,7 @@ export default function App() {
             <ul className="logs">
               {(snap?.log ?? []).slice(0, 8).map(e => (
                 <li key={e.id} className={`log ${e.actor_type}`}>
-                  <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
+                  <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{formatLogType(e.type)}</span>
                   <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
                 </li>))}
               {snap && (snap.log ?? []).length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
