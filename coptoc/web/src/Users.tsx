@@ -4,7 +4,7 @@ import * as api from './api'
 import type { UserInfo } from './types'
 
 const SECTIONS = ['S1', 'S2', 'S3', 'S4', 'S6'] as const
-const NEXT: Record<string, string | null> = { none: 'view', view: 'edit', edit: null }
+const NEXT: Record<string, 'view' | 'edit' | null> = { none: 'view', view: 'edit', edit: null }
 
 export function UsersPanel({ busy, act, reload, onChanged }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; reload: number; onChanged: () => void }) {
   const [users, setUsers] = useState<UserInfo[]>([])

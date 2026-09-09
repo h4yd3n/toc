@@ -20,3 +20,6 @@ coptoc/android/build/
 coptoc/android/local.properties
 coptoc/android/.kotlin/
 coptoc/ios/build-device/
+
+# a second checkout may link the first one's venv
+.venv

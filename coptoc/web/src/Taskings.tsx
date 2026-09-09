@@ -1,13 +1,16 @@
 // §5.10 — taskings: the work moving between sections. Each panel shows what it owes (inbox), what it is waiting on (outbox), and can raise one.
 import { useState } from 'react'
 import * as api from './api'
+import { Question } from './Headline'
 import type { SectionCode, Tasking, TaskingBoard } from './types'
 
 const SEC_TITLE: Record<SectionCode, string> = { S1: 'Personnel', S2: 'Intelligence', S3: 'Operations', S4: 'Logistics', S6: 'Signal' }
 const KIND_ICON: Record<string, string> = { collection: '◎', comms: '((·))', supply: '⛽', movement: '➜', coverage: '⛨', other: '·' }
 const fmt = (iso: string | null) => iso ? new Date(iso).toUTCString().slice(5, 22) + 'Z' : ''
 
-export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSelect }: { section: SectionCode; board: TaskingBoard | undefined; canEdit: boolean; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; enabled: SectionCode[]; onSelect?: (t: Tasking) => void }) {
+const MADE_LABEL = { operation: 'OP', shipment: 'SHIPMENT', task: 'TASK' } as const
+
+export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSelect, onOp, onSection }: { section: SectionCode; board: TaskingBoard | undefined; canEdit: boolean; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; enabled: SectionCode[]; onSelect?: (t: Tasking) => void; onOp?: (id: string) => void; onSection?: (s: SectionCode) => void }) {
   const [raise, setRaise] = useState(false)
   const [showDone, setShowDone] = useState(false)
   const [decision, setDecision] = useState<{ task: Tasking; status: Tasking['status'] } | null>(null)
@@ -28,6 +31,8 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
       <div className="l1">
         <span className={`sev ${t.health === 'green' ? 'ok' : t.health === 'amber' ? 'low' : 'critical'}`} title={t.priority}>{t.priority === 'urgent' ? 'URG' : t.priority === 'priority' ? 'PRI' : 'RTN'}</span>
         <span className="name"><span className="dim mono">{KIND_ICON[t.kind]} {mine ? `${t.from_section} →` : `→ ${t.to_section}`}</span> {t.title}</span>
+        {t.created_type && <button className="chip made" title={`accepting this ${t.kind} ask ${t.created_type === 'operation' ? 'opened an operation' : t.created_type === 'shipment' ? 'booked a shipment on the S4 board' : 'added a task to the subject\'s operation'}: ${t.created_name}`}
+          onClick={e => { e.stopPropagation(); if (t.created_type === 'shipment') onSection?.('S4'); else onOp?.(t.created_type === 'task' ? t.created_parent! : t.created_id!) }}>→ {MADE_LABEL[t.created_type]}</button>}
         <span className={`chip ${t.status === 'requested' ? 'open' : t.status === 'complete' ? 'green' : t.status === 'declined' ? 'dim' : 'active'}`}>{t.status.toUpperCase()}{t.overdue ? ' · LATE' : ''}</span>
       </div>
       <div className="l2">
@@ -45,8 +50,9 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
     </li>)
   return (<>
     {decision && <form className="ws-form" onSubmit={e=>{e.preventDefault();act('recording task outcome',async()=>{await api.updateTasking(decision.task.id,{status:decision.status,result:resultNote.trim()});setDecision(null)})}}><h3>{decision.status === 'complete' ? 'Complete task' : 'Decline task'} · {decision.task.title}</h3><label>{decision.status === 'complete' ? 'What was done?' : 'Reason for declining'}<textarea required value={resultNote} onChange={e=>setResultNote(e.target.value)}/></label><div className="ws-actions"><button disabled={!!busy||!resultNote.trim()}>Save outcome</button><button type="button" onClick={()=>setDecision(null)}>Cancel</button></div></form>}
-    <div className="section-label">TASKINGS <span className="dim">{inbox.filter(t => t.open).length} to do · {outbox.filter(t => t.open).length} waiting</span>
-      <span className="grp"><button className={`chip btn ${showDone ? 'on' : ''}`} onClick={() => setShowDone(v => !v)}>DONE</button>{canEdit && <button className={`chip btn ${raise ? 'on' : ''}`} onClick={() => setRaise(v => !v)}>RAISE</button>}</span></div>
+    <Question q="What we owe, and are waiting on" count={`${inbox.filter(t => t.open).length} to do · ${outbox.filter(t => t.open).length} waiting`}>
+      <span className="grp"><button className={`chip btn ${showDone ? 'on' : ''}`} onClick={() => setShowDone(v => !v)}>DONE</button>{canEdit && <button className={`chip btn ${raise ? 'on' : ''}`} onClick={() => setRaise(v => !v)}>RAISE</button>}</span></Question>
+
     {raise && <div className="dform">
       <div className="dform-head">RAISE A TASKING <span className="dim">from {section} · what you need, from whom, by when</span></div>
       <div className="row-btns">

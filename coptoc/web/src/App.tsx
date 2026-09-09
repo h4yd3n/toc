@@ -1,20 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './MapView'
-import OverlayPanel, { OVERLAY_DEFAULTS, PRESETS, toLayers } from './OverlayPanel'
 import { BriefPanel, EstimateLine, WatchChip } from './Watch'
+import { RequirementsPanel } from './Requirements'
+import { CasesPanel } from './Cases'
 import { AreaPanel } from './Area'
 import { IntsumPanel } from './Intsum'
 import { DistributionBox, OperationPanel } from './Operation'
-import { FlashStrip } from './Warnings'
-import { PlanningPanel } from './Planning'
+import { FlashStrip, WarningsSection } from './Warnings'
+import { ImportDrawer, PlanningPanel } from './Planning'
 import { Timeline } from './Timeline'
+import { S4Headline, S4Panel, S6Headline, S6Panel } from './Sections'
+import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
+import { UploadDrawer } from './Upload'
+import { TaskingBox } from './Taskings'
+import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
+import { ContextRow, RollCallStrip } from './Strips'
+import { CommandBar, buildCommands } from './CommandBar'
+import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } from './Areas'
 import * as api from './api'
-import Workspaces, { SectionSummary } from './Workspaces'
+import Workspaces from './Workspaces'
 import { useDestination } from './navigation'
-import type { SectionCode } from './types'
-import type { UserInfo, CopEvent, Incident, Location, OverlayId, OverlayPresetId, OverlayState, Person, Role, RosterStatus, Selection, Snapshot, Threat, Trip } from './types'
+import type { Draw, GraphicType, Overlay, UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, SectionCode, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE', airfield: 'AIRFIELD', cp: 'CP', fob: 'FOB', farp: 'FARP', range: 'RANGE' }
 const SITE_TYPES = ['hq', 'cp', 'fob', 'farp', 'airfield', 'range', 'office', 'datacenter', 'venue', 'residence'] as const
@@ -23,8 +31,12 @@ const LOG_LABEL: Record<string, string> = {
   'cop.event.attendees_added': 'EVENT', 'cop.event.attendee_removed': 'EVENT', 'cop.event.cancelled': 'EVENT', 'cop.person.checkin': 'CHECK-IN',
   'cop.person.shift': 'SHIFT', 'cop.location.posture': 'POSTURE', 'cop.threat.link_confirmed': 'S2 LINK', 'cop.threat.link_removed': 'S2 LINK',
   's2.requirement.created': 'S2 REQ', 's2.requirement.updated': 'S2 REQ', 's2.requirements.synced': 'S2 SYNC', 's2.source.updated': 'SOURCE',
+  's2.actor.created': 'ACTOR', 's2.actor.updated': 'ACTOR', 's2.sighting.created': 'SIGHTING', 's2.report.filed': 'SPOTREP', 's2.report.disposed': 'REPORT', 's2.graphic.promoted': 'S2 GRAPHIC',
   'cop.watch.taken': 'WATCH', 'cop.watch.handover': 'HANDOVER', 'cop.watch.acknowledged': 'HANDOVER', 'cop.watch.estimate': 'ESTIMATE', 'cop.watch.config': 'WATCH',
-  'cop.pir.created': 'PIR', 'cop.pir.updated': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗',
+  'cop.pir.created': 'PIR', 'cop.incident.opened': 'ROLL CALL', 'cop.incident.contact': 'CONTACT', 'cop.incident.closed': 'ROLL CALL', 'cop.incident.checkins_requested': 'CHECK-IN REQ', 'cop.incident.escalated': 'ESCALATED', 'cop.incident.roster_added': 'ROSTER +', 'cop.comms.inbound': 'SMS IN', 's2.warning.suggested': 'WARN?', 's2.warning.drafted': 'WARN', 's2.warning.released': 'FLASH', 's2.warning.cancelled': 'WARN ✗', 's2.product.disseminated': 'SENT', 's2.product.acknowledged': 'ACK', 'cop.comms.inbound_unmatched': 'SMS ?', 'cop.assessment.drafted': 'S2 DRAFT', 'cop.assessment.status': 'S2', 'cop.intel.refresh': 'COLLECT', 'cop.intel.refresh_failed': 'COLLECT ✗', 'cop.area.assessed': 'AREA', 'cop.area.updated': 'AREA',
+  'cop.graphic.drawn': 'GRAPHIC', 'cop.graphic.updated': 'GRAPHIC', 'cop.graphic.retired': 'GRAPHIC ✗',
+  'cop.operation.opened': 'OP', 'cop.operation.status': 'OP', 'cop.operation.task': 'OP TASK', 'cop.s4.shipment': 'S4', 'cop.s4.supply': 'S4', 'cop.s6.system': 'S6',
+  'cop.tasking.raised': 'TASKING', 'cop.tasking.accepted': 'TASKING', 'cop.tasking.scheduled': 'TASKING', 'cop.tasking.complete': 'TASKING ✓', 'cop.tasking.declined': 'TASKING ✗', 'cop.tasking.amended': 'TASKING',
 }
 
 function rel(iso: string | null, now: number): string {
@@ -36,6 +48,7 @@ function rel(iso: string | null, now: number): string {
   return `${p}${Math.round(a / 86400)}d${s}`
 }
 const clock = (d: Date) => d.toISOString().slice(11, 19) + 'Z'
+const short = (s: string) => s.split(',')[0]
 
 type ById = { loc: Map<string, Location>; person: Map<string, Person>; threat: Map<string, Threat>; trip: Map<string, Trip>; event: Map<string, CopEvent>; incident: Map<string, Incident> }
 const ROSTER_COLOR: Record<RosterStatus, string> = { unaccounted: 'dim', unreachable: 'amber', assist: 'red', injured: 'red', contacted: 'green', safe: 'green' }
@@ -57,30 +70,29 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection>(null)
-  // Decision 1: restricted layer is OFF by default. Toggling it re-fetches with restricted=true.
-  // The wall: the map has the room; S1 and S2 live on rails and slide out over the map, never over S3 or the log.
-  // Labels and the header are toggles under DISPLAY, persisted per browser.
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
-  // Panels stay up until closed or displaced by another on the same rail; the choice survives a reload.
   type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
+  const [addSite, setAddSite] = useState(false)
   const [leftOpen, setLeftOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.left') !== 'closed' } catch { return true } })
   const [rightPanel, setRightPanel] = useState<RightPanel>(() => { try { return (localStorage.getItem('toc.panel.right') as RightPanel) || null } catch { return null } })
-  useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? '') } catch { /* private mode */ } }, [leftOpen, rightPanel])
+  const [s3Open, setS3Open] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.s3') !== 'closed' } catch { return true } })
+  const [logOpen, setLogOpen] = useState<boolean>(() => { try { return localStorage.getItem('toc.panel.log') !== 'closed' } catch { return true } })
+  useEffect(() => { try { localStorage.setItem('toc.panel.left', leftOpen ? 'open' : 'closed'); localStorage.setItem('toc.panel.right', rightPanel ?? ''); localStorage.setItem('toc.panel.s3', s3Open ? 'open' : 'closed'); localStorage.setItem('toc.panel.log', logOpen ? 'open' : 'closed') } catch { /* private mode */ } }, [leftOpen, rightPanel, s3Open, logOpen])
   const toggleRight = (p: Exclude<RightPanel, null>) => {
-    const next = rightPanel === p ? null : p; setRightPanel(next)
-
+    const next = rightPanel === p ? null : p; setRightPanel(next); if (next === 's4') setLayers(l => ({ ...l, s4: true })); if (next === 's6') setLayers(l => ({ ...l, s6: true }))
+    setOverlay(next === 'right' ? 'S2' : next === 's4' ? 'S4' : next === 's6' ? 'S6' : 'COP')
   }
-  const openPanel = rightPanel ?? (leftOpen ? 'left' : null)  // for the wall's class only
+  const openPanel = rightPanel ?? (leftOpen ? 'left' : null)
   const [s3Flash, setS3Flash] = useState(false)
-  const jump = (section: 'S1' | 'S2' | 'S3') => {  // a header counter opens its section
+  const jump = (section: 'S1' | 'S2' | 'S3') => {
     if (section === 'S1') setLeftOpen(true)
     else if (section === 'S2') setRightPanel('right')
-    else { setS3Flash(true); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
+    else { setS3Open(true); setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
   }
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
-  const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code   // what the rail says: "S1" or "PEOPLE"
-  const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''  // a corporate desk drops the staff codes
+  const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code
+  const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''
   const switchProfile = (profile: 'military' | 'corporate') => {
     if (!window.confirm(`Switch to the ${profile.toUpperCase()} profile? This reloads the sample data — ${profile === 'military' ? 'the Combat Aviation Brigade with S4 and S6' : 'the executive-protection sample, S1–S3 only'}.`)) return
     act(`switching to the ${profile} profile`, async () => { await api.setProfile(profile); window.location.reload() })
@@ -88,22 +100,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showDefcon, setShowDefcon] = useState(false)
   useEffect(() => { try { localStorage.setItem('toc.ui', JSON.stringify(ui)) } catch { /* private mode */ } }, [ui])
-  // §3 Acetate overlay system — replaces the flat Layers toggle bag
-  const [overlayState, setOverlayState] = useState<OverlayState>(() => {
-    try { const raw = localStorage.getItem('toc.overlays'); if (raw) { const s = JSON.parse(raw); if (s.overlays?.length) return s } } catch { /* private mode */ }
-    return { overlays: OVERLAY_DEFAULTS.map(o => ({ ...o })), soloId: null }
-  })
-  const [activePreset, setActivePreset] = useState<OverlayPresetId | null>('cop')
-  useEffect(() => { try { localStorage.setItem('toc.overlays', JSON.stringify(overlayState)) } catch { /* private mode */ } }, [overlayState])
-  const applyPreset = (id: OverlayPresetId) => {
-    const preset = PRESETS.find(p => p.id === id); if (!preset) return
-    const result = preset.apply(overlayState.overlays)
-    setOverlayState(result)
-    setActivePreset(id)
-  }
-  const onOverlayChange = (s: OverlayState) => { setOverlayState(s); setActivePreset('custom') }
-  // Derive legacy Layers for code paths that still read them (S4/S6 panels, residences API call)
-  const layers = toLayers(overlayState)
+  const [layers, setLayers] = useState<Layers>({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: false, s6: false })
   const [now, setNow] = useState(Date.now())
   const [role, setRole] = useState<Role>(api.session.role)
   const [users, setUsers] = useState<UserInfo[]>([])
@@ -111,38 +108,66 @@ export default function App() {
   const me = snap?.me
   const can = (section: string, level: 'view' | 'edit' = 'view') => !me || me.user_id === null || me.battle_captain ? true : level === 'view' ? me.sections_visible.includes(section) : me.perms[section as 'S1'] === 'edit'
   const enabledSections = (['S1', 'S2', 'S3', 'S4', 'S6'] as const).filter(c => sectionOn(c))
-
+  const taskingsFor = (sec: 'S1' | 'S2' | 'S3' | 'S4' | 'S6') => <TaskingBox section={sec} board={snap?.taskings} canEdit={can(sec, 'edit')} busy={busy} act={act} enabled={[...enabledSections]} onOp={id => { setOpId(id); setShowBrief(false) }} onSection={s => { if (s === 'S4' || s === 'S6') setRightPanel(s.toLowerCase() as 's4' | 's6'); else jump(s as 'S1' | 'S2' | 'S3') }} />
   const [showBrief, setShowBrief] = useState(false)
   const [areaId, setAreaId] = useState<string | null>(null)
   const [showIntsum, setShowIntsum] = useState(false)
   const [opId, setOpId] = useState<string | null>(null)
   const [showPlan, setShowPlan] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [upload, setUpload] = useState<'S1' | 'S3' | 'S4' | 'S6' | null>(null)
+  const [s3Tasks, setS3Tasks] = useState(false)
   const [briefReload, setBriefReload] = useState(0)
+  const [cov, setCov] = useState<Coverage | null>(null)
+  const [cmd, setCmd] = useState(false)
+  const [areaMode, setAreaMode] = useState<AreaMode | null>(null)
+  const [overlay, setOverlay] = useState<Overlay>('COP')
+  const [timeBack, setTimeBack] = useState<number | null>(null)
+  const [scrub, setScrub] = useState<{ t: number; pinned: boolean } | null>(null)
+  const [overlayMenuOpen, setOverlayMenuOpen] = useState(false)
+  const [outlineOnly, setOutlineOnly] = useState<boolean>(() => { try { return localStorage.getItem('toc.map.outlineOnly') === 'true' } catch { return false } })
+  useEffect(() => { try { localStorage.setItem('toc.map.outlineOnly', String(outlineOnly)) } catch {} }, [outlineOnly])
 
-  const loadGeneration = useRef(0)
-  const load = useCallback(async () => {
-    const user = api.session.userId, generation = ++loadGeneration.current
-    try { const s = await api.fetchSnapshot(layers.residences); if (user === api.session.userId && generation === loadGeneration.current) { setSnap(s); setErr(null) } }
-    catch(e) { if(user === api.session.userId && generation === loadGeneration.current) setErr(String(e)) }
-  }, [layers.residences])
+  const [catalog, setCatalog] = useState<GraphicType[]>([])
+  const [draw, setDraw] = useState<Draw | null>(null)
+  const [drawMenu, setDrawMenu] = useState(false)
+  useEffect(() => { api.graphicsCatalog().then(d => setCatalog(d.types)).catch(() => {}) }, [snap?.profile])
+  const finishDraw = (d: Draw | null) => {
+    if (!d) return
+    const pts = d.points.filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1])
+    const need = d.kind === 'point' ? 1 : d.kind === 'line' ? 2 : 3
+    if (pts.length < need) { setErr(`A ${d.kind} needs ${need} point${need === 1 ? '' : 's'}; ${pts.length} so far.`); return }
+    const name = window.prompt(`Name for the ${d.type.label.split(' · ')[0]}:`, '')
+    if (!name?.trim()) { setDraw(null); return }
+    const note = window.prompt('Note (optional):', '') ?? ''
+    setDraw(null)
+    act(`drawing ${name}`, () => api.drawGraphic({ type: d.type.type, kind: d.kind, name: name.trim(), geometry: d.kind === 'point' ? pts[0] : pts, note }))
+  }
+  const drawRef = useRef<Draw | null>(null); drawRef.current = draw
+  const onDrawPoint = (p: [number, number]) => { const d = drawRef.current; if (!d) return; if (d.kind === 'point') { finishDraw({ ...d, points: [p] }); return } setDraw({ ...d, points: [...d.points, p] }) }
+  const onScrub = (t: number | null, pinned?: boolean) => setScrub(prev => pinned ? (prev?.pinned && t != null && Math.abs(prev.t - t) < 1 ? null : t == null ? null : { t, pinned: true }) : prev?.pinned ? prev : t == null ? null : { t, pinned: false })
+
+  const load = useCallback(() => api.fetchSnapshot(layers.residences).then(s => { setSnap(s); setErr(null) }).catch(e => setErr(String(e))), [layers.residences])
   useEffect(() => { api.session.role = role; load() }, [role, load])
-  useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}) }, [briefReload])
+  useEffect(() => { api.listUsers().then(d => setUsers(d.users)).catch(() => {}); api.getCoverage().then(setCov).catch(() => {}) }, [briefReload])
+  useEffect(() => { const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) } if (e.key === 'Escape') { setDraw(null); setDrawMenu(false); setOverlayMenuOpen(false) } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k) }, [])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
-  // §3 Keyboard shortcuts: Alt+1–8 to toggle overlays, Alt+Shift+1–8 to solo
+
   useEffect(() => {
-    const OVERLAY_KEYS: OverlayId[] = ['blue_force', 'threat', 'sigacts', 'routes', 'events', 's4', 's6', 'restricted']
-    const handler = (e: KeyboardEvent) => {
-      if (!e.altKey || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'SELECT') return
-      const idx = parseInt(e.key) - 1; if (idx < 0 || idx >= OVERLAY_KEYS.length) return
-      e.preventDefault()
-      const id = OVERLAY_KEYS[idx]
-      if (e.shiftKey) { setOverlayState(s => ({ ...s, soloId: s.soloId === id ? null : id })); setActivePreset('custom') }
-      else { setOverlayState(s => ({ ...s, overlays: s.overlays.map(o => o.id === id ? { ...o, enabled: !o.enabled } : o) })); setActivePreset('custom') }
-    }
-    window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler)
-  }, [])
+    let alive = true
+    setWorkBoard(null)
+    const refresh = () => api.getWork().then(b => { if (alive) setWorkBoard(b) }).catch(() => {})
+    void refresh(); const interval = window.setInterval(refresh, 15000)
+    return () => { alive = false; clearInterval(interval) }
+  }, [userId, briefReload])
+
+  const released = (section: SectionCode) => {
+    const ids = new Set(workBoard?.assignments.filter(a => a.section === section).map(a => a.id))
+    const items = workBoard?.runs.filter(r => ids.has(r.assignment_id) && r.review_status === 'released').sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,3) ?? []
+    return items.length ? <div className="section-summary"><h3>Released findings</h3>{items.map(r => <button className="section-exception" key={r.id} onClick={() => { setWorkspaceDetail(false); navigate({ page:'work',section,tab:'overview',record:r.id }) }}><strong>{r.result.title}</strong><span>{r.result.summary}</span></button>)}</div> : null
+  }
 
   const byId = useMemo<ById>(() => ({
     loc: new Map(snap?.locations.map(l => [l.id, l]) ?? []), person: new Map(snap?.people.map(p => [p.id, p]) ?? []),
@@ -154,34 +179,33 @@ export default function App() {
     setBusy(label)
     try { await fn(); await load(); setBriefReload(n => n + 1) } catch (e) { setErr(String(e)) } finally { setBusy(null) }
   }
+  const toggle = (k: keyof Layers) => setLayers(l => ({ ...l, [k]: !l[k] }))
   const s = snap?.summary
-  useEffect(() => {
-    let alive = true
-    setWorkBoard(null)
-    const refresh = () => api.getWork().then(b => { if (alive) setWorkBoard(b) }).catch(() => {})
-    void refresh(); const interval = window.setInterval(refresh, 15000)
-    return () => { alive = false; clearInterval(interval) }
-  }, [userId, briefReload])
-  const released = (section: SectionCode) => {
-    const ids = new Set(workBoard?.assignments.filter(a => a.section === section).map(a => a.id))
-    const items = workBoard?.runs.filter(r => ids.has(r.assignment_id) && r.review_status === 'released').sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,3) ?? []
-    return items.length ? <div className="section-summary"><h3>Released findings</h3>{items.map(r => <button className="section-exception" key={r.id} onClick={() => { setWorkspaceDetail(false); navigate({ page:'work',section,tab:'overview',record:r.id }) }}><strong>{r.result.title}</strong><span>{r.result.summary}</span></button>)}</div> : null
+  const travelers = snap?.people.filter(p => p.status === 'traveling') ?? []
+  const alert = (s?.defcon === 1) || (snap?.warnings.some(w => w.status === 'released' && w.severity === 'critical') ?? false)
+  const inbox = (sec: string) => snap?.taskings?.per_section?.[sec]?.inbox ?? 0
+  const badge = (n: number | undefined, tone: 'red' | 'amber' | 'dim', title: string) => n ? <i className={`badge ${tone}`} title={title}>{n}</i> : null
+  const openPanel2 = (p: 'S1' | 'S2' | 'S3' | 'S4' | 'S6' | 'brief' | 'settings' | 'plan' | 'intsum') => {
+    if (p === 'S1' || p === 'S2' || p === 'S3') jump(p); else if (p === 'S4' || p === 'S6') setRightPanel(p.toLowerCase() as 's4' | 's6'); else if (p === 'settings') setRightPanel('settings')
+    else if (p === 'brief') setShowBrief(true); else if (p === 'plan') setShowPlan(true); else if (p === 'intsum') { setRightPanel('right'); setShowIntsum(true) }
   }
+  const eventsWithCover = snap?.events.filter(e => e.coverage) ?? []
+  const nextEvent = snap?.events.find(e => e.status === 'upcoming')
+
   const recordDetails = <>
     {showPlan && <PlanningPanel role={role} busy={busy} act={act} onClose={() => setShowPlan(false)} onSelect={s => { setSel(s); setShowPlan(false) }} reload={briefReload} snap={snap} />}
     {opId && !showPlan && <OperationPanel id={opId} role={role} busy={busy} act={act} onClose={() => setOpId(null)} reload={briefReload} />}
     {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
     {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
-    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} />}
+    {areaMode && snap && <RatedAreaPanel mode={areaMode} areas={snap.areas ?? []} locations={snap.locations} role={role} busy={busy} act={act} onClose={() => setAreaMode(null)} onSelect={s => { setSel(s); setAreaMode(null) }} />}
+    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && !areaMode && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} onArea={m => { setAreaMode(m); setShowBrief(false) }} />}
     {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
   </>
 
-
   return (
-    <div className={`wall ${isCop ? '' : 'is-workspace'} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
+    <div className={`wall ${isCop ? '' : 'is-workspace'} ${!s3Open && !logOpen ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="brand"><img className="glyph" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
-        <nav className="global-nav" aria-label="Main navigation"><button aria-current={isCop?'page':undefined} onClick={() => navigate({page:'cop'})}>COP</button><button aria-current={destination.page==='workspace'?'page':undefined} onClick={() => openWorkspace(destination.section)}>Workspaces</button></nav>
         {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
           <option value="military">Military</option><option value="corporate">Corporate</option>
         </select>}
@@ -210,6 +234,7 @@ export default function App() {
           <option value="battle_captain">Battle Captain</option><option value="ep">Executive Protection</option><option value="security">Security</option><option value="analyst">S2 Analyst</option><option value="ea">Executive Assistant</option><option value="logistics">S4 Logistics</option><option value="signal">S6 Signal</option>
         </select>}
         {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
+        <button className="gear kbd" title="Find anything on the picture (⌘K / Ctrl+K)" onClick={() => setCmd(true)}>⌘K</button>
         <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
         <div className="clock">{clock(new Date(now))}</div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
@@ -217,66 +242,314 @@ export default function App() {
           <div className="s-row"><span>HEADER</span>{(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}<span className="dim small">POSTURE: one big posture tile, five counters</span></div>
         </div>}
       </header>
-      <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
+      <div className="strips">
+        <ContextRow view={snap?.view} now={now} />
+        <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
+        <RollCallStrip incidents={snap?.incidents ?? []} now={now} role={role} busy={busy} act={act} onSelect={setSel} selected={sel} />
+      </div>
+      {cmd && snap && <CommandBar commands={buildCommands(snap, { select: setSel, open: openPanel2 })} onClose={() => setCmd(false)} />}
 
       <nav className="rail rail-left">
-        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}</button>}
+        {sectionOn('S1') && <button className={`rail-btn ${leftOpen ? 'on' : ''}`} onClick={() => setLeftOpen(v => !v)} title={`${sectionCode('S1')} ${sectionTitle('S1', 'PERSONNEL')}`}>{sectionLabel('S1')}{s && ((s.unaccounted + s.unreachable) > 0 ? badge(s.unaccounted + s.unreachable, 'red', 'unaccounted or unreachable') : inbox('S1') ? badge(inbox('S1'), 'amber', 'taskings S1 owes') : badge(s.total_people, 'dim', 'personnel'))}</button>}
+        {sectionOn('S3') && <button className={`rail-btn ${s3Open ? 'on' : ''}`} onClick={() => { setS3Open(v => !v); if (!s3Open) setOverlay('S3') }} title={`${sectionCode('S3')} ${sectionTitle('S3', 'OPERATIONS')}`}>{sectionLabel('S3')}{s && ((s.movement_risks ?? 0) > 0 ? badge(s.movement_risks, 'red', 'movement risks') : inbox('S3') ? badge(inbox('S3'), 'amber', 'taskings S3 owes') : badge(s.upcoming_events, 'dim', 'upcoming events'))}</button>}
         {snap && snap.incidents.some(i => i.status === 'open') && <button className="rail-btn alert" onClick={() => setLeftOpen(true)} title="open roll calls">S6</button>}
       </nav>
       <nav className="rail rail-right">
-        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{(s?.warnings_pending ?? 0) > 0 && <i className="badge">{s?.warnings_pending}</i>}</button>}
-        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} /></button>}
-        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} /></button>}
+        {sectionOn('S2') && <button className={`rail-btn ${rightPanel === 'right' ? 'on' : ''}`} onClick={() => toggleRight('right')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
+        {sectionOn('S4') && <button className={`rail-btn ${rightPanel === 's4' ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => toggleRight('s4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
+        {sectionOn('S6') && <button className={`rail-btn ${rightPanel === 's6' ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => toggleRight('s6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
+        <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => setLogOpen(v => !v)} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
       </nav>
       <aside className={`left ${leftOpen ? 'open' : ''}`} inert={!isCop}>
-        <PanelHead code="S1" title={sectionTitle('S1','PERSONNEL')} onClose={() => setLeftOpen(false)} />
-        {snap && <SectionSummary section="S1" snap={snap} onOpen={(tab,record) => openWorkspace('S1',tab,record)} onSelect={setSel} />}
+        <PanelHead code={sectionCode('S1')} title={sectionTitle('S1', 'PERSONNEL')} hint="Blue Force" onClose={() => setLeftOpen(false)}>
+          <button className="mini" onClick={() => openWorkspace('S1')} title="Open S1 Personnel Workspace">WORKSPACE →</button>
+          {can('S1', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S1' ? null : 'S1')} title="Drop the roster spreadsheet">UPLOAD</button>}
+          {['battle_captain', 'ea', 'security', 'analyst'].includes(role) && <button className="mini" onClick={() => setShowImport(v => !v)} title="paste an export from the systems of record">IMPORT</button>}
+        </PanelHead>
+        {upload === 'S1' && <UploadDrawer section="S1" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+        {showImport && <ImportDrawer busy={busy} act={act} onDone={() => setShowImport(false)} />}
+        {s && <Headline big={s.present.toLocaleString()} label="at post" sub={`of ${s.total_people.toLocaleString()} · ${s.traveling} traveling · ${s.checked_in_fresh} checked in`} pct={(100 * s.present) / Math.max(1, s.total_people)} tone="blue" />}
+        {s && <Tiles items={[
+          { v: s.unaccounted, l: 'UNACCOUNTED', tone: 'red', hide: s.unaccounted === 0, title: 'open roll calls: not yet accounted for' }, { v: s.unreachable, l: 'UNREACHABLE', tone: 'red', hide: s.unreachable === 0 },
+          { v: s.traveling, l: 'TRAVELING', tone: 'blue', onClick: () => jump('S3') }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 }, { v: s.security_on_shift, l: 'SEC ON SHIFT', tone: 'green' },
+          { v: inbox('S1'), l: 'OWED', tone: 'amber', hide: inbox('S1') === 0, title: 'taskings S1 owes' },
+        ]} />}
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S1')} role={role} busy={busy} act={act} />
+        {taskingsFor('S1')}
+        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
+          <Question q="Who is not accounted for" count={snap.incidents.filter(i => i.status === 'open').length + ' open'} />
+          <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
+          <ul className="list">
+            {snap.incidents.filter(i => i.status === 'open').map(i => (
+              <li key={i.id} className={`row rollcall ${sel?.type === 'incident' && sel.id === i.id ? 'active' : ''}`} onClick={() => setSel({ type: 'incident', id: i.id })}>
+                <div className="rc-head"><span className="name">☎ {i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></div>
+                <div className="bar"><span style={{ width: `${i.pct}%` }} className={i.pct === 100 ? 'ok' : ''} /></div>
+              </li>))}
+          </ul>
+        </>}
+        {snap && <TaskOrg teams={snap.teams} people={snap.people} onSelect={setSel} sel={sel} />}
+        <Question q="Where we are" count={snap?.locations.length}>{can('S3', 'edit') && <button className="mini" title="Add a site — a CP the TOC jumped to, a new office" onClick={e => { e.stopPropagation(); setAddSite(v => !v) }}>{addSite ? '×' : '+ SITE'}</button>}</Question>
+        {addSite && <SiteForm busy={busy} act={act} onDone={() => setAddSite(false)} />}
+        <ul className="list">
+          {snap?.locations.map(l => (
+            <li key={l.id} className={`row ${sel?.type === 'location' && sel.id === l.id ? 'active' : ''}`} onClick={() => setSel({ type: 'location', id: l.id })}>
+              <span className={`dot posture-${l.effective_posture}`} />
+              <span className="name">{l.is_toc && <span className="tocmark" title="the TOC is running from here">◈</span>}{l.name}{l.sensitivity === 'restricted' && <span className="lock">⚿</span>}</span>
+              {l.confirmed_threat_ids.length > 0 ? <span className="tbadge confirmed" title="confirmed threat link">▲{l.confirmed_threat_ids.length}</span>
+                : l.threat_ids_in_area.length > 0 ? <span className="tbadge" title="threat in area — unconfirmed">△{l.threat_ids_in_area.length}</span> : null}
+              <MiniBar a={l.present} b={l.assigned} tone="blue" />
+              <span className="meta">{l.present}<span className="dim">/{l.assigned}</span>{l.security_on_shift ? <span className="sec"> ·{l.security_on_shift}⛨</span> : null}</span>
+            </li>))}
+        </ul>
+        <Question q="Who is moving" count={travelers.length} />
+        {(() => {
+          const groups = new Map<string, Person[]>()
+          for (const p of travelers) { const k = short(byId.trip.get(p.trip_id ?? '')?.dest_name ?? 'en route'); groups.set(k, [...(groups.get(k) ?? []), p]) }
+          return [...groups.entries()].sort((a, b) => b[1].length - a[1].length).map(([dest, ps]) => (<div key={dest} className="group">
+            <div className="group-head"><span className="name">→ {dest}</span><span className="meta">{ps.length}{ps.some(p => p.is_vip) && <span className="vipstar"> ★</span>}</span></div>
+            <ul className="list">{ps.map(p => (
+              <li key={p.id} className={`row ${sel?.type === 'person' && sel.id === p.id ? 'active' : ''}`} onClick={() => setSel({ type: 'person', id: p.id })}>
+                <span className={`dot ${p.confirmed_threat_ids.length ? 'red' : 'blue'}`} />
+                <span className="name">{p.is_vip && <span className="vipstar">★</span>}{p.name}</span>
+                <Presence p={p} />
+                <span className="meta dim">{byId.trip.get(p.trip_id ?? '')?.current_leg?.label || p.role}</span>
+              </li>))}</ul></div>))
+        })()}
+        {travelers.length === 0 && <div className="dim small" style={{ padding: '2px 14px 8px' }}>Nobody is away.</div>}
         {released('S1')}
       </aside>
 
-      <main className="center" inert={!isCop} onClick={() => setShowSettings(false)}>
-        <MapView snapshot={snap} selection={sel} overlayState={overlayState} onSelect={setSel} />
-        <OverlayPanel state={overlayState} onChange={onOverlayChange} activePreset={activePreset} onPreset={applyPreset} restrictedDenied={snap?.restricted_denied} />
+      <main className="center" inert={!isCop} onClick={() => { setShowSettings(false); setOverlayMenuOpen(false) }}>
+        <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
+        <div className="ovbar" onClick={e => e.stopPropagation()}>
+          {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
+          {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
+          {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
+          {drawMenu && !draw && <div className="drawmenu">
+            {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
+            {catalog.filter(t => t.section === overlay).length === 0 && <div className="dim small" style={{ padding: 6 }}>Nothing in the catalog for {overlay}.</div>}
+          </div>}
+          {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
+          {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
+          <span className="ovsep" />
+          <button className={`ov ov-layers-btn ${overlayMenuOpen ? 'on' : ''}`} title="Toggle map layers and display style" onClick={e => { e.stopPropagation(); setOverlayMenuOpen(v => !v); setDrawMenu(false) }}>
+            OVERLAYS ▾
+          </button>
+          {overlayMenuOpen && (
+            <div className="overlay-dropdown" onClick={e => e.stopPropagation()}>
+              <div className="ov-dd-head">
+                <span>MAP OVERLAYS</span>
+                <div className="ov-dd-quick">
+                  <button className="ov-dd-btn" onClick={() => setLayers({ locations: true, travelers: true, threats: true, routes: true, events: true, residences: false, s4: true, s6: true })}>ALL ON</button>
+                  <button className="ov-dd-btn" onClick={() => setLayers({ locations: false, travelers: false, threats: false, routes: false, events: false, residences: false, s4: false, s6: false })}>ALL OFF</button>
+                </div>
+              </div>
+              <div className="ov-dd-style">
+                <span className="ov-dd-style-label">THREAT RADII</span>
+                <div className="ov-dd-style-btns">
+                  <button className={`ov-dd-btn ${!outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(false)}>FILL + OUTLINE</button>
+                  <button className={`ov-dd-btn ${outlineOnly ? 'active' : ''}`} onClick={() => setOutlineOnly(true)}>OUTLINE ONLY</button>
+                </div>
+              </div>
+              <div className="ov-dd-list">
+                {([
+                  { key: 'locations', label: 'Sites & Units', icon: '◆', desc: 'HQ, CPs, FOBs, Airfields' },
+                  { key: 'travelers', label: 'Moving Personnel', icon: '●', desc: 'Personnel in transit & VIPs' },
+                  { key: 'routes', label: 'Routes & Convoys', icon: '↗', desc: 'Active & planned movement arcs' },
+                  { key: 'threats', label: 'Threats & Hazards', icon: '⚠', desc: 'Observed threats & danger radii' },
+                  { key: 'events', label: 'Operations & Events', icon: '★', desc: 'Key exercises, gunnery, meetings' },
+                  { key: 's4', label: 'S4 Logistics Status', icon: '▦', desc: 'Supply health chips on sites' },
+                  { key: 's6', label: 'S6 Signal & Comms', icon: '⚡', desc: 'PACE net & system health chips' },
+                  { key: 'residences', label: 'Restricted Residences', icon: '⚿', desc: 'Personal residences (gated)' },
+                ] as const).map(item => {
+                  if (item.key === 's4' && !sectionOn('S4')) return null
+                  if (item.key === 's6' && !sectionOn('S6')) return null
+                  const on = layers[item.key]
+                  const denied = item.key === 'residences' && snap?.restricted_denied
+                  return (
+                    <div
+                      key={item.key}
+                      className={`ov-dd-item ${on ? 'on' : 'off'} ${denied ? 'denied' : ''}`}
+                      onClick={() => {
+                        if (denied) return
+                        toggle(item.key)
+                      }}
+                    >
+                      <span className={`ov-dd-check ${on ? 'checked' : ''}`}>{on ? '✓' : ''}</span>
+                      <span className="ov-dd-icon">{item.icon}</span>
+                      <div className="ov-dd-info">
+                        <span className="ov-dd-name">{item.label}{denied ? ' · DENIED' : ''}</span>
+                        <span className="ov-dd-desc">{item.desc}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
         {isCop && recordDetails}
         {err && <div className="error" onClick={() => setErr(null)}>{err}</div>}
         {!snap && !err && <div className="loading">LOADING PICTURE…</div>}
         {busy && <div className="loading">{busy.toUpperCase()}…</div>}
       </main>
 
-      <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`}>
+      <aside className={`right wide ${rightPanel === 'settings' ? 'open' : ''}`} inert={!isCop}>
         <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
-      {(['S2','S4','S6'] as SectionCode[]).map(section => {
-        const panel = section === 'S2' ? 'right' : section.toLowerCase()
-        return <aside key={section} className={`right ${rightPanel === panel ? 'open' : ''}`} inert={!isCop}>
-          <PanelHead code={section} title={sectionTitle(section,section)} onClose={() => setRightPanel(null)} />
-          {snap && <SectionSummary section={section} snap={snap} onOpen={(tab,record) => openWorkspace(section,tab,record)} onSelect={setSel} />}
-          {released(section)}
-        </aside>
-      })}
+      <aside className={`right ${rightPanel === 's4' ? 'open' : ''}`} inert={!isCop}>
+        <PanelHead code="S4" title={sectionTitle('S4', 'LOGISTICS')} hint="Supply & equipment · by exception" onClose={() => setRightPanel(null)}>
+          <button className="mini" onClick={() => openWorkspace('S4')} title="Open S4 Logistics Workspace">WORKSPACE →</button>
+          {can('S4', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S4' ? null : 'S4')} title="Drop the LOGSTAT spreadsheet">UPLOAD</button>}
+        </PanelHead>
+        {upload === 'S4' && <UploadDrawer section="S4" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+        <S4Headline board={snap?.s4} owed={inbox('S4')} />
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S4')} role={role} busy={busy} act={act} />
+        {taskingsFor('S4')}
+        <S4Panel board={snap?.s4} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s4} toggleMap={() => toggle('s4')} />
+        {released('S4')}
+      </aside>
+      <aside className={`right ${rightPanel === 's6' ? 'open' : ''}`} inert={!isCop}>
+        <PanelHead code="S6" title={sectionTitle('S6', 'SIGNAL')} hint="Comms & systems · by exception" onClose={() => setRightPanel(null)}>
+          <button className="mini" onClick={() => openWorkspace('S6')} title="Open S6 Signal Workspace">WORKSPACE →</button>
+          {can('S6', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S6' ? null : 'S6')} title="Drop the comms status spreadsheet">UPLOAD</button>}
+        </PanelHead>
+        {upload === 'S6' && <UploadDrawer section="S6" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+        <S6Headline board={snap?.s6} owed={inbox('S6')} />
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S6')} role={role} busy={busy} act={act} />
+        {taskingsFor('S6')}
+        <S6Panel board={snap?.s6} role={role} busy={busy} act={act} site={sel?.type === 'location' ? byId.loc.get(sel.id) : undefined} onClearSite={() => setSel(null)} onMap={layers.s6} toggleMap={() => toggle('s6')} />
+        {snap && snap.incidents.filter(i => i.status === 'open').length > 0 && <>
+          <Question q="Accountability · open roll calls" count={snap.incidents.filter(i => i.status === 'open').length} />
+          <ul className="list">{snap.incidents.filter(i => i.status === 'open').map(i => (
+            <li key={i.id} className="row rollcall" onClick={() => setSel({ type: 'incident', id: i.id })}><span className="name">{i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></li>))}</ul>
+        </>}
+        {released('S6')}
+      </aside>
+      <aside className={`right ${rightPanel === 'right' ? 'open' : ''}`} inert={!isCop}>
+        <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>
+          <button className="mini" onClick={() => openWorkspace('S2')} title="Open S2 Intelligence Workspace">WORKSPACE →</button>
+          <button className="mini" onClick={() => { setShowIntsum(v => !v); setAreaId(null); setShowBrief(false) }} title="The daily INTSUM (Decision G)">INTSUM</button>
+          <button className="mini" disabled={!!busy} onClick={() => act('collecting from every live source', api.refreshIntel)} title="Run every enabled, configured collector">⟳ COLLECT</button>
+        </PanelHead>
+        {cov && <Headline big={`${cov.avg_coverage_pct}%`} label="collection coverage" sub={`${cov.fully_covered} of ${cov.requirements} requirements fully covered · ${cov.gaps.length} indicator${cov.gaps.length === 1 ? '' : 's'} nobody collects`} pct={cov.avg_coverage_pct} tone={toneFor(cov.avg_coverage_pct, 90, 70)} />}
+        {snap && <SevBlocks threats={snap.threats} />}
+        {s && <Tiles items={[
+          { v: s.warnings_pending, l: 'TO RELEASE', tone: 'red', hide: s.warnings_pending === 0, title: 'warnings awaiting the Battle Captain' }, { v: s.flash, l: 'FLASH LIVE', tone: 'red', hide: s.flash === 0 },
+          { v: s.confirmed_links, l: 'CONFIRMED', tone: s.confirmed_links ? 'red' : 'neutral', title: 'confirmed threat links' }, { v: s.real_threats, l: 'LIVE', title: 'threats from a live source, not the sample' },
+          { v: s.s2_actors ?? 0, l: 'ACTORS', tone: (s.s2_actors ?? 0) ? 'red' : 'neutral' }, { v: s.s2_reports_pending ?? 0, l: 'REPORTS', tone: (s.s2_reports_pending ?? 0) ? 'amber' : 'neutral', hide: (s.s2_reports_pending ?? 0) === 0 },
+          { v: s.movement_risks ?? 0, l: 'ROUTE RISK', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
+          { v: s.open_pirs, l: 'OPEN PIRs', tone: 'amber' }, { v: snap?.assessments.filter(a => a.status === 'review').length ?? 0, l: 'IN REVIEW', hide: !snap?.assessments.some(a => a.status === 'review') },
+          { v: inbox('S2'), l: 'OWED', tone: 'amber', hide: inbox('S2') === 0, title: 'taskings S2 owes' },
+        ]} />}
+        <EstimateLine e={snap?.estimates.find(e => e.section === 'S2')} role={role} busy={busy} act={act} />
+        {taskingsFor('S2')}
+        <WarningsSection warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} />
+        <Question q="Who is out there" count={snap?.s2_actors?.length ?? 0} />
+        <ul className="list cards">
+          {snap?.s2_actors.map(a => (
+            <li key={a.id} className="card actor">
+              <div className="card-head"><span className="id">{a.kind.toUpperCase()}</span><span className="name">{a.name}</span><span className={`chip ${a.status}`}>{a.status.toUpperCase()}</span></div>
+              <div className="est"><b>{a.strength || 'unknown strength'}</b>{a.place ? <span className="dim"> · {a.place}</span> : null}</div>
+              {a.assessed_intent && <div className="bluf">{a.assessed_intent}</div>}
+              <div className="card-foot dim">{a.sighting_ids.length} sighting{a.sighting_ids.length === 1 ? '' : 's'}{a.last_seen_at ? ` · last ${rel(a.last_seen_at, now)}` : ''}</div>
+            </li>))}
+        </ul>
+        <Question q="Field reports" count={`${snap?.s2_reports?.filter(r => r.status === 'filed').length ?? 0} open`} />
+        <ul className="list">
+          {snap?.s2_reports.filter(r => r.status === 'filed').slice(0, 6).map(r => (
+            <li key={r.id} className="row">
+              <span className="sev moderate">{r.grade}</span>
+              <span className="name">{r.place ?? r.reported_by}</span>
+              <span className="meta dim">{rel(r.at, now)}</span>
+            </li>))}
+        </ul>
+        <Question q="Movement risk" count={snap?.movement_risks?.length ?? 0} />
+        <ul className="list">
+          {snap?.movement_risks.slice(0, 6).map(r => (
+            <li key={r.id} className="row">
+              <span className={`sev ${r.severity}`}>{r.severity.slice(0, 3).toUpperCase()}</span>
+              <span className="name">{r.movement_name}</span>
+              <span className="meta dim">{r.graphic_name}</span>
+            </li>))}
+        </ul>
+        <Question q="What is threatening us" count={`${snap?.threats.length ?? 0} · ${s?.real_threats ?? 0} live`} />
+        <ul className="list">
+          {snap?.threats.map(t => (
+            <li key={t.id} className={`row ${sel?.type === 'threat' && sel.id === t.id ? 'active' : ''}`} onClick={() => setSel({ type: 'threat', id: t.id })}>
+              <span className={`sev ${t.severity}`}>{t.severity.slice(0, 3).toUpperCase()}</span>
+              <span className="name">{t.title}</span>
+              {!t.synthetic && <span className="chip live">LIVE</span>}
+              {t.confirmed_links.length > 0 && <span className="tbadge confirmed">▲{t.confirmed_links.length}</span>}
+              <span className="meta dim">{rel(t.observed_at, now)}</span>
+            </li>))}
+        </ul>
+        <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
+        <Question q="What we assess" count={snap?.assessments.length} />
+        <ul className="list cards">
+          {snap?.assessments.map(a => (
+            <li key={a.id} className={`card ${a.confidence === 'insufficient' ? 'gap' : ''}`}>
+              <div className="card-head"><span className="id">{a.id}</span><span className="name">{a.title}</span><span className={`chip ${a.status}`}>{a.status.toUpperCase()}</span></div>
+              {a.confidence === 'insufficient'
+                ? <div className="est"><b className="gapword">COLLECTION GAP</b> · <span className="dim">refused to assess</span></div>
+                : <div className="est"><b>{a.likelihood}</b> <span className="dim">({a.band})</span> · <span className={`conf ${a.confidence}`}>{a.confidence} confidence</span></div>}
+              <div className="bluf">{a.bluf}</div>
+              <AssessmentActions a={a} busy={busy} act={act} />
+            </li>))}
+        </ul>
+        {snap && <AreasSection areas={snap.areas ?? []} locations={snap.locations} role={role} onOpen={m => { setAreaMode(m); setShowBrief(false) }} onSelect={setSel} />}
+        <Question q="What we still need to know" count={`${s?.open_pirs ?? 0} open PIRs`} />
+        <ul className="list cards">
+          {snap?.pirs.map(p => (
+            <li key={p.id} className="card pir" onClick={() => p.subject_type && p.subject_id && byId[p.subject_type === 'trip' ? 'trip' : p.subject_type === 'event' ? 'event' : p.subject_type === 'location' ? 'loc' : 'person'].has(p.subject_id) && setSel(p.subject_type === 'trip' ? { type: 'person', id: byId.trip.get(p.subject_id)!.person_id } : { type: p.subject_type as 'event' | 'location' | 'person', id: p.subject_id })}>
+              <div className="card-head"><span className="id">{p.id}</span><span className="prio">P{p.priority}</span><span className={`chip ${p.status.toLowerCase()}`}>{p.status}</span></div>
+              <div className="q">{p.question}</div>
+            </li>))}
+        </ul>
+        <CasesPanel reload={briefReload} busy={busy} act={act} role={role} onChanged={() => setBriefReload(n => n + 1)} />
+        {released('S2')}
+      </aside>
 
-      <footer className="bottom">
-        <div className="s3">
-          <PanelHead code={sectionCode('S3')} title={sectionTitle('S3','OPERATIONS')} inline><button className="mini" onClick={() => openWorkspace('S3')}>OPEN WORKSPACE →</button><button className="mini" onClick={() => openWorkspace('S3','planning')}>PLANNING</button></PanelHead>
-          <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
-          <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} />
-        </div>
-        <div className="oplog">
-          <PanelHead code="LOG" title="RECENT ACTIVITY" inline><button className="mini" onClick={() => { setWorkspaceDetail(false); navigate({page:'workspace',tab:'activity'}) }}>VIEW ALL</button></PanelHead>
-          <ul className="logs">
-            {snap?.log.slice(0, 5).map(e => (
-              <li key={e.id} className={`log ${e.actor_type}`}>
-                <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
-                <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
-              </li>))}
-            {snap && snap.log.length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
-          </ul>
-        </div>
+      <footer className={`bottom ${!s3Open && !logOpen ? 'closed' : ''}`} inert={!isCop}>
+        {s3Open && (
+          <div className="s3">
+            <PanelHead code={sectionCode('S3')} title={sectionTitle('S3', 'OPERATIONS')} hint="Events · Travel" inline>
+              <button className="mini" onClick={() => openWorkspace('S3')} title="Open S3 Operations Workspace">WORKSPACE →</button>
+              {can('S3', 'edit') && <button className="mini" onClick={() => setUpload(u => u === 'S3' ? null : 'S3')} title="Drop the schedule spreadsheet">UPLOAD</button>}
+              <button className={`mini ${s3Tasks ? 'on' : ''}`} onClick={() => setS3Tasks(v => !v)} title="Work S3 owes and is waiting on">TASKINGS{(snap?.taskings?.per_section?.S3?.inbox ?? 0) > 0 && <i className="badge">{snap?.taskings.per_section.S3.inbox}</i>}</button>
+              <button className="mini" onClick={() => { setShowPlan(v => !v); setOpId(null); setShowBrief(false) }} title="the next 90 days by week, coverage per event">PLAN 90d</button>
+              {s && <Tiles inline items={[
+                { v: s.upcoming_events, l: 'EVENTS' }, { v: `${eventsWithCover.filter(e => e.coverage!.gap === 0).length}/${eventsWithCover.length}`, l: 'COVERED', tone: eventsWithCover.some(e => e.coverage!.gap > 0) ? 'red' : 'green', hide: eventsWithCover.length === 0, title: 'events with their security coverage filled' },
+                { v: snap?.trips.filter(t => t.status === 'active').length ?? 0, l: 'TRIPS ACTIVE', tone: 'blue' }, { v: s.vips_traveling, l: 'VIP OUT', tone: 'amber', hide: s.vips_traveling === 0 },
+                { v: s.movement_risks ?? 0, l: 'RISK FLAGS', tone: (s.movement_risks ?? 0) ? 'red' : 'neutral', hide: (s.movement_risks ?? 0) === 0 },
+                { v: nextEvent ? `${nextEvent.name.split(' — ')[0]} · ${nextEvent.days_until}d` : '—', l: 'NEXT', hide: !nextEvent, onClick: () => nextEvent && setSel({ type: 'event', id: nextEvent.id }) },
+                { v: inbox('S3'), l: 'OWED', tone: 'amber', hide: inbox('S3') === 0 },
+              ]} />}
+            </PanelHead>
+            {upload === 'S3' && <UploadDrawer section="S3" busy={busy} act={act} onDone={() => setBriefReload(n => n + 1)} />}
+            {s3Tasks && <div className="dform upload s3-tasks">{taskingsFor('S3')}</div>}
+            <EstimateLine e={snap?.estimates.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
+            <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
+          </div>
+        )}
+        {logOpen && (
+          <div className={`oplog ${!s3Open ? 'solo' : ''}`}>
+            <PanelHead code="LOG" title="BATTLE LOG" hint="hash-chained" inline />
+            <ul className="logs">
+              {snap?.log.map(e => (
+                <li key={e.id} className={`log ${e.actor_type}`}>
+                  <span className="lt dim">{rel(e.at, now)}</span><span className="lk">{LOG_LABEL[e.type] ?? e.type}</span>
+                  <span className="ls">{e.summary}</span><span className="la dim">{e.actor}</span>
+                </li>))}
+              {snap && snap.log.length === 0 && <li className="log"><span className="ls dim">No actions recorded yet.</span></li>}
+            </ul>
+          </div>
+        )}
       </footer>
       {!isCop && !snap && <main className="workspace"><p role="status">Loading your workspace…</p></main>}
-      {!isCop && snap && <div inert={workspaceDetail}><Workspaces key={userId} destination={destination} navigate={next => { setWorkspaceDetail(false); navigate(next) }} snap={snap} role={role} enabled={enabledSections} can={can} act={act} busy={busy} reload={briefReload}
+      {!isCop && snap && <div inert={workspaceDetail}><Workspaces key={userId} destination={destination} navigate={next => { setWorkspaceDetail(false); navigate(next) }} snap={snap} role={role} enabled={[...enabledSections]} can={can} act={act} busy={busy} reload={briefReload}
         onSelect={s => { setSel(s); setWorkspaceDetail(true) }} onArea={id => { setAreaId(id); setWorkspaceDetail(true) }} onIntsum={() => { setShowIntsum(true); setWorkspaceDetail(true) }} onOp={id => { setOpId(id); setWorkspaceDetail(true) }} siteForm={<SiteForm busy={busy} act={act} onDone={() => setBriefReload(n=>n+1)} />} /></div>}
       {!isCop && workspaceDetail && <div className="workspace-dialog" role="dialog" aria-modal="true" aria-label="Record details" onKeyDown={e=>{if(e.key==='Escape')setWorkspaceDetail(false)}}><button className="workspace-dialog-backdrop" aria-label="Close record" onClick={() => { setWorkspaceDetail(false); setOpId(null); setAreaId(null); setShowIntsum(false) }} />{recordDetails}</div>}
       {!isCop && err && <div className="workspace-toast" role="alert"><span>{err}</span><button onClick={()=>setErr(null)}>Dismiss</button></div>}
@@ -290,17 +563,14 @@ function Presence({ p }: { p: Person }) {
   if (p.checkin_stale) return <span className="chk stale" title="last check-in older than 12h">stale</span>
   return null
 }
-// which section a counter belongs to: click it and that section opens
 const STAT_SECTION: Record<string, 'S1' | 'S2' | 'S3'> = { PERSONNEL: 'S1', PRESENT: 'S1', 'CHECKED IN': 'S1', 'SEC ON SHIFT': 'S1', UNACCOUNTED: 'S1', UNREACHABLE: 'S1', TRAVELING: 'S3', 'VIP OUT': 'S3', EVENTS: 'S3', THREATS: 'S2', CONFIRMED: 'S2', FLASH: 'S2', 'OPEN PIRs': 'S2' }
 function Stat({ label, v, accent, onJump }: { label: string; v?: number; accent?: string; onJump?: (section: 'S1' | 'S2' | 'S3') => void }) {
-  // data-k lets the header toggle keep five counters without changing the markup order
   const sec = STAT_SECTION[label]
   return <div className={`stat ${accent ?? ''} ${sec ? 'jump' : ''}`} data-k={label} title={sec ? `open ${sec}` : undefined} onClick={() => sec && onJump?.(sec)}><span className="v">{v ?? '—'}</span><span className="l">{label}</span></div>
 }
 function PanelHead({ code, title, hint, inline, children, onClose }: { code: string; title: string; hint?: string; inline?: boolean; children?: React.ReactNode; onClose?: () => void }) {
   return <div className={`panel-head ${inline ? 'inline' : ''}`}>{code && <span className="code">{code}</span>}<span className="title">{title}</span>{children}{hint && <span className="hint">{hint}</span>}{onClose && <button className="close-panel" title="Close" onClick={onClose}>×</button>}</div>
 }
-/** §3.1 — add a site, or correct one that moved. The TOC flag has its own action: it is a different decision. */
 function SiteForm({ busy, act, onDone, site }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; onDone: () => void; site?: Location }) {
   const [f, setF] = useState({
     name: site?.name ?? '', type: (site?.type ?? 'cp') as string, lat: String(site?.lat ?? ''), lon: String(site?.lon ?? ''),
@@ -336,15 +606,13 @@ function SiteForm({ busy, act, onDone, site }: { busy: string | null; act: (l: s
     </div>)
 }
 
-
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
-function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role }: {
-  sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null; onOp: (id: string) => void; role: Role
-  act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void
+function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, role, onOp }: {
+  sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
+  act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void; onArea?: (m: AreaMode) => void; role: Role; onOp: (id: string) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState(false)
-  // S3 owns where the force sits; nobody signed in is the demo wall, which can do anything.
   const mayEditSites = !snap.me || snap.me.user_id === null || snap.me.battle_captain || snap.me.perms.S3 === 'edit'
   useEffect(() => { setEditing(false) }, [sel.type, sel.id])
   const threatRows = (ids: string[], confirmed: string[], target: { type: 'location' | 'person'; id: string }) => ids.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
@@ -387,13 +655,6 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role
                 {r.basis === 'assigned' && <span className="chip amber" title="assigned to this site but elsewhere right now">ASSIGNED · AWAY</span>}
                 {r.basis === 'in_area' && <span className="chip" title="not assigned here — inside the radius">NEARBY</span>}
                 {r.basis === 'manual' && <span className="chip amber" title="added by hand on the floor (Decision N)">ADDED</span>}
-                {r.updated_by === 'rule:escalation-15m' && r.status === 'unreachable' && <span className="chip red small" title="no response in 15 minutes — flagged by rule (Decision M)">AUTO · 15m</span>}
-                <span className={`chip ${ROSTER_COLOR[r.status]}`}>{r.status.toUpperCase()}</span>
-              </div>
-              <div className="rline sub">
-                {r.phone && <a href={`tel:${r.phone.replace(/\s/g, '')}`} className="phone">{r.phone}</a>}
-                {r.attempts > 0 && <span className="dim">{r.attempts} attempt{r.attempts === 1 ? '' : 's'} · {rel(r.last_attempt_at, now)}{r.method === 'app' ? ' · via app' : ''}</span>}
-                {r.checkin_requested_at && (r.status === 'unaccounted' || r.status === 'unreachable') && <span className="chip green small">📲 requested {rel(r.checkin_requested_at, now)}</span>}
                 {r.deliveries.map((d, k) => <span key={k} className={`chip small dl-${d.status}`} title={d.error ?? `${d.channel} ${d.status}`}>{d.channel === 'sms' ? '📱' : '💬'} {d.status === 'sent' ? '✓' : d.status === 'simulated' ? 'sim' : '✗'}</span>)}
                 {r.note && <span className="dim note">{r.note}</span>}
               </div>
@@ -408,6 +669,28 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role
   const draftBtn = (subject_type: string, subject_id: string) => (
     <button className="mini s2" disabled={!!busy} onClick={e => { e.stopPropagation(); act('drafting S2 assessment', () => api.draftAssessment(subject_type, subject_id)) }}>✎ DRAFT S2 ASSESSMENT</button>)
 
+  if (sel.type === 'graphic') {
+    const g = snap.graphics?.find(x => x.id === sel.id); if (!g) return null
+    const OWNER: Record<string, Role> = { S2: 'analyst', S3: 'ea', S4: 'logistics', S6: 'signal' }
+    const canEdit = role === 'battle_captain' || role === OWNER[g.section]
+    const subject = g.subject_type === 'event' && g.subject_id ? byId.event.get(g.subject_id) : g.subject_type === 'location' && g.subject_id ? byId.loc.get(g.subject_id) : undefined
+    return (
+      <div className="detail graphic" style={{ borderColor: g.color }} onClick={e => e.stopPropagation()}>
+        <button className="close" onClick={onClose}>×</button>
+        <div className="d-kicker"><span style={{ color: g.color }}>{g.glyph}</span> {g.label.toUpperCase()} · {g.section} · <span className={`chip small ${g.status === 'active' ? 'green' : 'planned'}`}>{g.status.toUpperCase()}</span>{g.window_from && <span className={`chip small ${g.in_window ? 'red' : 'dim'}`}>{g.in_window ? 'IN WINDOW' : 'OUTSIDE WINDOW'}</span>}</div>
+        <div className="d-title">{g.name}</div>
+        <div className="d-sub">{g.kind} · {g.kind === 'point' ? `${(g.geometry as number[])[1].toFixed(4)}, ${(g.geometry as number[])[0].toFixed(4)}` : `${(g.geometry as [number, number][]).length} points`} · drawn by {g.created_by} {rel(g.created_at, now)}</div>
+        {g.window_from && <div className="kv"><span>Window</span>{new Date(g.window_from).toUTCString().slice(5, 22)}Z{g.window_to && <> → {new Date(g.window_to).toUTCString().slice(5, 22)}Z</>}</div>}
+        {subject && <div className="kv"><span>For</span><a onClick={() => onSelect(g.subject_type === 'event' ? { type: 'event', id: g.subject_id! } : { type: 'location', id: g.subject_id! })}>{'name' in subject ? subject.name : g.subject_id}</a></div>}
+        {g.note && <div className="bluf">{g.note}</div>}
+        {canEdit && <div className="d-actions row-btns">
+          <button className="mini" disabled={!!busy} onClick={() => { const n = window.prompt('Note:', g.note); if (n !== null) act('amending the graphic', () => api.updateGraphic(g.id, { note: n })) }}>NOTE</button>
+          <button className="mini" disabled={!!busy} onClick={() => { const n = window.prompt('Name:', g.name); if (n?.trim()) act('renaming the graphic', () => api.updateGraphic(g.id, { name: n.trim() })) }}>RENAME</button>
+          {g.status === 'planned' && <button className="mini ok" disabled={!!busy} onClick={() => act('activating the graphic', () => api.updateGraphic(g.id, { status: 'active' }))}>ACTIVATE</button>}
+          <button className="mini danger" disabled={!!busy} onClick={() => { if (window.confirm(`Retire ${g.name}? It leaves the board and stays in the record.`)) act('retiring the graphic', () => api.updateGraphic(g.id, { status: 'retired' }).then(() => onClose())) }}>RETIRE</button>
+        </div>}
+      </div>)
+  }
   if (sel.type === 'location') {
     const l = byId.loc.get(sel.id); if (!l) return null
     const teams = snap.teams.filter(t => t.location_id === l.id)
@@ -430,6 +713,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role
           <div className="section-label">THREATS IN AREA <span className="dim">proximity suggests · analyst confirms</span></div>
           <ul className="people">{threatRows(Array.from(new Set([...l.confirmed_threat_ids, ...l.threat_ids_in_area])), l.confirmed_threat_ids, { type: 'location', id: l.id })}</ul>
         </>}
+        <div className="kv area"><span>Place</span>{l.area ? <AreaStrip a={l.area} onOpen={() => onArea?.({ kind: 'view', id: l.area!.id })} /> : <span className="dim">not rated</span>}{['battle_captain', 'analyst'].includes(role) && <button className="mini" onClick={() => onArea?.({ kind: 'new', location_id: l.id })} title="S2 rates this place, indicator by indicator">{l.area ? 'REASSESS' : 'RATE'}</button>}</div>
         <div className="d-actions">{draftBtn('location', l.id)} {rollCallBtn({ location_id: l.id })}
           {mayEditSites && <>
             <button className={`chip btn ${l.is_toc ? 'on' : ''}`} disabled={!!busy || l.is_toc}
@@ -476,6 +760,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role
         {trip && <>
           <div className="section-label">TRIP · {trip.id}{ev && <> · <a onClick={() => onSelect({ type: 'event', id: ev.id })}>{ev.name}</a></>}</div>
           <div className="kv"><span>To</span><b>{trip.dest_name}</b></div>
+          {trip.area && <div className="kv area"><span>Place</span><AreaStrip a={trip.area} onOpen={() => onArea?.({ kind: 'view', id: trip.area!.id })} /></div>}
           <div className="kv"><span>Depart</span>{new Date(trip.depart_at).toUTCString().slice(5, 22)} <span className="dim">({rel(trip.depart_at, now)})</span></div>
           <div className="kv"><span>Return</span>{new Date(trip.return_at).toUTCString().slice(5, 22)} <span className="dim">({rel(trip.return_at, now)})</span></div>
           <div className="kv"><span>Purpose</span>{trip.purpose}</div>
@@ -512,6 +797,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onOp, role
         <div className="kv"><span>Brief</span>{e.description}</div>
         <div className="kv"><span>Source</span><code>{e.source}</code></div>
         {e.security_plan && <div className="kv"><span>Sec plan</span>{e.security_plan}</div>}
+        {e.area && <div className="kv area"><span>Place</span><AreaStrip a={e.area} onOpen={() => onArea?.({ kind: 'view', id: e.area!.id })} /></div>}
         {e.coverage && <div className="kv"><span>Coverage</span><span className={e.coverage.gap > 0 ? 'bad' : 'ok'}>{e.coverage.assigned}/{e.coverage.required}</span> {e.coverage.people.map(p => `${p.name} (${p.role})`).join(', ') || 'nobody assigned'} <span className="dim">· {e.coverage.rule}</span></div>}
         {e.threat_ids_in_area.length > 0 && <><div className="section-label">THREATS IN AREA</div>
           <ul className="people">{e.threat_ids_in_area.map(id => byId.threat.get(id)).filter(Boolean).map(t => (
@@ -557,6 +843,16 @@ function PersonRow({ p, onClick }: { p: Person; onClick: () => void }) {
     </li>)
 }
 
+function AssessmentActions({ a, busy, act }: { a: Assessment; busy: string | null; act: (l: string, f: () => Promise<unknown>) => void }) {
+  if (a.status === 'approved' || a.status === 'superseded') return <div className="card-foot dim">{a.status === 'approved' ? `approved by ${a.approved_by}` : 'superseded'} · {a.author}</div>
+  return (
+    <div className="card-foot">
+      <span className="dim">{a.author}</span>
+      {a.status === 'draft' && <button className="mini" disabled={!!busy} onClick={e => { e.stopPropagation(); act('sending to review', () => api.setAssessmentStatus(a.id, 'review')) }}>→ REVIEW</button>}
+      {a.status === 'review' && a.confidence !== 'insufficient' && <button className="mini ok" disabled={!!busy} onClick={e => { e.stopPropagation(); act('approving', () => api.setAssessmentStatus(a.id, 'approved')) }}>✓ APPROVE</button>}
+      {a.confidence === 'insufficient' && <span className="dim">cannot be approved</span>}
+    </div>)
+}
 
 function RosterAddForm({ busy, act, incidentId, people, onDone }: { busy: string | null; act: (l: string, f: () => Promise<unknown>) => void; incidentId: string; people: Person[]; onDone: () => void }) {
   const [f, setF] = useState({ person_id: '', name: '', phone: '', role: 'Visitor', note: '' })

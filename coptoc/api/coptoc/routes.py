@@ -24,9 +24,13 @@ from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, Deli
                         TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
-from .taskings import TaskingRow, out as tasking_out
+from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
+from . import areas as toc_areas
+from . import graphics as toc_graphics
+from .graphics import GraphicRow
+from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (LocationCreate, LocationUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen,
+from .schemas import (GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -233,6 +237,135 @@ async def set_profile(body: ProfileChoice, session: AsyncSession = Depends(get_s
     return {"profile": body.profile, "dataset": dataset_for(body.profile)}
 
 
+# ---------------------------------------------------------------- §3.4 the graphics object: a control measure a section draws on the board
+
+@router.get("/graphics/catalog")
+async def graphics_catalog():
+    """What may be drawn, by whom, and what this desk calls it."""
+    from .sections import profile
+    return {"profile": profile(), "types": toc_graphics.catalog(profile())}
+
+
+@router.get("/graphics")
+async def list_graphics(all: bool = Query(False, description="include retired"), session: AsyncSession = Depends(get_session)):
+    from .sections import profile
+    q = select(GraphicRow) if all else select(GraphicRow).where(GraphicRow.status != "retired")
+    now = now_utc()
+    return [toc_graphics.out(g, now, profile()) for g in (await session.execute(q.order_by(GraphicRow.section, GraphicRow.created_at))).scalars()]
+
+
+@router.post("/graphics", status_code=201)
+async def draw_graphic(body: GraphicCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Draw a control measure. The type says which section owns it; drawing needs edit on that section, or the Battle Captain."""
+    from .sections import profile
+    c = toc_graphics.CATALOG.get(body.type)
+    if not c: raise HTTPException(422, f"unknown graphic type {body.type!r}")
+    _may_act_for(c["section"], x_toc_role, f"Drawing a {body.type}")
+    why = toc_graphics.validate(body.type, body.kind, body.geometry)
+    if why: raise HTTPException(422, why)
+    if body.window_from and body.window_to and naive(body.window_to) < naive(body.window_from): raise HTTPException(422, "window_to is before window_from")
+    if not body.name.strip(): raise HTTPException(422, "a graphic needs a name")
+    now = now_utc(); actor = actor_from(x_toc_actor)
+    g = GraphicRow(id=f"gfx_{uuid.uuid4().hex[:8]}", type=body.type, kind=body.kind, section=c["section"], name=body.name.strip(), geometry_json=json.dumps(body.geometry), window_from=naive(body.window_from), window_to=naive(body.window_to),
+                   status=body.status, note=body.note, confidence=body.confidence, basis=body.basis, subject_type=body.subject_type, subject_id=body.subject_id, created_by=actor, created_at=now, updated_at=now)
+    session.add(g); await session.commit()
+    o = toc_graphics.out(g, now, profile())
+    await get_ledger().append_event(content_id=g.id, event_type="cop.graphic.drawn", actor_type="human", actor_id=actor, new_state=g.status,
+                                    reason=f"{c['section']} drew {o['label'].split(' · ')[0]} {g.name}" + (f" for {body.subject_type} {body.subject_id}" if body.subject_id else ""), metadata={"type": g.type, "kind": g.kind, "section": g.section, "confidence": g.confidence})
+    return o
+
+
+@router.patch("/graphics/{graphic_id}")
+async def update_graphic(graphic_id: str, body: GraphicUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Move it, rename it, change its window, or retire it. Retired graphics stay in the record and off the board."""
+    from .sections import profile
+    g = await one_or_404(session, GraphicRow, graphic_id, "graphic")
+    _may_act_for(g.section, x_toc_role, "Changing a graphic")
+    changes = body.model_dump(exclude_unset=True)
+    if "geometry" in changes:
+        why = toc_graphics.validate(g.type, g.kind, changes["geometry"])
+        if why: raise HTTPException(422, why)
+        g.geometry_json = json.dumps(changes.pop("geometry"))
+    old = g.status
+    for k, v in changes.items():
+        setattr(g, k, naive(v) if k in ("window_from", "window_to") else (v.strip() if k == "name" else v))
+    g.updated_at = now_utc(); await session.commit()
+    ev = "cop.graphic.retired" if changes.get("status") == "retired" and old != "retired" else "cop.graphic.updated"
+    await get_ledger().append_event(content_id=g.id, event_type=ev, actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=g.status,
+                                    reason=f"{g.section}: {g.name} {'retired' if ev.endswith('retired') else 'amended'}", metadata={"type": g.type})
+    return toc_graphics.out(g, now_utc(), profile())
+
+
+# ---------------------------------------------------------------- §5.6a the rated area assessment: what S2 judges about a place
+
+@router.get("/areas/indicators")
+async def area_indicators():
+    """The indicator list this deployment rates a place on — the profile's default unless TOC_AREA_INDICATORS says otherwise."""
+    from .sections import profile
+    return {"profile": profile(), "indicators": toc_areas.indicators(profile())}
+
+
+@router.get("/areas")
+async def list_areas(all: bool = Query(False, description="include superseded versions"), session: AsyncSession = Depends(get_session)):
+    q = select(AreaRatingRow) if all else select(AreaRatingRow).where(AreaRatingRow.status == "current")
+    now = now_utc()
+    return sorted((toc_areas.out(a, now) for a in (await session.execute(q)).scalars()), key=lambda a: (a["status"] != "current", a["place"], a["assessed_at"] or ""))
+
+
+@router.get("/areas/{area_id}")
+async def get_area_rating(area_id: str, session: AsyncSession = Depends(get_session)):
+    return toc_areas.out(await one_or_404(session, AreaRatingRow, area_id, "area assessment"), now_utc())
+
+
+@router.post("/areas", status_code=201)
+async def assess_area(body: AreaCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """S2 rates a place. A new assessment of a place supersedes the current one; the old one stays, marked superseded."""
+    from .sections import profile
+    require_role(x_toc_role, {"battle_captain", "analyst"}, "Assessing a place", section="S2")
+    place, lat, lon = (body.place or "").strip(), body.lat, body.lon
+    if body.location_id:
+        loc = await one_or_404(session, LocationRow, body.location_id, "location")
+        place, lat, lon = place or loc.name, lat if lat is not None else loc.lat, lon if lon is not None else loc.lon
+    if not place:
+        raise HTTPException(422, "a place needs a name, or a site on the wall")
+    now = now_utc(); actor = actor_from(x_toc_actor)
+    ratings = toc_areas.normalize([r.model_dump() for r in body.ratings], toc_areas.indicators(profile()))
+    prev = None
+    for a in (await session.execute(select(AreaRatingRow).where(AreaRatingRow.status == "current"))).scalars():
+        if (body.location_id and a.location_id == body.location_id) or toc_areas.same_place(a.place, place):
+            a.status = "superseded"; a.updated_at = now; prev = a
+    row = AreaRatingRow(id=f"area_{uuid.uuid4().hex[:8]}", place=place, location_id=body.location_id, lat=lat, lon=lon, ratings_json=json.dumps(ratings), summary=body.summary.strip(),
+                        assessed_by=actor, assessed_at=now, updated_at=now, supersedes=prev.id if prev else None)
+    session.add(row); await session.commit()
+    o = toc_areas.out(row, now)
+    await get_ledger().append_event(content_id=row.id, event_type="cop.area.assessed", actor_type="human", actor_id=actor, old_state=prev.id if prev else None, new_state=o["worst"],
+                                    reason=f"{place}: {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green" + (f"; worst {o['worst_indicator']}" if o["worst_indicator"] else "") + (" (supersedes the last)" if prev else ""),
+                                    metadata={"location_id": body.location_id, "counts": o["counts"]})
+    return o
+
+
+@router.patch("/areas/{area_id}")
+async def update_area_rating(area_id: str, body: AreaUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Correct a current assessment in place — a note, a rating — without a new version. Superseded ones are history."""
+    from .sections import profile
+    require_role(x_toc_role, {"battle_captain", "analyst"}, "Amending an area assessment", section="S2")
+    row = await one_or_404(session, AreaRatingRow, area_id, "area assessment")
+    if row.status != "current":
+        raise HTTPException(409, "this assessment has been superseded; assess the place again instead")
+    if body.ratings is not None:
+        current = {r["indicator"]: r for r in json.loads(row.ratings_json or "[]")}
+        for r in body.ratings:
+            current[r.indicator] = {"indicator": r.indicator, "rating": r.rating, "note": r.note}
+        row.ratings_json = json.dumps(toc_areas.normalize(list(current.values()), toc_areas.indicators(profile())))
+    if body.summary is not None:
+        row.summary = body.summary.strip()
+    row.updated_at = now_utc(); await session.commit()
+    o = toc_areas.out(row, now_utc())
+    await get_ledger().append_event(content_id=row.id, event_type="cop.area.updated", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=o["worst"],
+                                    reason=f"{row.place}: assessment amended — {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green")
+    return o
+
+
 # ---------------------------------------------------------------- §5.10 taskings: work moving between sections
 
 SECTION_EDITORS = {"S1": "security", "S2": "analyst", "S3": "ea", "S4": "logistics", "S6": "signal"}
@@ -282,9 +415,18 @@ async def update_tasking(tasking_id: str, body: TaskingUpdate, session: AsyncSes
     if "status" in changes and changes["status"] in ("accepted", "scheduled", "complete", "declined") and not t.owned_by:
         t.owned_by = actor_from(x_toc_actor)
     t.updated_at = now_utc()
+    made, closed = None, None
+    if "status" in changes and changes["status"] in ("accepted", "scheduled") and not t.created_id:   # once, on the way in — a seeded accepted ask gets its object when it is scheduled
+        made = await tasking_on_accept(session, t, actor_from(x_toc_actor), t.updated_at)   # §5.10a the ask becomes a thing on the owing section's board
+    if "status" in changes and changes["status"] == "complete":
+        closed = await tasking_on_complete(session, t, actor_from(x_toc_actor), t.updated_at)
     await session.commit()
     await get_ledger().append_event(content_id=t.id, event_type="cop.tasking." + (changes.get("status") or "amended"), actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=t.status,
-                                    reason=f"{t.from_section} → {t.to_section}: {t.title} — {t.status}" + (f" · {t.result}" if t.result and "status" in changes else ""), metadata={"kind": t.kind, "priority": t.priority})
+                                    reason=f"{t.from_section} → {t.to_section}: {t.title} — {t.status}" + (f" · {t.result}" if t.result and "status" in changes else "") + (f" · opened {made['type']} {made['id']}" if made else "") + (f" · {closed}" if closed else ""),
+                                    metadata={"kind": t.kind, "priority": t.priority, **({"created": made} if made else {})})
+    if made:
+        await get_ledger().append_event(content_id=made["id"], event_type={"operation": "cop.operation.opened", "shipment": "cop.s4.shipment", "task": "cop.operation.task"}[made["type"]], actor_type="human", actor_id=actor_from(x_toc_actor),
+                                        new_state="planned" if made["type"] != "task" else "todo", reason=f"{made['name']} — from tasking {t.id} ({t.from_section} → {t.to_section})", metadata={"tasking": t.id})
     return tasking_out(t, now_utc())
 
 
@@ -508,9 +650,15 @@ async def update_shipment(shipment_id: str, body: ShipmentUpdate, session: Async
     values = {k: naive(v) if k == "eta" else v for k, v in body.model_dump(exclude_unset=True).items()}
     values.update(updated_by=actor_from(x_toc_actor), updated_at=now_utc())
     await patch_shipment(session, row.id, values)
+    for k, v in values.items():
+        setattr(row, k, v)
+    done = await tasking_complete_from(session, "shipment", row.id, row.updated_by, row.updated_at, f"Arrived: {row.description}") if row.status == "arrived" and old != "arrived" else None
+
     await session.commit()
     await get_ledger().append_event(content_id=row.id, event_type="cop.s4.shipment", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=row.status,
                                     reason=f"{row.description} → {row.to_name}: {row.status.replace('_', ' ')}, ETA {row.eta:%d %b %H:%M}Z" + (f" — {row.note}" if body.note else ""), metadata={"priority": row.priority})
+    if done:
+        await get_ledger().append_event(content_id=done.id, event_type="cop.tasking.complete", actor_type="human", actor_id=row.updated_by, old_state="scheduled", new_state="complete", reason=f"{done.from_section} → {done.to_section}: {done.title} — complete · {done.result}", metadata={"kind": done.kind})
     return {"id": row.id, "status": "updated"}
 
 
@@ -1549,9 +1697,12 @@ async def update_operation(op_id: str, body: OperationUpdate, session: AsyncSess
     if body.status:
         op.status = body.status
         if body.status in ("complete", "cancelled"): op.closed_at = now_utc()
+    done = await tasking_complete_from(session, "operation", op.id, actor_from(x_toc_actor), now_utc(), f"Operation complete: {op.title}") if body.status == "complete" and old != "complete" else None
     await session.commit()
     if body.status and body.status != old:
         await get_ledger().append_event(content_id=op.id, event_type="cop.operation.status", actor_type="human", actor_id=actor_from(x_toc_actor), old_state=old, new_state=body.status, reason=f"{op.title} → {body.status}")
+    if done:
+        await get_ledger().append_event(content_id=done.id, event_type="cop.tasking.complete", actor_type="human", actor_id=actor_from(x_toc_actor), old_state="accepted", new_state="complete", reason=f"{done.from_section} → {done.to_section}: {done.title} — complete · {done.result}", metadata={"kind": done.kind})
     return await get_operation(op_id, session)
 
 
@@ -1578,10 +1729,13 @@ async def update_task(op_id: str, task_id: str, body: TaskUpdate, session: Async
         if v is not None: setattr(t, k, v)
     if body.due_at is not None: t.due_at = naive_dt(body.due_at)
     t.updated_by, t.updated_at = actor_from(x_toc_actor), now_utc()
+    done = await tasking_complete_from(session, "task", t.id, t.updated_by, t.updated_at, f"Done: {t.title}" + (f" — {body.note}" if body.note else "")) if body.status == "done" and old != "done" else None
     await session.commit()
     if body.status and body.status != old:
         await get_ledger().append_event(content_id=op_id, event_type="cop.operation.task", actor_type="human", actor_id=t.updated_by, old_state=old, new_state=body.status,
                                         reason=f"{t.title}: {body.status.upper()}" + (f" ({t.owner})" if t.owner else "") + (f" — {body.note}" if body.note else ""))
+    if done:
+        await get_ledger().append_event(content_id=done.id, event_type="cop.tasking.complete", actor_type="human", actor_id=t.updated_by, old_state="accepted", new_state="complete", reason=f"{done.from_section} → {done.to_section}: {done.title} — complete · {done.result}", metadata={"kind": done.kind})
     return task_dict(t)
 
 

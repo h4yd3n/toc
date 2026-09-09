@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 Posture = Literal["normal", "guarded", "elevated", "high", "critical"]
+GraphicConfidence = Literal["confirmed", "probable", "possible", "template"]
 
 class TripCreate(BaseModel):
     person_id: str
@@ -89,6 +90,47 @@ class TaskingCreate(BaseModel):
     window_to: Optional[datetime] = None
     priority: Literal["routine", "priority", "urgent"] = "routine"
     notes: str = ""
+
+class AreaRatingIn(BaseModel):
+    indicator: str
+    rating: Literal["green", "amber", "red", "unknown"] = "unknown"
+    note: str = ""
+
+class AreaCreate(BaseModel):
+    place: Optional[str] = None            # required unless location_id names a site
+    location_id: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    ratings: List[AreaRatingIn] = []
+    summary: str = ""
+
+class GraphicCreate(BaseModel):
+    type: str
+    kind: Literal["point", "line", "polygon"]
+    name: str
+    geometry: Any                     # point: [lon, lat]; line / polygon: [[lon, lat], …]
+    window_from: Optional[datetime] = None
+    window_to: Optional[datetime] = None
+    status: Literal["planned", "active"] = "active"
+    note: str = ""
+    confidence: GraphicConfidence = "confirmed"
+    basis: str = ""
+    subject_type: Optional[Literal["event", "location", "operation", "trip", "case", "report", "actor", "threat", "nai"]] = None
+    subject_id: Optional[str] = None
+
+class GraphicUpdate(BaseModel):
+    name: Optional[str] = None
+    geometry: Optional[Any] = None
+    window_from: Optional[datetime] = None
+    window_to: Optional[datetime] = None
+    status: Optional[Literal["planned", "active", "retired"]] = None
+    note: Optional[str] = None
+    confidence: Optional[GraphicConfidence] = None
+    basis: Optional[str] = None
+
+class AreaUpdate(BaseModel):
+    ratings: Optional[List[AreaRatingIn]] = None
+    summary: Optional[str] = None
 
 class TaskingUpdate(BaseModel):
     status: Optional[Literal["requested", "accepted", "scheduled", "complete", "declined"]] = None

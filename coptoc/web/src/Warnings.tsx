@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as api from './api'
+import { Question } from './Headline'
 import type { Distribution, Role, Selection, Warning } from './types'
 
 type Act = (l: string, f: () => Promise<unknown>) => void
@@ -33,8 +34,8 @@ export function WarningsSection({ warnings, role, busy, act, onSelect }: { warni
   const pending = warnings.filter(w => w.status === 'suggested' || w.status === 'draft')
   const isBC = role === 'battle_captain'
   return (<>
-    <div className="section-label">WARNINGS <span className="dim">{pending.length} awaiting release{warnings.some(w => w.status === 'released') ? ` · ${warnings.filter(w => w.status === 'released').length} FLASH live` : ''}</span>
-      <span className="btns"><button className="mini" disabled={!!busy} onClick={() => act('running the warning rule', api.suggestWarnings)} title="critical inside a radius, or elevated with a confirmed link">RUN RULE</button></span></div>
+    <Question q="What we have warned, or should" count={`${pending.length} awaiting release${warnings.some(w => w.status === 'released') ? ` · ${warnings.filter(w => w.status === 'released').length} FLASH live` : ''}`}>
+      <span className="btns"><button className="mini" disabled={!!busy} onClick={() => act('running the warning rule', api.suggestWarnings)} title="critical inside a radius, or elevated with a confirmed link">RUN RULE</button></span></Question>
     {pending.length === 0 && <div className="dim small" style={{ padding: '2px 14px' }}>Nothing suggested. Confirm a link on an elevated threat, or collect a critical one, and the rule proposes a FLASH.</div>}
     <ul className="list">
       {pending.map(w => <li key={w.id} className="row reqrow warn" onClick={() => onSelect(sel(w))}>

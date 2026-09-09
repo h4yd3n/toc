@@ -49,6 +49,13 @@ class ReportRow(Base):
     reliability: Mapped[str] = mapped_column(String, default="A")  # our own people
     credibility: Mapped[int] = mapped_column(Integer, default=2)  # probably true until corroborated
     source: Mapped[str] = mapped_column(String, default="ops")
+    status: Mapped[str] = mapped_column(String, default="filed")  # filed | corroborated | linked | promoted | dismissed
+    disposition: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # corroborate | link | promote | dismiss
+    disposition_target_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    disposition_target_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    disposed_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    disposed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    disposition_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     filed_at: Mapped[datetime] = mapped_column(DateTime)
 
 
@@ -270,7 +277,9 @@ def event_dict(v: CaseEventRow) -> Dict[str, Any]:
 
 def report_dict(r: ReportRow) -> Dict[str, Any]:
     return {"id": r.id, "kind": r.kind, "reported_by": r.reported_by, "reporter_role": r.reporter_role, "at": iso(r.at), "lat": r.lat, "lon": r.lon, "place": r.place,
-            "text": r.text, "case_id": r.case_id, "reliability": r.reliability, "credibility": r.credibility, "grade": f"{r.reliability}{r.credibility}", "source": r.source, "filed_at": iso(r.filed_at)}
+            "text": r.text, "case_id": r.case_id, "reliability": r.reliability, "credibility": r.credibility, "grade": f"{r.reliability}{r.credibility}", "source": r.source,
+            "status": r.status, "disposition": r.disposition, "disposition_target_type": r.disposition_target_type, "disposition_target_id": r.disposition_target_id,
+            "disposed_by": r.disposed_by, "disposed_at": iso(r.disposed_at), "disposition_note": r.disposition_note, "filed_at": iso(r.filed_at)}
 
 def case_dict(c: CaseRow, counts: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     return {"id": c.id, "title": c.title, "kind": c.kind, "subject_type": c.subject_type, "subject_id": c.subject_id, "summary": c.summary, "status": c.status,

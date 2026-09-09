@@ -1,8 +1,8 @@
 // §3 Acetate overlay panel — toggle, solo, opacity, and outline controls for each map overlay sheet
 import { useState } from 'react'
-import type { Overlay, OverlayId, OverlayPresetId, OverlayState } from './types'
+import type { OverlayItem, OverlayId, OverlayPresetId, OverlayState } from './types'
 
-export const OVERLAY_DEFAULTS: Overlay[] = [
+export const OVERLAY_DEFAULTS: OverlayItem[] = [
   { id: 'blue_force', label: 'BLUE FORCE', icon: '◆', enabled: true, opacity: 1, outlineOnly: false },
   { id: 'threat',     label: 'THREAT',     icon: '◎', enabled: true, opacity: 1, outlineOnly: false },
   { id: 'sigacts',    label: 'SIGACTS',    icon: '☎', enabled: true, opacity: 1, outlineOnly: false },
@@ -13,7 +13,7 @@ export const OVERLAY_DEFAULTS: Overlay[] = [
   { id: 'restricted', label: 'RESTRICTED', icon: '⚿', enabled: false, opacity: 1, outlineOnly: false },
 ]
 
-export const PRESETS: { id: OverlayPresetId; label: string; hint: string; apply: (base: Overlay[]) => { overlays: Overlay[]; soloId: OverlayId | null } }[] = [
+export const PRESETS: { id: OverlayPresetId; label: string; hint: string; apply: (base: OverlayItem[]) => { overlays: OverlayItem[]; soloId: OverlayId | null } }[] = [
   { id: 'cop', label: 'COP', hint: 'All overlays at full', apply: base => ({
     overlays: base.map(o => ({ ...o, enabled: o.id !== 's4' && o.id !== 's6' && o.id !== 'restricted', opacity: 1, outlineOnly: false })), soloId: null }) },
   { id: 's2_sittemp', label: 'S2 SITTEMP', hint: 'Threat picture only', apply: base => ({
@@ -37,7 +37,7 @@ export const PRESETS: { id: OverlayPresetId; label: string; hint: string; apply:
 ]
 
 /** Resolve the effective opacity for an overlay, accounting for solo mode. */
-export function effectiveOpacity(ov: Overlay, soloId: OverlayId | null): number {
+export function effectiveOpacity(ov: OverlayItem, soloId: OverlayId | null): number {
   if (!ov.enabled) return 0
   if (soloId && soloId !== ov.id) return 0.08
   return ov.opacity

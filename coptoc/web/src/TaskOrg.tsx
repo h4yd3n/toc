@@ -1,6 +1,7 @@
 // §4 — the task organization: brigade → battalions → companies, with present/assigned and who is away. Collapsed by default;
 // a battalion opens on click. Where the data has no hierarchy (a flat set of teams) the panel shows nothing and the team list stands.
 import { useState } from 'react'
+import { MiniBar, Question } from './Headline'
 import type { Person, Selection, Team } from './types'
 
 export function TaskOrg({ teams, people, onSelect, sel }: { teams: Team[]; people: Person[]; onSelect: (s: Selection) => void; sel: Selection }) {
@@ -18,13 +19,14 @@ export function TaskOrg({ teams, people, onSelect, sel }: { teams: Team[]; peopl
         <span className="short mono">{t.short ?? t.name}</span>
         <span className="name dim">{depth === 0 ? t.name : t.equipment ?? t.function}</span>
         {s.bad > 0 && <span className="tbadge confirmed">▲{s.bad}</span>}
+        <MiniBar a={s.present} b={s.total} tone="blue" width={36} />
         <span className="meta mono">{s.present}<span className="dim">/{s.total}</span>{s.away > 0 && <span className="away"> ·{s.away}↗</span>}</span>
       </li>
       {isOpen && ch.map(c => <Row key={c.id} t={c} depth={depth + 1} />)}
     </>)
   }
   return (<>
-    <div className="section-label">TASK ORGANIZATION <span className="dim">present/assigned · ↗ away</span></div>
+    <Question q="How ready are we, by unit" count="present / assigned · ↗ away" />
     <ul className="list taskorg">{roots.map(r => <Row key={r.id} t={r} depth={0} />)}</ul>
   </>)
 }
