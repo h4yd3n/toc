@@ -197,6 +197,12 @@ export default function App() {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k)
   }, [isCop, workspaceDetail, navigate])
+  useEffect(() => {
+    if (!showSettings && !showDefcon) return
+    const onDocClick = () => { setShowSettings(false); setShowDefcon(false) }
+    window.addEventListener('click', onDocClick)
+    return () => window.removeEventListener('click', onDocClick)
+  }, [showSettings, showDefcon])
   useEffect(() => { if (me?.role && me.user_id) setRole(me.role as Role) }, [me?.role, me?.user_id])
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t) }, [load])
   useEffect(() => { const c = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(c) }, [])
@@ -303,13 +309,27 @@ export default function App() {
           <select className="role" disabled={!!busy} value={userId} onChange={e => { api.signIn(e.target.value); setSnap(null); setWorkBoard(null); setWorkspaceDetail(false); setUserId(e.target.value); load() }} title="Profile — the role you are signed in as (§9)">
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
-          {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <button className={`gear ${rightPanel === 'settings' ? 'on' : ''}`} title="Sources, keys, comms, sections — Battle Captain" onClick={() => toggleRight('settings')}>⚙ SETTINGS</button>}
           <button className="gear kbd" title="Find anything on the picture (⌘K / Ctrl+K)" onClick={() => setCmd(true)}>⌘K</button>
-          <button className="gear" title="Labels and header options" onClick={() => setShowSettings(v => !v)}>DISPLAY ▾</button>
+          <button className={`gear ${showSettings || rightPanel === 'settings' ? 'on' : ''}`} title="Display options & system settings" onClick={e => { e.stopPropagation(); setShowSettings(v => !v); setShowDefcon(false) }}>⚙ SETTINGS ▾</button>
         </div>
         {showSettings && <div className="settings" onClick={e => e.stopPropagation()}>
-          <div className="s-row"><span>LABELS</span>{(['full', 'lean'] as const).map(m => <button key={m} className={`chip btn ${ui.labels === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, labels: m })}>{m.toUpperCase()}</button>)}<span className="dim small">LEAN drops hints, empty lines, second lines</span></div>
-          <div className="s-row"><span>HEADER</span>{(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}<span className="dim small">POSTURE: one big posture tile, five counters</span></div>
+          <div className="settings-menu-head dim mono small">DISPLAY OPTIONS</div>
+          <div className="s-row">
+            <span>LABELS</span>
+            {(['full', 'lean'] as const).map(m => <button key={m} className={`chip btn ${ui.labels === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, labels: m })}>{m.toUpperCase()}</button>)}
+            <span className="dim small">LEAN drops hints, empty lines</span>
+          </div>
+          <div className="s-row">
+            <span>HEADER</span>
+            {(['counters', 'posture'] as const).map(m => <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>{m.toUpperCase()}</button>)}
+            <span className="dim small">POSTURE: one big posture tile</span>
+          </div>
+          {(me && me.user_id ? me.admin || me.battle_captain : role === 'battle_captain') && <>
+            <div className="settings-menu-sep" />
+            <button className="settings-panel-btn" onClick={() => { setShowSettings(false); toggleRight('settings') }}>
+              ⚙ OPEN BATTLE CAPTAIN PANEL →
+            </button>
+          </>}
         </div>}
       </header>
       {hasStrips && (
@@ -565,7 +585,28 @@ export default function App() {
       </main>
 
       <aside className={`right wide ${isCop && rightPanel === 'settings' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'settings'}>
-        <PanelHead code="⚙" title="SETTINGS" hint="Battle Captain · write-only keys" onClose={() => setRightPanel(null)} />
+        <PanelHead code="⚙" title="SETTINGS" hint="Display &amp; Battle Captain configuration" onClose={() => setRightPanel(null)} />
+        <div className="section-label">DISPLAY <span className="dim">appearance &amp; layout</span></div>
+        <div className="settings-display-block">
+          <div className="s-row">
+            <span>LABELS</span>
+            {(['full', 'lean'] as const).map(m => (
+              <button key={m} className={`chip btn ${ui.labels === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, labels: m })}>
+                {m.toUpperCase()}
+              </button>
+            ))}
+            <span className="dim small">LEAN drops hints, empty lines, second lines</span>
+          </div>
+          <div className="s-row">
+            <span>HEADER</span>
+            {(['counters', 'posture'] as const).map(m => (
+              <button key={m} className={`chip btn ${ui.header === m ? 'on' : ''}`} onClick={() => setUi({ ...ui, header: m })}>
+                {m.toUpperCase()}
+              </button>
+            ))}
+            <span className="dim small">POSTURE: one big posture tile, five counters</span>
+          </div>
+        </div>
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
