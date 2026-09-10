@@ -442,13 +442,33 @@ export default function App() {
                       type="button"
                       className="msp-item gold"
                       onClick={() => { setOverlay('S3'); jump('S3') }}
-                      title="VIPs traveling"
+                      title="VIPs traveling · Click to view S3 movement"
                     >
                       <span className="msp-val gold">{s.vips_traveling}</span>
                       <span className="msp-lbl">VIP OUT</span>
                     </button>
                   </>
                 )}
+                <span className="msp-sep" />
+                <button
+                  type="button"
+                  className="msp-item red"
+                  onClick={() => { setOverlay('S2'); jump('S2') }}
+                  title="Active threats · Click to view S2 intelligence"
+                >
+                  <span className="msp-val red">{s.active_threats}</span>
+                  <span className="msp-lbl">THREATS</span>
+                </button>
+                <span className="msp-sep" />
+                <button
+                  type="button"
+                  className="msp-item red"
+                  onClick={() => { setOverlay('S2'); jump('S2') }}
+                  title="Confirmed threat links · Click to view S2 intelligence"
+                >
+                  <span className="msp-val red">{s.confirmed_links}</span>
+                  <span className="msp-lbl">CONFIRMED</span>
+                </button>
                 {(s.unaccounted ?? 0) > 0 && (
                   <>
                     <span className="msp-sep" />
@@ -463,23 +483,24 @@ export default function App() {
                     </button>
                   </>
                 )}
+                {(s.flash ?? 0) > 0 && (
+                  <>
+                    <span className="msp-sep" />
+                    <button
+                      type="button"
+                      className="msp-item red"
+                      onClick={() => { setOverlay('S2'); jump('S2') }}
+                      title="Flash intelligence warnings"
+                    >
+                      <span className="msp-val red">{s.flash}</span>
+                      <span className="msp-lbl">FLASH</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
-            <div className="ovbar" onClick={e => e.stopPropagation()}>
-              {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
-              {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
-              {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
-              {drawMenu && !draw && <div className="drawmenu">
-                {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
-                {catalog.filter(t => t.section === overlay).length === 0 && <div className="dim small" style={{ padding: 6 }}>Nothing in the catalog for {overlay}.</div>}
-              </div>}
-              {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
-              {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
-              <span className="ovsep" />
-              <button className={`ov ov-layers-btn ${overlayMenuOpen ? 'on' : ''}`} title="Toggle map layers and display style" onClick={e => { e.stopPropagation(); setOverlayMenuOpen(v => !v); setDrawMenu(false) }}>
-                OVERLAYS ▾
-              </button>
-              {overlayMenuOpen && (
+            {(() => {
+              const overlayDropdown = (
                 <div className="overlay-dropdown" onClick={e => e.stopPropagation()}>
                   <div className="ov-dd-head">
                     <span>MAP OVERLAYS</span>
@@ -530,8 +551,49 @@ export default function App() {
                     })}
                   </div>
                 </div>
-              )}
-            </div>
+              )
+
+              return (
+                <>
+                  <div className="ovbar" onClick={e => e.stopPropagation()}>
+                    {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
+                    {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
+                    {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
+                    {drawMenu && !draw && <div className="drawmenu">
+                      {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
+                      {catalog.filter(t => t.section === overlay).length === 0 && <div className="dim small" style={{ padding: 6 }}>Nothing in the catalog for {overlay}.</div>}
+                    </div>}
+                    {draw && <span className="drawhint"><b style={{ color: draw.type.color }}>{draw.type.glyph} {draw.type.label.split(' · ')[0]}</b> · {draw.kind === 'point' ? 'click the spot' : `${draw.points.length} point${draw.points.length === 1 ? '' : 's'} · click to add · double-click to finish`}{draw.kind !== 'point' && <button className="ov time on" onClick={() => finishDraw(draw)}>FINISH</button>}<button className="ov" onClick={() => setDraw(null)}>ESC</button></span>}
+                    {overlay === 'S3' && scrub?.pinned && <button className="ov time on" title="release the pinned moment" onClick={() => setScrub(null)}>⏱ {Math.abs(scrub.t - now) > 864e5 ? new Date(scrub.t).toUTCString().slice(5, 11) + ' ' : ''}{new Date(scrub.t).toISOString().slice(11, 16)}Z ×</button>}
+                    <span className="ovsep" />
+                    <button className={`ov ov-layers-btn ${overlayMenuOpen ? 'on' : ''}`} title="Toggle map layers and display style" onClick={e => { e.stopPropagation(); setOverlayMenuOpen(v => !v); setDrawMenu(false) }}>
+                      OVERLAYS ▾
+                    </button>
+                  </div>
+
+                  <div
+                    className="map-layers-pill"
+                    style={{ right: rightPanel ? (rightPanel === 'settings' ? 474 : 394) : 14 }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className={`mlp-btn ${overlayMenuOpen ? 'on' : ''}`}
+                      title="Toggle map layers and display style"
+                      onClick={() => { setOverlayMenuOpen(v => !v); setDrawMenu(false) }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                        <polyline points="2 17 12 22 22 17" />
+                        <polyline points="2 12 12 17 22 12" />
+                      </svg>
+                      <span>LAYERS</span>
+                    </button>
+                    {overlayMenuOpen && overlayDropdown}
+                  </div>
+                </>
+              )
+            })()}
             {recordDetails}
             {showWeather && snap?.weather && (
               <WeatherPopover

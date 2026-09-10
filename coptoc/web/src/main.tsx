@@ -17,3 +17,19 @@ createRoot(document.getElementById('root')!).render(
 )
 
 if (new URLSearchParams(window.location.search).get('embedded') === '1') document.documentElement.classList.add('native-workspace')
+
+// Smoothly reveal ultra-thin scrollbars only while scrolling commences, fading out when idle
+window.addEventListener(
+  'scroll',
+  (e) => {
+    const target = e.target as HTMLElement | null
+    if (target && target.classList) {
+      target.classList.add('is-scrolling')
+      clearTimeout((target as any)._scrollTimer)
+      ;(target as any)._scrollTimer = window.setTimeout(() => {
+        target.classList.remove('is-scrolling')
+      }, 900)
+    }
+  },
+  { capture: true, passive: true },
+)
