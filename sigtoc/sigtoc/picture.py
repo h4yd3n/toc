@@ -233,3 +233,45 @@ def seed(dataset: str, now: datetime) -> List[Any]:
               equipment=["social accounts"], ttps=["names operators", "amplifies access-control photos"], intent="Harassment and possible facilitation against DC-East operators.", owner="S2 Analyst"),
         sighting("sgt_dc_1", "act_dc_threat_cluster", h(3), 39.0442, -77.4870, "DC-East loading side", "New post named an operator and the soft-side loading dock.", nai="req_loc_loc_dc2", src="thr_004", rel="C", cred=3, confidence="probable"),
     ]
+
+
+def assess_traveler_exposure(
+    country: str,
+    actors: Iterable[Dict[str, Any]],
+    capability_filter: Optional[Iterable[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Evaluates whether travelers to a country/region are exposed to active threat groups (e.g. GTG actors).
+    Returns list of matching threat assessments, including specific cyber interception (CaptiveCrunch) or kinetic threats.
+    """
+    matches = []
+    country_code = country.upper()
+    filter_set = set(capability_filter) if capability_filter else None
+
+    for a in actors:
+        if a.get("status") != "active":
+            continue
+        actor_place = (a.get("place") or "").upper()
+        aliases = [str(x).upper() for x in a.get("aliases", [])]
+        ttps = a.get("ttps", [])
+
+        # Match if country matches place, alias, or if state_nexus tag matches
+        country_match = (country_code in actor_place) or any(country_code in al for al in aliases)
+        if not country_match:
+            continue
+
+        if filter_set:
+            actor_caps = set(ttps) | set(a.get("equipment", []))
+            combined_caps = " ".join(actor_caps).lower()
+            if not any(f.lower() in combined_caps for f in filter_set):
+                continue
+
+        matches.append({
+            "actor_id": a.get("id"),
+            "name": a.get("name"),
+            "echelon": a.get("echelon"),
+            "ttps": ttps,
+            "assessed_intent": a.get("assessed_intent"),
+        })
+
+    return matches
+

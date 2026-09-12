@@ -2,21 +2,22 @@
 import os
 from typing import Any, Awaitable, Callable, Dict, List, Sequence, Tuple
 
-from . import acled, clstr, fcdo, nws, state_dept, usgs, who_don
+from . import acled, clstr, fcdo, frontier_cti, nws, state_dept, usgs, who_don
 from .gdacs import collect_gdacs
 
 Points = Sequence[Tuple[float, float]]
 Countries = Dict[str, Tuple[float, float]]  # ISO → a representative blue-force point there
 
 COLLECTORS: Dict[str, Dict[str, Any]] = {
-    "gdacs":      {"scope": "point",   "run": lambda p, c: collect_gdacs(p)},
-    "usgs":       {"scope": "point",   "run": lambda p, c: usgs.collect_usgs(p)},
-    "nws":        {"scope": "point",   "run": lambda p, c: nws.collect_nws(p)},
-    "who_don":    {"scope": "country", "run": lambda p, c: who_don.collect_who(p, c)},
-    "state_dept": {"scope": "country", "run": lambda p, c: state_dept.collect_state_dept(p, c)},
-    "fcdo":       {"scope": "country", "run": lambda p, c: fcdo.collect_fcdo(p, c)},
-    "acled":      {"scope": "point",   "run": lambda p, c: acled.collect_acled(p, c), "configured": acled.configured},
-    "clstr":      {"scope": "country", "run": lambda p, c: clstr.collect_clstr(p, c), "configured": clstr.configured},
+    "gdacs":        {"scope": "point",   "run": lambda p, c: collect_gdacs(p)},
+    "usgs":         {"scope": "point",   "run": lambda p, c: usgs.collect_usgs(p)},
+    "nws":          {"scope": "point",   "run": lambda p, c: nws.collect_nws(p)},
+    "who_don":      {"scope": "country", "run": lambda p, c: who_don.collect_who(p, c)},
+    "state_dept":   {"scope": "country", "run": lambda p, c: state_dept.collect_state_dept(p, c)},
+    "fcdo":         {"scope": "country", "run": lambda p, c: fcdo.collect_fcdo(p, c)},
+    "acled":        {"scope": "point",   "run": lambda p, c: acled.collect_acled(p, c), "configured": acled.configured},
+    "clstr":        {"scope": "country", "run": lambda p, c: clstr.collect_clstr(p, c), "configured": clstr.configured},
+    "frontier_cti": {"scope": "country", "run": lambda p, c: frontier_cti.collect_frontier_cti(p, c), "configured": frontier_cti.configured},
 }
 
 

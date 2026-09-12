@@ -31,6 +31,35 @@ class ThreatEntityGraph:
             return []
         return list(self.graph.neighbors(entity_name))
 
+    def get_campaigns_for_actor(self, actor_name: str) -> List[str]:
+        if actor_name not in self.graph:
+            return []
+        return [
+            nbr for nbr in self.graph.neighbors(actor_name)
+            if self.graph.nodes[nbr].get("entity_type") == "campaign"
+        ]
+
+    def get_tactics_for_campaign(self, campaign_name: str) -> List[str]:
+        if campaign_name not in self.graph:
+            return []
+        return [
+            nbr for nbr in self.graph.neighbors(campaign_name)
+            if self.graph.nodes[nbr].get("entity_type") == "attack-pattern"
+        ]
+
+    def find_coordinated_clusters(self) -> List[List[str]]:
+        """Returns connected components that represent coordinated campaign/actor clusters."""
+        return [list(c) for c in nx.connected_components(self.graph) if len(c) > 1]
+
+    def get_actors_targeting_sector(self, sector_name: str) -> List[str]:
+        """Returns all threat actors linked to a specific targeted sector or industry."""
+        if sector_name not in self.graph:
+            return []
+        return [
+            nbr for nbr in self.graph.neighbors(sector_name)
+            if self.graph.nodes[nbr].get("entity_type") in ("threat-actor", "actor")
+        ]
+
     def get_all_entities(self) -> List[Dict]:
         nodes = []
         for n, data in self.graph.nodes(data=True):

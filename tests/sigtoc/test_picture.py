@@ -50,3 +50,58 @@ def test_dismissal_needs_a_reason_and_corroboration_improves_credibility():
         assert c.post(f"/v1/s2/reports/{rid}/dispose", json={"action": "dismiss"}, headers=AN).status_code == 422
         r = c.post(f"/v1/s2/reports/{rid}/dispose", json={"action": "corroborate", "note": "matches camera feed"}, headers=AN)
         assert r.status_code == 200 and r.json()["status"] == "corroborated" and r.json()["grade"] == "A1"
+
+
+def test_assess_traveler_exposure():
+    from sigtoc.picture import assess_traveler_exposure
+
+    actors = [
+        {
+            "id": "act_gtg20006",
+            "name": "Midnight Blizzard / CaptiveCrunch",
+            "status": "active",
+            "place": "Russia / Moscow",
+            "aliases": ["GTG-20006", "APT29"],
+            "ttps": ["T1557", "hotel-wifi-interception", "dns-hijacking"],
+            "equipment": ["CaptiveCrunch"],
+            "assessed_intent": "espionage against diplomatic/defense travelers",
+        },
+        {
+            "id": "act_other",
+            "name": "Local Petty Cell",
+            "status": "active",
+            "place": "Germany / Berlin",
+            "aliases": [],
+            "ttps": ["vandalism"],
+            "equipment": [],
+            "assessed_intent": "harassment",
+        },
+        {
+            "id": "act_inactive",
+            "name": "Retired Actor",
+            "status": "inactive",
+            "place": "Russia",
+            "aliases": ["GTG-99999"],
+            "ttps": ["hotel-wifi-interception"],
+            "equipment": [],
+            "assessed_intent": "none",
+        },
+    ]
+
+    # Test country match
+    ru_exposures = assess_traveler_exposure("Russia", actors)
+    assert len(ru_exposures) == 1
+    assert ru_exposures[0]["actor_id"] == "act_gtg20006"
+
+    # Test capability filter
+    wifi_exposures = assess_traveler_exposure("Russia", actors, capability_filter=["captivecrunch", "hotel-wifi"])
+    assert len(wifi_exposures) == 1
+
+    # Unmatched capability filter
+    drone_exposures = assess_traveler_exposure("Russia", actors, capability_filter=["drone-swarms"])
+    assert len(drone_exposures) == 0
+
+    # Unmatched country
+    jp_exposures = assess_traveler_exposure("Japan", actors)
+    assert len(jp_exposures) == 0
+

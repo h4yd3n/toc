@@ -67,8 +67,8 @@ def test_keyed_sources_parse_documented_shapes_and_are_not_live_without_keys(mon
                                       "last_updated": "2026-08-14T11:38:00.000Z", "status": "ACTIVE", "categories": ["international", "business"], "countries": ["YE", "EG"], "significance_score": 9}]})
     assert len(c) == 2 and c[0]["country"] == "YE" and c[0]["severity"] == "elevated" and c[0]["event_type"] == "infrastructure" and "(theirs)" in c[0]["summary"]
     assert configured("acled") is False and configured("clstr") is False
-    assert configured("gdacs") is False and configured("usgs") is False  # TOC_OFFLINE=1 in this test module: nothing is live
-    assert set(COLLECTORS) == {"gdacs", "usgs", "nws", "who_don", "state_dept", "fcdo", "acled", "clstr"}
+    assert configured("frontier_cti") is False
+    assert set(COLLECTORS) == {"gdacs", "usgs", "nws", "who_don", "state_dept", "fcdo", "acled", "clstr", "frontier_cti"}
 
 
 def test_countries_and_holiday_baseline():

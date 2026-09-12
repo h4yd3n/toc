@@ -63,6 +63,7 @@ CATALOG: List[Dict[str, Any]] = [
     {"id": "opensanctions","name": "OpenSanctions",              "indicators": ["targeted"],                    "access": "free",          "reliability": "B", "cadence": "weekly",  "built": False},
     {"id": "osac",        "name": "OSAC",                        "indicators": ["crime", "advisory", "targeted"], "access": "login",       "reliability": "A", "cadence": "daily",   "built": False},
     {"id": "commercial",  "name": "Flashpoint · Dataminr · Recorded Future", "indicators": ["targeted", "crime", "civil_unrest"], "access": "paid", "reliability": "B", "cadence": "continuous", "built": False},
+    {"id": "frontier_cti", "name": "Frontier AI Threat Intel (Anthropic · OpenAI · Meta)", "indicators": ["targeted"], "access": "free, keyless", "reliability": "A", "cadence": "daily", "built": True},
     {"id": "ops",         "name": "Organic reports (our own people)", "indicators": ["crowd", "transit", "infrastructure", "targeted", "civil_unrest"], "access": "internal", "reliability": "A", "cadence": "continuous", "built": True},
 ]
 CADENCES = ["manual", "hourly", "every few hours", "daily", "weekly", "continuous", "on demand"]  # Decision K: operator-adjustable

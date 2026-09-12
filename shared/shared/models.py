@@ -83,7 +83,7 @@ class STIXThreatObject(BaseModel):
 
 class ThreatReport(BaseModel):
     report_id: str
-    source: str  # "darknet_crawler", "telegram_monitor", "commercial_feed"
+    source: str  # "darknet_crawler", "telegram_monitor", "commercial_feed", "frontier_cti"
     title: str
     summary: str
     severity_score: float = Field(ge=0.0, le=10.0)
@@ -91,5 +91,9 @@ class ThreatReport(BaseModel):
     relevance_score: float = Field(ge=0.0, le=1.0)
     threat_actors: List[str] = Field(default_factory=list)
     evasion_tactics: List[str] = Field(default_factory=list)
+    campaign_type: Optional[str] = None  # e.g. "influence_operation", "coordinated_inauthentic_behavior", "adversary_evasion"
+    state_nexus: Optional[str] = None  # e.g. "RU", "CN", "IR"
+    target_platforms: List[str] = Field(default_factory=list)  # e.g. ["social_feed", "api_llm", "messaging"]
+    targeted_sectors: List[str] = Field(default_factory=list)  # e.g. ["defense_ministries", "drone_manufacturers"]
     recommended_policy_action: Optional[str] = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

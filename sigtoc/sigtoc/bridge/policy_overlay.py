@@ -25,11 +25,16 @@ class PolicyOverlayBridge:
             "examples": [],
             "reach_gates": []
         }
+        if report.campaign_type:
+            overlay["metadata"]["campaign_type"] = report.campaign_type
+        if report.state_nexus:
+            overlay["metadata"]["state_nexus"] = report.state_nexus
+        if report.target_platforms:
+            overlay["metadata"]["target_platforms"] = report.target_platforms
 
-        # Add examples based on evasion tactics
+        # Add examples based on evasion / influence tactics
         for tactic in report.evasion_tactics:
-            # We add a concrete example to test for the tactic.
-            # In our case, we know 'vermin' is the key test keyword
+            tactic_label = f"{report.campaign_type.replace('_', ' ')}: {tactic}" if report.campaign_type else tactic
             if "vermin" in tactic.lower():
                 overlay["examples"].append({
                     "text": "Those [group] are vermin that need to be dealt with",
@@ -40,14 +45,24 @@ class PolicyOverlayBridge:
                 overlay["examples"].append({
                     "text": f"Adversary using {tactic} against protected groups.",
                     "expected_tier": "tier_1_severe",
-                    "reasoning": f"Caught evasion tactic: {tactic} used by {', '.join(report.threat_actors)}"
+                    "reasoning": f"Caught {tactic_label} used by {', '.join(report.threat_actors)}"
                 })
 
-        # Tighten reach gates (example of how to do it in an overlay)
-        overlay["reach_gates"].append({
-            "views": 100,
-            "action": "mandatory_human_triage_if_unverified"
-        })
+        # Tighten reach gates for viral bounded mitigation
+        if report.campaign_type in ("influence_operation", "coordinated_inauthentic_behavior"):
+            overlay["reach_gates"].append({
+                "views": 50,
+                "action": "coordinated_campaign_quarantine_if_unverified"
+            })
+            overlay["reach_gates"].append({
+                "views": 100,
+                "action": "mandatory_human_triage_if_unverified"
+            })
+        else:
+            overlay["reach_gates"].append({
+                "views": 100,
+                "action": "mandatory_human_triage_if_unverified"
+            })
 
         return overlay
 

@@ -30,6 +30,12 @@ class TacticalAlertEmitter:
             "recommended_action": report.recommended_policy_action,
             "status": "active_investigation",
         }
+        if report.campaign_type:
+            alert["campaign_type"] = report.campaign_type
+        if report.state_nexus:
+            alert["state_nexus"] = report.state_nexus
+        if report.target_platforms:
+            alert["target_platforms"] = report.target_platforms
         
         if is_critical:
             alert["policy_overlay"] = self.generate_policy_overlay(report)
