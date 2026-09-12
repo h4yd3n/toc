@@ -36,6 +36,13 @@ DEFCON_MEANING = {  # the US military definitions, as the example (the author's 
     "high":     "DEFCON 2 — Next step to nuclear war. Armed forces ready to deploy and engage in less than 6 hours. [FAST PACE]",
     "critical": "DEFCON 1 — Nuclear war is imminent or has already begun. Maximum readiness. [COCKED PISTOL]",
 }
+POSTURE_MEANING_CORPORATE = {
+    "normal":   "Normal — Lowest state of alert. Standard facility access and routine monitoring.",
+    "guarded":  "Guarded — Increased security watch and strengthened access controls.",
+    "elevated": "Elevated — Heightened threat or regional disruption. Active travel and facility advisories.",
+    "high":     "High — Severe threat to facilities or personnel. Incident response teams activated.",
+    "critical": "Critical — Major emergency or security incident in progress. Maximum response posture.",
+}
 # Decision 3: only a *confirmed* link changes posture. Severity → posture it forces.
 SEVERITY_TO_POSTURE = {"low": "normal", "moderate": "elevated", "elevated": "critical", "critical": "critical"}
 # Decision 2: a check-in this recent overrides the derived position.
@@ -491,7 +498,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "unaccounted": sum(i["counts"]["unaccounted"] + i["counts"]["unreachable"] for i in incidents_out if i["status"] == "open"),
         "upcoming_events": len(events_out),
         "posture": POSTURES[worst_loc], "defcon": 5 - worst_loc,
-        "defcon_levels": [{"defcon": DEFCON[p], "posture": p, "meaning": DEFCON_MEANING[p], "sites": sum(1 for l in locations_out if l["effective_posture"] == p)} for p in POSTURES],
+        "defcon_levels": [{"defcon": DEFCON[p], "posture": p, "meaning": (POSTURE_MEANING_CORPORATE[p] if prof == "corporate" else DEFCON_MEANING[p]), "sites": sum(1 for l in locations_out if l["effective_posture"] == p)} for p in POSTURES],
     }
     summary["s4_status"], summary["s6_status"] = s4["status"], s6["status"]
     _tk = taskings_summary(taskings, now); summary["taskings_open"], summary["taskings_overdue"] = _tk["open"], _tk["overdue"]

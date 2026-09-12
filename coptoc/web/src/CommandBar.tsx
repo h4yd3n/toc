@@ -23,7 +23,10 @@ function score(q: string[], hay: string): number {
 export function buildCommands(snap: Snapshot, go: { select: (s: Selection) => void; open: (panel: 'S1' | 'S2' | 'S3' | 'S4' | 'S6' | 'brief' | 'settings' | 'plan' | 'intsum') => void }): Command[] {
   const out: Command[] = []
   for (const p of snap.people) out.push({ id: `p:${p.id}`, kind: 'person', title: p.name, sub: `${p.rank ? p.rank + ' · ' : ''}${p.role} · ${p.team_name}${p.status === 'traveling' ? ' · traveling' : ''}`, run: () => { go.select({ type: 'person', id: p.id }); go.open('S1') } })
-  for (const l of snap.locations) out.push({ id: `l:${l.id}`, kind: 'location', title: l.name, sub: `${l.city}, ${l.country} · ${l.present}/${l.assigned} present · DEFCON ${l.defcon ?? ''}`.replace(' · DEFCON ', l.defcon ? ' · DEFCON ' : ''), run: () => { go.select({ type: 'location', id: l.id }); go.open('S1') } })
+  for (const l of snap.locations) {
+    const postText = snap.profile === 'corporate' ? (l.effective_posture ?? l.posture).toUpperCase() : (l.defcon ? `DEFCON ${l.defcon}` : '')
+    out.push({ id: `l:${l.id}`, kind: 'location', title: l.name, sub: `${l.city}, ${l.country} · ${l.present}/${l.assigned} present${postText ? ' · ' + postText : ''}`, run: () => { go.select({ type: 'location', id: l.id }); go.open('S1') } })
+  }
   for (const e of snap.events) out.push({ id: `e:${e.id}`, kind: 'event', title: e.name, sub: `${e.venue_name} · ${e.status === 'active' ? 'in progress' : `in ${e.days_until} d`}`, run: () => { go.select({ type: 'event', id: e.id }); go.open('S3') } })
   for (const t of snap.threats) out.push({ id: `t:${t.id}`, kind: 'threat', title: t.title, sub: `${t.severity} · ${t.source}`, run: () => { go.select({ type: 'threat', id: t.id }); go.open('S2') } })
   for (const t of snap.taskings?.items ?? []) if (t.open) out.push({ id: `k:${t.id}`, kind: 'tasking', title: t.title, sub: `${t.from_section} → ${t.to_section} · ${t.status}${t.overdue ? ' · LATE' : ''}`, run: () => go.open(t.to_section) })

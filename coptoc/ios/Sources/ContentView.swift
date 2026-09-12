@@ -122,19 +122,22 @@ struct PostureTopBar: View {
     var body: some View {
         let s = store.snapshot?.summary
         let posture = s?.posture ?? "normal"
+        let isCorporate = (store.snapshot?.profile ?? "military") == "corporate"
         ZStack {
             Menu {
                 ForEach((s?.defconLevels ?? []).sorted { $0.defcon > $1.defcon }) { l in
-                    Button { } label: { Label("DEFCON \(l.defcon) · \(l.posture.uppercased())" + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
+                    let title = isCorporate ? l.posture.uppercased() : "DEFCON \(l.defcon) · \(l.posture.uppercased())"
+                    Button { } label: { Label(title + (l.defcon == s?.defcon ? "  ← now" : "") + (l.sites > 0 ? "  (\(l.sites))" : ""), systemImage: l.defcon == s?.defcon ? "checkmark.circle.fill" : "circle") }
                 }
                 Divider()
                 Text("The wall reads the worst site. Set a site's level from its card.")
             } label: {
+                let badgeText = isCorporate ? posture.uppercased() : "DEFCON \(s?.defcon.map(String.init) ?? "—")"
                 if store.postureHeader {
-                    Text("DEFCON \(s?.defcon.map(String.init) ?? "—")").font(.system(size: 14, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
+                    Text(badgeText).font(.system(size: 14, weight: .heavy, design: .monospaced)).tracking(2.5).foregroundStyle(Theme.posture(posture))
                         .padding(.horizontal, 12).padding(.vertical, 6).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.posture(posture), lineWidth: 2))
                 } else {
-                    Chip(text: "DEFCON \(s?.defcon.map(String.init) ?? "—")", color: Theme.posture(posture))
+                    Chip(text: badgeText, color: Theme.posture(posture))
                 }
             }
             HStack(spacing: 10) {

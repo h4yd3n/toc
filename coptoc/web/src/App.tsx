@@ -292,11 +292,16 @@ export default function App() {
           {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
             <option value="military">Military</option><option value="corporate">Corporate</option>
           </select>}
-          <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">DEFCON {s?.defcon ?? '—'}</button>
+          {snap?.profile === 'corporate' ? (
+            <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">{s?.posture?.toUpperCase() ?? 'NORMAL'}</button>
+          ) : (
+            <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">DEFCON {s?.defcon ?? '—'}</button>
+          )}
           {showDefcon && s && <div className="defcon" onClick={e => e.stopPropagation()}>
-            <div className="dform-head">DEFCON <span className="dim">the wall reads the worst site · set a site's level from its card</span></div>
+            <div className="dform-head">{snap?.profile === 'corporate' ? 'POSTURE' : 'DEFCON'} <span className="dim">the wall reads the worst site · set a site's level from its card</span></div>
             {[...(s.defcon_levels ?? [])].sort((x, y) => y.defcon - x.defcon).map(l => <div key={l.defcon} className={`dlevel ${l.posture} ${l.defcon === s.defcon ? 'now' : ''}`}>
-              <span className="dnum">{l.defcon}</span><span className="dname">{l.posture.toUpperCase()}</span><span className="dmean">{l.meaning}</span><span className="dsites dim">{l.sites ? `${l.sites} site${l.sites === 1 ? '' : 's'}` : ''}</span>
+              {snap?.profile !== 'corporate' && <span className="dnum">{l.defcon}</span>}
+              <span className="dname">{l.posture.toUpperCase()}</span><span className="dmean">{l.meaning}</span><span className="dsites dim">{l.sites ? `${l.sites} site${l.sites === 1 ? '' : 's'}` : ''}</span>
             </div>)}
           </div>}
         </div>
