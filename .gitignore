@@ -23,3 +23,4 @@ coptoc/ios/build-device/
 
 # a second checkout may link the first one's venv
 .venv
+.wrangler/
