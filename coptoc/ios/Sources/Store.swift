@@ -81,7 +81,7 @@ final class COPStore {
 
     var client = COPClient()
     var users: [UserInfo] = []
-    var tab = "COP"  // the phone's tab; a header counter can jump it
+    var tab = ProcessInfo.processInfo.environment["TOC_TAB"] ?? "COP"  // the phone's tab; a header counter can jump it
     /// Bumped when the section's own tab is tapped again: the sheet takes it as "raise me a step", so a sheet resting
     /// down by the dock can be brought back without finding the handle.
     var sheetRaise = 0
