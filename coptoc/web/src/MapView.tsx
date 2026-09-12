@@ -14,6 +14,12 @@ const BOARD_KEY = 'toc.board.2'   // bumped when home station replaced the fixed
 /** The board this browser was left on. A wall that remembers is never pulled somewhere by the server's default. */
 function savedBoard(): { center: [number, number]; zoom: number } | null {
   try {
+    const hash = typeof window !== 'undefined' ? window.location.hash || '' : ''
+    const qs = hash.includes('?') ? hash.split('?')[1] : (typeof window !== 'undefined' ? window.location.search.slice(1) : '')
+    const params = new URLSearchParams(qs)
+    if (params.get('board') === 'world') {
+      return { center: [15, 20], zoom: 1.65 }
+    }
     const raw = localStorage.getItem(BOARD_KEY); if (!raw) return null
     const b = JSON.parse(raw)
     if (typeof b?.zoom !== 'number' || !Array.isArray(b.center) || b.center.length !== 2) return null
@@ -71,6 +77,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     const m = new maplibregl.Map({
       container: el.current, style: STYLE, ...(savedBoard() ?? BAY_AREA),
       attributionControl: false, dragRotate: false, pitchWithRotate: false,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     })
     // Only once the board is real — the opening frame applied, or a remembered one restored. Saving before that
     // persists the placeholder we show while the first snapshot is in flight, and the wall would open there forever.
@@ -136,7 +143,8 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     const onWin = () => m.resize()
     window.addEventListener('resize', onWin)
     map.current = m
-    if (import.meta.env.DEV) (window as unknown as { __tocMap?: MLMap }).__tocMap = m
+    if (el.current) (el.current as any).__map = m
+    ;(window as unknown as { __tocMap?: MLMap }).__tocMap = m
     m.on('error', e => console.error('[maplibre]', e.error?.message ?? e))
     return () => {
       ro.disconnect()
