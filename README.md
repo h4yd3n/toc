@@ -19,6 +19,30 @@ A corporate-security **Tactical Operations Center**, built the way a military st
 
 Everything is synthetic: people, sites, phone numbers, reports. Live feeds are real. Nothing needs a key to run.
 
+## Open source and commercial boundary
+
+TOC is an open-source reference implementation for intelligence-led corporate-security operations. The public
+repository is intended to be inspectable, runnable with synthetic data, and useful to organizations that need to
+evaluate the operating model before adopting it. Open source does not mean that customer intelligence is public:
+customer data, source credentials, reports, cases, collection requirements, and operational history belong in the
+customer's controlled environment.
+
+The public project focuses on the reusable core:
+
+- Coptoc and Sigtoc workflows, API contracts, schemas, and audit-ledger behavior
+- Synthetic fixtures, reference collectors, web/mobile clients, and evaluation tests
+- Evidence-aware review, assessment, dissemination, and handover patterns
+
+A production or supported deployment may add private customer-specific capabilities, including identity and tenant
+isolation, hardened infrastructure, sensitive-source connectors, organization-specific playbooks and taxonomies,
+provider configuration, compliance controls, integrations, support, and managed operations. The exact boundary is
+deployment-dependent, but real intelligence and customer records should never be committed to this repository.
+
+The goal is to make the system trustworthy by making the core visible: organizations should be able to inspect the
+data flows, run TOC privately or on-premise, and verify that intelligence does not leave their controlled boundary.
+The Apache 2.0 license permits commercial use and modification; production value comes from secure deployment,
+integrations, operational expertise, and ongoing support.
+
 ## Why
 
 > The entire concept of this COP was born from my years of experience working in tactical operations centers that
@@ -127,7 +151,8 @@ Every one of those actions is on the battle log, hash-chained, with who did it a
 
 ## Before you deploy
 
-This is a prototype built to be read and run locally. It has **no authentication**: the role and the actor come from
+This is a public prototype built to be read and run locally, not a production security product. It has **no authentication**:
+the role and the actor come from
 two request headers (`X-TOC-Role`, `X-TOC-Actor`), which is what lets one screen switch identities for a demo. The
 API allows any CORS origin. Cleartext HTTP is allowed only for the dev hosts the phones use. The check-in and roll-call
 links are HMAC tokens signed with `TOC_SECRET`, which defaults to a dev value. Twilio, Slack, ACLED, CLSTR, and the
