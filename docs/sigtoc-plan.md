@@ -4,10 +4,9 @@
 in this document is built unless it says so. The PRD stays the authority; the sections here are drafted so they can be
 lifted into PRD §5 as each phase lands.
 
-**Implementation pause, 2026-09-05:** Phase 1 implementation was paused at the user's request before code edits landed.
-Resume with a narrow Phase 1 pass only: shared Sigtoc object contract, actors, sightings, S2 threat graphics,
-SPOTREP/report disposition, S3 movement-risk flags, seed data, and read-only Cop Talk display. Do not start Phase 2/3
-collection-manager or IPB product work in the same pass unless explicitly asked.
+**Status, 2026-09-16:** Phase 1 landed on 6 September (PRD §5.10b, v3.32): actors, sightings, report disposition,
+the S2 threat-graphic types with confidence and basis, and movement risks derived for S3, all on the wall. Still open
+from phase 1: SPOTREP filing and the red picture on the phones. Phases 2 and 3 are next, in order.
 
 **Scope:** this is a cross-module plan, not a request to bury all of Sigtoc inside Cop Talk. Sigtoc is a separate
 module / sub-repo and remains the canonical home for intelligence objects and analyst workflow. Cop Talk gets the live
