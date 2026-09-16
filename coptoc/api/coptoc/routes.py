@@ -387,10 +387,18 @@ async def create_tasking(body: TaskingCreate, session: AsyncSession = Depends(ge
     t = TaskingRow(id=f"tsk_{uuid.uuid4().hex[:8]}", kind=body.kind, title=body.title, from_section=body.from_section, to_section=body.to_section, subject_type=body.subject_type,
                    subject_id=body.subject_id, subject_name=body.subject_name, asset=body.asset, window_from=naive(body.window_from), window_to=naive(body.window_to), priority=body.priority,
                    status="requested", notes=body.notes, requested_by=actor_from(x_toc_actor), requested_at=now, updated_at=now)
-    session.add(t); await session.commit()
+    session.add(t)
+    collecting: list = []
+    if body.kind == "collection" and body.subject_type == "requirement" and body.subject_id:
+        # tasked from an NAI: the PIRs on that NAI's subject are now being collected against
+        from sigtoc.api import pirs_collecting
+        from sigtoc.requirements import RequirementRow
+        req = await session.get(RequirementRow, body.subject_id)
+        if req: collecting = await pirs_collecting(session, req.subject_type, req.subject_id)
+    await session.commit()
     await get_ledger().append_event(content_id=t.id, event_type="cop.tasking.raised", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="requested",
-                                    reason=f"{body.from_section} → {body.to_section}: {body.title}" + (f" · {body.asset}" if body.asset else ""), metadata={"kind": body.kind, "priority": body.priority, "to": body.to_section})
-    return tasking_out(t, now)
+                                    reason=f"{body.from_section} → {body.to_section}: {body.title}" + (f" · {body.asset}" if body.asset else ""), metadata={"kind": body.kind, "pirs_collecting": collecting, "priority": body.priority, "to": body.to_section})
+    return {**tasking_out(t, now), **({"pirs_collecting": collecting} if collecting else {})}
 
 
 @router.patch("/taskings/{tasking_id}")

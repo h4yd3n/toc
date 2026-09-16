@@ -456,6 +456,7 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .mk-nai b { color: #fff; margin-right: 2px; } .mk-nai i { font-style: normal; margin-left: 4px; } .mk-nai u { text-decoration: none; margin-left: 4px; color: var(--red); font-weight: 800; }
 .mk-nai.green { border-color: var(--green); color: #bbf7d0; } .mk-nai.green i { color: var(--green); } .mk-nai.amber i { color: var(--amber); } .mk-nai.red { border-color: var(--red); color: #fecaca; } .mk-nai.red i { color: var(--red); }
 .mk-nai.p2, .mk-nai.p3 { font-size: 9px; opacity: .85; }
+.mk-nai s { text-decoration: none; margin-left: 5px; padding: 0 4px; border: 1px solid rgba(96,165,250,.6); border-radius: 2px; color: var(--blue-2); cursor: pointer; } .mk-nai s:hover { background: rgba(59,130,246,.25); }
 .mk-head { display: flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 6px; background: rgba(13,18,25,.94); border: 1.5px solid #c084fc; color: #fff; font: 600 11px var(--sans); box-shadow: 0 0 14px rgba(192,132,252,.45); white-space: nowrap; }
 .mk-head .glyph { color: #c084fc; font-size: 11px; } .mk-head.planned { border-style: dashed; opacity: .85; } .mk-head.vip { border-color: var(--gold); box-shadow: 0 0 16px rgba(251,191,36,.5); } .mk-head.vip .glyph { color: var(--gold); }
 .mk-head.shipment { border-color: var(--orange); box-shadow: 0 0 14px rgba(249,115,22,.45); font-family: var(--mono); font-size: 10px; } .mk-head.shipment .glyph { color: var(--orange); } .mk-head.shipment.red { border-color: var(--red); } .mk-head.shipment.amber { border-color: var(--amber); }
@@ -1441,3 +1442,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   -webkit-overflow-scrolling: touch !important;
   padding: 16px 14px 60px !important;
 }
+
+/* §5.10b Phase 2 — ISR sync grid and the pattern-of-life wheels under the S2 panel */
+.isr { padding: 2px 14px 8px; font-family: var(--mono); font-size: 10px; }
+.isr-row { display: flex; align-items: center; gap: 2px; padding: 2px 0; cursor: pointer; }
+.isr-row:hover { background: rgba(255,255,255,.03); }
+.isr-head { cursor: default; color: var(--dim); font-size: 9px; letter-spacing: .06em; }
+.isr-nai { flex: 0 0 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.isr-nai b { margin-right: 3px; color: #fff; } .isr-nai.red b { color: var(--red); } .isr-nai.amber b { color: var(--amber); } .isr-nai.green b { color: var(--green); }
+.isr-day, .isr-cell { flex: 1 1 0; min-width: 14px; text-align: center; }
+.isr-day.today { color: var(--text); font-weight: 700; }
+.isr-cell { height: 16px; line-height: 16px; border-radius: 2px; background: rgba(255,255,255,.04); color: var(--dim); }
+.isr-cell.cov { background: rgba(34,197,94,.14); color: #bbf7d0; } .isr-cell.gap { background: rgba(239,68,68,.16); color: #fecaca; }
+.isr-cell.tasked { box-shadow: inset 0 0 0 1px rgba(96,165,250,.7); } .isr-cell.future { opacity: .55; } .isr-cell.today { outline: 1px solid rgba(255,255,255,.35); }
+.isr-nai-block.open { background: rgba(255,255,255,.02); border-radius: 3px; }
+.isr-detail { padding: 4px 4px 8px; display: flex; flex-direction: column; gap: 4px; }
+.isr-detail .chip { margin-right: 4px; }
+.pol { padding: 6px 0; border-top: 1px solid var(--line); }
+.pol-head { display: flex; gap: 6px; align-items: baseline; margin-bottom: 4px; } .pol-head .id { color: var(--dim); font-size: 9px; letter-spacing: .08em; } .pol-head .name { flex: 1; font-family: var(--sans); font-size: 11.5px; font-weight: 600; } .pol-head .meta { font-size: 9.5px; }
+.wheel { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px; }
+.wheel-row { display: flex; gap: 1px; align-items: center; } .wheel-day { flex: 0 0 26px; font-size: 8.5px; color: var(--dim); }
+.wheel-cell { flex: 1 1 0; height: 7px; background: var(--amber); border-radius: 1px; }

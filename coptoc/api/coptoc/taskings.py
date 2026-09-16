@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from shared.database import Base
 
-KINDS = ("collection", "comms", "supply", "movement", "coverage", "other")
+KINDS = ("collection", "rfi", "comms", "supply", "movement", "coverage", "other")  # rfi: a request for information, S2 answers it
 STATUSES = ("requested", "accepted", "scheduled", "complete", "declined")
 SECTIONS = ("S1", "S2", "S3", "S4", "S6")
 PRIORITIES = ("routine", "priority", "urgent")

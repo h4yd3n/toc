@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { Map as MLMap, Marker } from 'maplibre-gl'
-import type { CopEvent, Draw, Layers, Location, Movement, Overlay, Person, Selection, Snapshot } from './types'
+import type { CopEvent, Draw, Layers, Location, Movement, Overlay, Person, Selection, Snapshot, NAI } from './types'
 import { arc, circle } from './geo'
 
 // Free, keyless vector basemap. Attribution is carried in the style JSON.
@@ -52,6 +52,8 @@ interface Props {
   onDrawFinish: () => void
   /** S2/COP declutter: show threat circles as outlines only rather than filled rings. */
   outlineOnly?: boolean
+  /** §5.10b Phase 2: TASK on an NAI label raises a collection tasking on S3 for it. */
+  onTaskCollection?: (nai: NAI) => void
 }
 const HOUR = 36e5
 // how far the other sections' things fade under each overlay: an overlay sits on the base, the base stays
@@ -61,7 +63,7 @@ const ageFactor = (iso: string, now: number) => { const d = (now - +new Date(iso
 const HEALTH_COLOR: Record<string, string> = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' }
 const RATING_LETTER: Record<string, string> = { green: 'G', amber: 'A', red: 'R', unknown: '?' }
 
-export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly }: Props) {
+export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly, onTaskCollection }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
@@ -313,7 +315,8 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     if (s2) for (const n of snapshot.nais ?? []) {
       const div = document.createElement('div')
       div.className = `mk mk-nai ${n.health} p${n.priority}`
-      div.innerHTML = `<b>${n.name}</b> ${n.subject_name.split(' — ')[0].split(' · ')[0]} <i>${n.coverage_pct}%</i>${n.pir_ids.length ? ` <u>PIR</u>` : ''}`
+      div.innerHTML = `<b>${n.name}</b> ${n.subject_name.split(' — ')[0].split(' · ')[0]} <i>${n.coverage_pct}%</i>${n.pir_ids.length ? ` <u>PIR</u>` : ''}${s2 && onTaskCollection ? ` <s title="Task collection on S3 for this NAI">TASK</s>` : ''}`
+      if (s2 && onTaskCollection) { const b = div.querySelector('s'); if (b) (b as HTMLElement).onclick = e => { e.stopPropagation(); onTaskCollection(n) } }
       div.title = `${n.name} · P${n.priority} · ${n.subject_name}\n${n.question}\n${n.coverage_pct}% covered · ${n.gaps} gap${n.gaps === 1 ? '' : 's'}${n.window_to ? ` · until ${n.window_to.slice(0, 10)}` : ''}`
       div.onclick = e => { e.stopPropagation(); if (n.subject_type === 'location' && n.subject_id) onSelect({ type: 'location', id: n.subject_id }); else if (n.subject_type === 'event' && n.subject_id) onSelect({ type: 'event', id: n.subject_id }) }
       const top = circle(n.lat, n.lon, n.radius_km, 4)[0]   // the northern point of the ring

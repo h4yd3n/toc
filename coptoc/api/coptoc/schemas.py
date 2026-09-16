@@ -78,7 +78,7 @@ class SystemUpdate(BaseModel):
     note: Optional[str] = None
 
 class TaskingCreate(BaseModel):
-    kind: Literal["collection", "comms", "supply", "movement", "coverage", "other"] = "other"
+    kind: Literal["collection", "rfi", "comms", "supply", "movement", "coverage", "other"] = "other"
     title: str
     from_section: Literal["S1", "S2", "S3", "S4", "S6"]
     to_section: Literal["S1", "S2", "S3", "S4", "S6"]

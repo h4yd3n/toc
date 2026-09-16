@@ -5,8 +5,10 @@ in this document is built unless it says so. The PRD stays the authority; the se
 lifted into PRD §5 as each phase lands.
 
 **Status, 2026-09-16:** Phase 1 landed on 6 September (PRD §5.10b, v3.32): actors, sightings, report disposition,
-the S2 threat-graphic types with confidence and basis, and movement risks derived for S3, all on the wall. Still open
-from phase 1: SPOTREP filing and the red picture on the phones. Phases 2 and 3 are next, in order.
+the S2 threat-graphic types with confidence and basis, and movement risks derived for S3, all on the wall; the phones
+followed on 16 September (SPOTREP filing, actors and report pins, red risky legs). Phase 2 landed the same day (PRD
+v3.38): the RFI kind, collection tasked from an NAI with PIRs moving to COLLECTING, the ISR sync view, pattern of
+life, and threshold rules as settings. Phase 3 is next.
 
 **Scope:** this is a cross-module plan, not a request to bury all of Sigtoc inside Cop Talk. Sigtoc is a separate
 module / sub-repo and remains the canonical home for intelligence objects and analyst workflow. Cop Talk gets the live

@@ -5,7 +5,7 @@ import { Question } from './Headline'
 import type { SectionCode, Tasking, TaskingBoard } from './types'
 
 const SEC_TITLE: Record<SectionCode, string> = { S1: 'Personnel', S2: 'Intelligence', S3: 'Operations', S4: 'Logistics', S6: 'Signal' }
-const KIND_ICON: Record<string, string> = { collection: '◎', comms: '((·))', supply: '⛽', movement: '➜', coverage: '⛨', other: '·' }
+const KIND_ICON: Record<string, string> = { collection: '◎', rfi: '?', comms: '((·))', supply: '⛽', movement: '➜', coverage: '⛨', other: '·' }
 const fmt = (iso: string | null) => iso ? new Date(iso).toUTCString().slice(5, 22) + 'Z' : ''
 
 const MADE_LABEL = { operation: 'OP', shipment: 'SHIPMENT', task: 'TASK' } as const
@@ -57,7 +57,7 @@ export function TaskingBox({ section, board, canEdit, busy, act, enabled, onSele
       <div className="dform-head">RAISE A TASKING <span className="dim">from {section} · what you need, from whom, by when</span></div>
       <div className="row-btns">
         <select value={f.to_section} onChange={e => setF({ ...f, to_section: e.target.value as SectionCode })}>{enabled.filter(s => s !== section).map(s => <option key={s} value={s}>{s} · {SEC_TITLE[s]}</option>)}</select>
-        <select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value as Tasking['kind'] })}>{(['collection', 'comms', 'supply', 'movement', 'coverage', 'other'] as const).map(k => <option key={k}>{k}</option>)}</select>
+        <select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value as Tasking['kind'] })}>{(['collection', 'rfi', 'comms', 'supply', 'movement', 'coverage', 'other'] as const).map(k => <option key={k}>{k}</option>)}</select>
         <select value={f.priority} onChange={e => setF({ ...f, priority: e.target.value as Tasking['priority'] })}>{(['routine', 'priority', 'urgent'] as const).map(k => <option key={k}>{k}</option>)}</select>
       </div>
       <input placeholder="What (title)" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} />

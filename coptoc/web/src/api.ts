@@ -1,4 +1,4 @@
-import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location } from './types'
+import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -77,6 +77,8 @@ export const answerResource = (opId: string, resId: string, status: string, note
 export const getDistribution = (ptype: string, pid: string) => req<Distribution>('GET', `/v1/s2/products/${ptype}/${pid}/distribution`)
 export const disseminate = (ptype: string, pid: string, recipients: string[], channel: 'wall' | 'chat' = 'wall') => req<Distribution>('POST', `/v1/s2/products/${ptype}/${pid}/disseminate`, { recipients, channel })
 export const ackProduct = (ptype: string, pid: string) => req<Distribution>('POST', `/v1/s2/products/${ptype}/${pid}/ack`)
+export const getIsrSync = (days = 7, ahead = 3) => req<IsrSync>('GET', `/v1/s2/isr-sync?days=${days}&ahead=${ahead}`)
+export const getPatterns = (days = 30) => req<Patterns>('GET', `/v1/s2/patterns?days=${days}`)
 export const listWarnings = (status?: string) => req<Warning[]>('GET', status ? `/v1/s2/warnings?status=${status}` : '/v1/s2/warnings')
 export const draftWarning = (body: { subject_type: string; subject_id: string; title: string; text?: string; severity?: string; threat_id?: string }) => req<Warning>('POST', '/v1/s2/warnings', body)
 export const suggestWarnings = () => req<{ suggested: Warning[] }>('POST', '/v1/s2/warnings/suggest')

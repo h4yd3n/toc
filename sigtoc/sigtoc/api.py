@@ -531,6 +531,11 @@ async def dispose_report(report_id: str, body: ReportDisposition, session: Async
             report.disposition = "link"
             report.disposition_target_type = body.target_type
             report.disposition_target_id = body.target_id
+            if body.target_type == "nai":
+                # a report against an NAI is collection coming back: the PIRs on that subject move to COLLECTING
+                req = await session.get(R.RequirementRow, body.target_id)
+                if not req: raise HTTPException(404, "NAI (requirement) not found")
+                created = {"object_type": "pirs", "collecting": await pirs_collecting(session, req.subject_type, req.subject_id)}
         else:
             raise HTTPException(422, "unknown link target")
     elif body.action == "promote":
@@ -572,6 +577,35 @@ async def dispose_report(report_id: str, body: ReportDisposition, session: Async
                                 old_state=old, new_state=report.status, reason=f"{report.kind.upper()} {report.id}: {body.action}" + (f" - {body.note}" if body.note else ""),
                                 metadata={"action": body.action, "target_type": report.disposition_target_type, "target_id": report.disposition_target_id, **({"created": created} if created else {})})
     return {**C.report_dict(report), **({"created": created} if created else {})}
+
+
+async def pirs_collecting(session: AsyncSession, subject_type: Optional[str], subject_id: Optional[str]) -> List[str]:
+    """OPEN PIRs on a subject become COLLECTING when collection is tasked or reporting arrives against its NAI."""
+    from coptoc.db_models import PIRRow
+    if not subject_type or not subject_id: return []
+    rows = (await session.execute(select(PIRRow).where(PIRRow.subject_type == subject_type, PIRRow.subject_id == subject_id, PIRRow.status == "OPEN"))).scalars().all()
+    for p in rows: p.status = "COLLECTING"
+    return [p.id for p in rows]
+
+
+@router.get("/isr-sync")
+async def isr_sync(days: int = 7, ahead: int = 3, session: AsyncSession = Depends(get_session)):
+    """The ISR synchronization view: every NAI by day — sources watching, collection tasked, sightings and reports back, gaps."""
+    from coptoc.service import build_snapshot
+    from . import isr
+    now = R.now_utc()
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    return await isr.isr_sync(session, snap, now, days=days, ahead=ahead)
+
+
+@router.get("/patterns")
+async def pattern_of_life(days: int = 30, session: AsyncSession = Depends(get_session)):
+    """Pattern of life per actor and per NAI: time wheels, 7-day and N-day activity, what is new since the last INTSUM."""
+    from coptoc.service import build_snapshot
+    from . import isr
+    now = R.now_utc()
+    snap = await build_snapshot(session, include_restricted=True, log_limit=1)
+    return await isr.patterns(session, snap, now, days=days)
 
 
 @router.get("/cases")

@@ -635,7 +635,7 @@ struct TaskingsSection: View {
             if raising {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack { Picker("To", selection: $to) { ForEach(others, id: \.self) { Text($0) } }.pickerStyle(.segmented) }
-                    HStack { Picker("Kind", selection: $kind) { ForEach(["collection", "comms", "supply", "movement", "coverage", "other"], id: \.self) { Text($0) } }.pickerStyle(.menu)
+                    HStack { Picker("Kind", selection: $kind) { ForEach(["collection", "rfi", "comms", "supply", "movement", "coverage", "other"], id: \.self) { Text($0) } }.pickerStyle(.menu)
                         Picker("Priority", selection: $priority) { ForEach(["routine", "priority", "urgent"], id: \.self) { Text($0) } }.pickerStyle(.menu) }
                     TextField("What", text: $title).textFieldStyle(.roundedBorder).font(.system(size: 12))
                     TextField("Asset or capability wanted", text: $asset).textFieldStyle(.roundedBorder).font(.system(size: 12))

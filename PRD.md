@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** 3.37
+**Version:** v3.38
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -372,7 +372,7 @@ at once, which is what a fusion cell is.
 
 The object that carries a request from one staff section to another: S2 asks S3 for a collection asset over an area (a drone over the FARP during the rotation); S3 asks S6 to confirm PACE for an operation; S3 asks S4 for fuel at a site; S3 asks S1 for gate security at a ceremony. A tasking has who asked and who owes, what it is for (an operation, event, requirement, site, or trip), the asset or capability wanted, a window, a priority, and a status — requested → accepted → scheduled → complete, or declined with a reason. Raising one needs edit on the section it comes from; answering needs edit on the section it goes to; the Battle Captain can do either. A tasking whose window has opened and is not complete is late, and reads red. Every step is on the ledger; the handover brief carries what is open per section. Each section's panel on the wall, and each section's tab on the phones, shows what that section owes (with ACCEPT / SCHEDULE / COMPLETE / DECLINE), what it is waiting on, and a RAISE form. **Taskings create things when accepted (v3.29, Decision Y).** The tasking is the ask; the thing the owing section makes to answer it lives on that section's board. Accepting a *collection* tasking on a site, event, or trip opens an S3 operation with a collection skeleton (assign the asset, confirm the window and airspace, brief the requirement, fly and report to S2). Accepting a *supply* tasking books a planned shipment on the S4 board, categorised from the ask, due at the window. Accepting a *comms* or *coverage* (or movement / other) tasking whose subject already has an operation adds a task to it, owned by the answering section; with no operation it stays a plain ask. Each is linked both ways: completing the tasking closes what it made; the shipment arriving, the task done, or the operation closed completes the tasking with the result on it. Both objects log the link. The tasking card shows what it made as a chip that opens it.
 
-### 5.10b Sigtoc as a working section — the live S2 picture **[BUILT, phase 1]** (6 Sep 2026; plan in `docs/sigtoc-plan.md`)
+### 5.10b Sigtoc as a working section — the live S2 picture **[BUILT, phases 1–2]** (6 and 16 Sep 2026; plan in `docs/sigtoc-plan.md`)
 
 The plan of 5 September set out the other side of the picture — the red force, the threat overlay, field reporting, pattern analysis, thresholds, IPB products, the decision support matrix — in four phases. Phase 1 landed on 6 September under a boundary the author set the night before (Decision AA): **Sigtoc owns the intelligence objects; Cop Talk displays the live slice and can file reports back in.** Nothing Cop Talk does creates intelligence; a Sigtoc disposition decides what a report becomes.
 
@@ -382,7 +382,17 @@ The plan of 5 September set out the other side of the picture — the red force,
 - **The threat overlay** extends the graphics catalog (§3.4) with S2's types — danger area, likely ambush site, engagement / kill zone, attack or IED hot spot, avenue of approach, mobility corridor, no-go and slow-go terrain, restricted area, obstacle or UXO, hostile checkpoint, hostile observation post, surveillance detection point — each with a `confidence` (confirmed / probable / possible / template) and a `basis`. The brigade seed carries a danger area, an ambush site, an avenue of approach, and a hostile OP.
 - **What Intel does to Ops, by derivation.** Every active movement leg is tested against the active, in-window threat graphics; a leg that crosses one is a `movement_risk` in the snapshot (movement, leg, graphic, confidence, basis, severity, reason), flagged on the S3 overlay and counted in the summary. Never stored: derived on every snapshot.
 
-**Not yet built from phase 1:** SPOTREP filing and the red picture on the phones. **Phases 2–3** (RFIs, collection tasked from an NAI, the ISR synchronisation view, pattern of life, thresholds; IPB products, threat COAs, decision points and the DSM, the estimate and the annex) remain as planned.
+**Phase 1 on the phones** (16 Sep): iOS and Android draw active actors and open report pins on the map when the threats layer is on, show *Who is out there* and *Field reports* in the S2 panel, and file a SALUTE SPOTREP from the COP (size, activity, unit, equipment, place, position prefilled from the map centre). Risky movement legs draw red on both.
+
+**Phase 2 — closing the cycle: ask, collect, see, be warned** (16 Sep):
+
+- **RFI** is a tasking kind (`rfi`, §5.10): any section asks S2 a question through the same board that carries every other ask; S2 owes the answer and completes it with a result. The phones and the wall raise it from the tasking form.
+- **Collection tasked from an NAI.** TASK on an NAI label on the S2 overlay, or TASK COLLECTION on a row of the sync view, raises a `collection` tasking on S3 with the NAI as subject (`subject_type: requirement`), the NAI's question as the notes, its window, and its priority; the wall asks for one thing — the asset or capability wanted. Raising it moves the OPEN PIRs on that NAI's subject to COLLECTING, and so does linking a field report to the NAI; the response and the log carry which PIRs moved.
+- **The ISR synchronisation view** (`GET /v1/s2/isr-sync?days=7&ahead=3`, *Who is watching what* under the S2 panel): NAIs down the side, days across; a cell is what came back that day (sightings and reports inside the NAI), a blue edge is collection tasked for that day, a red cell is an NAI-day with no live source and nothing tasked — a gap. A row opens to the question, the sources watching it (from the collection plan), the taskings on it, and the PIRs it serves.
+- **Pattern of life** (`GET /v1/s2/patterns?days=30`, *Pattern of life* under the same panel): per actor and per NAI, the 7 × 24 time wheel from sightings and reports, activity over 7 and 30 days, which NAIs an actor has been seen in and which actors an NAI has held, and what is new since the last INTSUM. The wheel's sentence says how many of how many; below three events it says there is no pattern yet.
+- **Threshold rules** (`sigtoc/warning.py`, run with the warning rule after every refresh, `POST /v1/s2/warnings/suggest`): one actor sighted N times in one NAI within D days; a corroborated field report inside a threat graphic; an actor's latest sighting within the site buffer of one of our sites. Each is a *suggested* warning on the subject the NAI or site names; the Battle Captain still releases. Thresholds are settings, not judgments — `TOC_S2_SIGHTING_THRESHOLD` (3), `TOC_S2_SIGHTING_DAYS` (7), `TOC_S2_SITE_BUFFER_KM` (5) — and seed sightings never count: they are exercises.
+
+**Phase 3** (IPB products, threat COAs, decision points and the DSM, the estimate and the annex) follows below as it lands.
 
 ### 5.12 Staff workspaces and AI analysis **[BUILT]** (6–8 Sep 2026; contract in `docs/WORKSPACE_API.md`)
 
@@ -695,6 +705,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.38** — 16 Sep: Sigtoc plan phase 1 on the phones and phase 2 on the wall (§5.10b): RFI tasking kind, collection tasked from an NAI moving PIRs to COLLECTING, the ISR synchronisation view, pattern of life, threshold rules as settings.
 - **v3.37** — 11–15 Sep: the landing site and the open-source boundary (§11.4); the frontier AI CTI collector, the STIX mapper, the fusion graph, and the policy-overlay bridge (§5.8); no DEFCON on the corporate profile (Decision AC).
 - **v3.36** — 9–10 Sep: METOC weather, the multi-timezone clocks, the map stats overlay, DISPLAY into SETTINGS, threat counters and the LAYERS button (§3.5).
 - **v3.35** — 8 Sep: reviewed document intake for S4 with the overdue-delivery monitor, the `/console/` build and the in-app WORKSPACE on both phones (§5.13); workspaces into the centre stage; S3 and log rail toggles; error boundary and DB auto-migration.

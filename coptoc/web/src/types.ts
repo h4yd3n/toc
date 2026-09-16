@@ -260,9 +260,21 @@ export interface UploadPreview { upload_id: string; section: string; filename: s
   samples: Record<string, string>[]; mapping: Record<string, string | null>; proposed_by: 'model' | 'headers'; kind: 'supply' | 'shipments'; targets: Record<string, string>; issues: string[] }
 
 export type SectionCode = 'S1' | 'S2' | 'S3' | 'S4' | 'S6'
-export interface Tasking { id: string; kind: 'collection' | 'comms' | 'supply' | 'movement' | 'coverage' | 'other'; title: string; from_section: SectionCode; to_section: SectionCode
+export interface Tasking { id: string; kind: 'collection' | 'rfi' | 'comms' | 'supply' | 'movement' | 'coverage' | 'other'; title: string; from_section: SectionCode; to_section: SectionCode
   subject_type: string | null; subject_id: string | null; subject_name: string; asset: string; window_from: string | null; window_to: string | null
   priority: 'routine' | 'priority' | 'urgent'; status: 'requested' | 'accepted' | 'scheduled' | 'complete' | 'declined'; notes: string; result: string
   requested_by: string; requested_at: string; age_h: number; owned_by: string | null; updated_at: string; open: boolean; overdue: boolean; health: Health
   created_type: 'operation' | 'shipment' | 'task' | null; created_id: string | null; created_parent: string | null; created_name: string }
 export interface TaskingBoard { items: Tasking[]; open: number; overdue: number; per_section: Record<string, { inbox: number; outbox: number; overdue: number }> }
+
+/** §5.10b Phase 2 — the ISR synchronization view: NAIs by day. */
+export interface IsrCell { date: string; tasked: string[]; sightings: number; reports: number; covered: boolean; future: boolean }
+export interface IsrSource { id: string; name: string; cadence: string; indicators: string[] }
+export interface IsrNai { id: string; nai: number; name: string; subject_name: string; subject_type: string; subject_id: string | null; priority: number; question: string; health: Health; coverage_pct: number
+  window_from: string | null; window_to: string | null; pir_ids: string[]; sources: IsrSource[]; taskings: Tasking[]; cells: IsrCell[]; sightings: number; reports: number; gap_days: number }
+export interface IsrSync { from: string; to: string; today: string; days: string[]; nais: IsrNai[]; gaps: { nai_id: string; nai: string; date: string }[]; taskings_open: number }
+/** Pattern of life: a 7 × 24 time wheel with the sentence that says how many of how many. */
+export interface TimeWheel { entity_id: string | null; events: number; grid: number[][]; days: string[]; hours: number[]; peak: { day: string; hour: number; count: number } | null; pattern: string }
+export interface PatternActor { id: string; name: string; kind: string; status: string; last_seen_at: string | null; sightings_7d: number; sightings_total: number; since_intsum: number | null; nais: { id: string; name: string; sightings: number }[]; wheel: TimeWheel; [k: string]: unknown }
+export interface PatternNai { id: string; nai: number; name: string; subject_name: string; priority: number; activity_7d: number; sightings: number; reports: number; since_intsum: number | null; actors: { id: string; name: string; sightings: number }[]; wheel: TimeWheel; [k: string]: unknown }
+export interface Patterns { days: number; generated_at: string; since_intsum: { intsum_id: string; period_to: string | null; status: string; sightings: number; reports: number; new_actors: string[] } | null; actors: PatternActor[]; nais: PatternNai[] }

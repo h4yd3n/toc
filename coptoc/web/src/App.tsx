@@ -15,6 +15,7 @@ import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
 import { TaskingBox } from './Taskings'
+import { IsrPanel } from './IsrSync'
 import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
 import { ContextRow, RollCallStrip } from './Strips'
 import WeatherPopover from './WeatherPopover'
@@ -255,6 +256,13 @@ export default function App() {
     setBusy(label)
     try { await fn(); await load(); setBriefReload(n => n + 1) } catch (e) { setErr(String(e)) } finally { setBusy(null) }
   }
+  /** §5.10b Phase 2: collection tasked from an NAI — one prompt for the asset, the rest is the NAI's own words. */
+  const taskCollection = (n: { id: string; name: string; subject_type: string; subject_id: string | null; subject_name: string; question: string; window_from: string | null; window_to: string | null; priority: number }) => {
+    const asset = window.prompt(`${n.name} — ${n.subject_name}\n${n.question}\n\nAsset or capability wanted from S3:`, '')
+    if (asset === null) return
+    act('tasking collection on S3', () => api.raiseTasking({ kind: 'collection', title: `Watch ${n.name} — ${n.subject_name.split(' — ')[0]}`, from_section: 'S2', to_section: 'S3', subject_type: 'requirement', subject_id: n.id, subject_name: n.subject_name,
+      asset: asset.trim(), window_from: n.window_from ?? undefined, window_to: n.window_to ?? undefined, priority: n.priority === 1 ? 'urgent' : n.priority === 2 ? 'priority' : 'routine', notes: n.question }))
+  }
   const toggle = (k: keyof Layers) => setLayers(l => ({ ...l, [k]: !l[k] }))
   const s = snap?.summary
   const travelers = (snap?.people ?? []).filter(p => p.status === 'traveling')
@@ -414,7 +422,7 @@ export default function App() {
       <main className="center" onClick={() => { setShowSettings(false); setOverlayMenuOpen(false); setShowWeather(false) }}>
         {isCop ? (
           <>
-            <MapView snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
+            <MapView onTaskCollection={taskCollection} snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
             {s && (
               <div
                 className="map-stats-pill"
@@ -740,6 +748,7 @@ export default function App() {
               <span className="meta dim">{rel(r.at, now)}</span>
             </li>))}
         </ul>
+        <IsrPanel reload={briefReload} busy={busy} onTask={taskCollection} onSelect={setSel} />
         <Question q="Movement risk" count={snap?.movement_risks?.length ?? 0} />
         <ul className="list">
           {(snap?.movement_risks ?? []).slice(0, 6).map(r => (

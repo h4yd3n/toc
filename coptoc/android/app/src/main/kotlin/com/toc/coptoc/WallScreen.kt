@@ -1011,7 +1011,7 @@ fun TaskingDialogs(st: WallState, store: Store, section: String, raising: Boolea
         title = { Text("Raise a tasking from $section", fontSize = 14.sp) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { others.forEach { s -> Chip(s, if (to == s) Palette.blue2 else Palette.dim, filled = to == s, onClick = { to = s }) } }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("collection", "comms", "supply", "movement", "coverage", "other").forEach { k -> Chip(k, if (kind == k) Palette.blue2 else Palette.dim, filled = kind == k, onClick = { kind = k }) } }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("collection", "rfi", "comms", "supply", "movement", "coverage", "other").forEach { k -> Chip(k, if (kind == k) Palette.blue2 else Palette.dim, filled = kind == k, onClick = { kind = k }) } }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("routine", "priority", "urgent").forEach { k -> Chip(k, if (priority == k) Palette.amber else Palette.dim, filled = priority == k, onClick = { priority = k }) } }
             OutlinedTextField(title, { title = it }, label = { Text("What") }, singleLine = true)
             OutlinedTextField(asset, { asset = it }, label = { Text("Asset or capability wanted") }, singleLine = true) } },
