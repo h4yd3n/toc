@@ -163,6 +163,10 @@ final class COPStore {
     // Lookups
     func site(_ id: String?) -> Site? { snapshot?.locations.first { $0.id == id } }
     func person(_ id: String?) -> Person? { snapshot?.people.first { $0.id == id } }
+    func actor(_ id: String?) -> S2Actor? { snapshot?.s2Actors?.first { $0.id == id } }
+    func report(_ id: String?) -> S2Report? { snapshot?.s2Reports?.first { $0.id == id } }
+    func sightings(of actorId: String) -> [S2Sighting] { (snapshot?.s2Sightings ?? []).filter { $0.actorId == actorId }.sorted { $0.at > $1.at } }
+    var openReports: [S2Report] { (snapshot?.s2Reports ?? []).filter { $0.status == "filed" } }
     func threat(_ id: String?) -> Threat? { snapshot?.threats.first { $0.id == id } }
     func trip(_ id: String?) -> Trip? { snapshot?.trips.first { $0.id == id } }
     // §11.2 what a section is called here: "S1" on a military desk, nothing (just the title) on a corporate one

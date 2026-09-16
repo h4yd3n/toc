@@ -45,6 +45,8 @@ class CopClient(
     suspend fun releaseWarning(id: String) = send("POST", "/v1/s2/warnings/$id/release", buildJsonObject { })
     suspend fun cancelWarning(id: String) = send("POST", "/v1/s2/warnings/$id/cancel", buildJsonObject { })
     suspend fun runWarningRule() = send("POST", "/v1/s2/warnings/suggest", buildJsonObject { })
+    /** §5.10b a SPOTREP from the field: Cop Talk files it, Sigtoc disposes of it. */
+    suspend fun fileReport(body: kotlinx.serialization.json.JsonObject) = send("POST", "/v1/s2/reports", body)
     suspend fun ackProduct(ptype: String, pid: String) = send("POST", "/v1/s2/products/$ptype/$pid/ack", buildJsonObject { })
     suspend fun releaseIntsum(id: String) = send("POST", "/v1/s2/intsum/$id/release", buildJsonObject { })
     suspend fun draftIntsum() = send("POST", "/v1/s2/intsum/draft", buildJsonObject { })

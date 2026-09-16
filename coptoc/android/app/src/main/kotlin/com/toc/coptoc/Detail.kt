@@ -79,6 +79,29 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                         if (conf != null) Mini("UNLINK", Palette.dim, !busy) { store.act("removing link") { removeLink(t.id, conf.linkId) } } else if (st.role in listOf("battle_captain", "analyst")) Mini("CONFIRM", Palette.amber, !busy) { store.act("confirming link") { confirmLink(t.id, "person", p.id) } } } }
                 if (isBC) Mini("☎ OPEN ROLL CALL IN RADIUS", Palette.red, !busy) { store.act("opening roll call") { openRollCall(null, t.id) } }
             }
+            is Selection.ActorSel -> snap.s2Actors.firstOrNull { it.id == sel.id }?.let { a ->   // §5.10b the order-of-battle card, read-only: Sigtoc owns it
+                Kicker("S2 ACTOR · ${a.kind.uppercase()} · ${a.status.uppercase()} · owned by Sigtoc"); Title("${a.glyph} ${a.name}")
+                if (a.aliases.isNotEmpty()) Text("also " + a.aliases.joinToString(", "), color = Palette.dim, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { if (a.echelon.isNotEmpty()) Chip(a.echelon.uppercase(), Palette.red, filled = true); if (a.strength.isNotEmpty()) Chip(a.strength, Palette.dim) }
+                a.place?.let { KV("Last seen", it + (a.lastSeenAt?.let { t -> " · " + t.take(16).replace('T', ' ') + "Z" } ?: "")) }
+                if (a.assessedIntent.isNotEmpty()) KV("Intent", a.assessedIntent)
+                if (a.equipment.isNotEmpty()) KV("Equipment", a.equipment.joinToString(", "))
+                if (a.ttps.isNotEmpty()) { Section("TTPs"); a.ttps.forEach { Text("· $it", color = Palette.text, fontSize = 11.sp) } }
+                val track = snap.s2Sightings.filter { it.actorId == a.id }.sortedByDescending { it.at }
+                Section("SIGHTINGS", "${track.size}")
+                track.take(10).forEach { sg -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Top) {
+                    Text(sg.at.take(16).replace('T', ' '), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.width(88.dp)); Chip(sg.grade, Palette.amber); Chip(sg.confidence.uppercase(), if (sg.confidence == "confirmed") Palette.red else Palette.dim)
+                    Text(sg.what.ifEmpty { sg.place ?: sg.sourceType }, color = Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
+                Text("Actors, sightings, and dispositions are worked in Sigtoc; the phone shows the live picture.", color = Palette.dim, fontSize = 9.sp)
+            }
+            is Selection.ReportSel -> snap.s2Reports.firstOrNull { it.id == sel.id }?.let { r ->
+                Kicker("${r.kind.uppercase()} · ${r.grade} · ${r.status.uppercase()}"); Title(r.reportedBy)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text(r.at.take(16).replace('T', ' ') + "Z", color = Palette.text, fontSize = 11.sp, fontFamily = FontFamily.Monospace); if (r.reporterRole.isNotEmpty()) Text(r.reporterRole, color = Palette.dim, fontSize = 11.sp) }
+                r.place?.let { KV("Place", it) }
+                Text(r.text, color = Palette.text, fontSize = 12.sp, lineHeight = 16.sp)
+                r.disposition?.let { KV("Disposed", it + (r.disposedBy?.let { b -> " by $b" } ?: "") + (r.dispositionNote?.let { n -> " — $n" } ?: "")) }
+                    ?: Text("Awaiting the S2 analyst's disposition: corroborate, link, promote, or dismiss.", color = Palette.dim, fontSize = 9.sp)
+            }
             is Selection.EventSel -> snap.events.firstOrNull { it.id == sel.id }?.let { e ->
                 Kicker("S3 EVENT · ${e.eventType.uppercase().replace('_', ' ')} · ${if (e.status == "active") "IN PROGRESS" else "T-${e.daysUntil} DAYS"}"); Title(e.name); Text(e.venueName, color = Palette.dim, fontSize = 11.sp)
                 Stats("${e.attendeeCount} attending", "${e.vipCount} VIP", "${e.securityCount} security", "${e.tripsGenerated} trips")

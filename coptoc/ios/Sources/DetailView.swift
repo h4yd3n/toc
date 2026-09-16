@@ -14,6 +14,8 @@ struct DetailView: View {
                 case .threat(let id): if let t = store.threat(id) { threatView(t) }
                 case .event(let id): if let e = store.event(id) { eventView(e) }
                 case .incident(let id): if let i = store.incident(id) { incidentView(i) }
+                case .actor(let id): if let a = store.actor(id) { actorView(a) }
+                case .report(let id): if let r = store.report(id) { reportView(r) }
                 }
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
@@ -249,6 +251,40 @@ struct DetailView: View {
 
 
 /// §3.1 — add a site, or correct one that moved. Moving the TOC is its own action: a different decision.
+extension DetailView {
+    /// §5.10b the order-of-battle card, read-only here: Sigtoc owns it.
+    @ViewBuilder func actorView(_ a: S2Actor) -> some View {
+        kicker("S2 ACTOR · \(a.kind.uppercased()) · \(a.status.uppercased()) · owned by Sigtoc")
+        title("\(a.glyph) \(a.name)")
+        if !a.aliases.isEmpty { Text("also " + a.aliases.joined(separator: ", ")).font(.system(size: 12)).foregroundStyle(Theme.dim) }
+        HStack(spacing: 6) { if !a.echelon.isEmpty { Chip(text: a.echelon.uppercased(), color: Theme.red, filled: true) }; if !a.strength.isEmpty { Chip(text: a.strength, color: Theme.dim) } }
+        if let p = a.place { kv("Last seen", p + (a.lastSeenAt.map { " · " + ISO.rel($0, now: store.now) } ?? "")) }
+        if !a.assessedIntent.isEmpty { kv("Intent", a.assessedIntent) }
+        if !a.equipment.isEmpty { kv("Equipment", a.equipment.joined(separator: ", ")) }
+        if !a.ttps.isEmpty { SectionLabel(text: "TTPs"); ForEach(a.ttps, id: \.self) { Text("· " + $0).font(.system(size: 12)) } }
+        let track = store.sightings(of: a.id)
+        SectionLabel(text: "SIGHTINGS · \(track.count)")
+        ForEach(track.prefix(10)) { sg in
+            HStack(alignment: .top, spacing: 8) {
+                Text(ISO.rel(sg.at, now: store.now)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(width: 52, alignment: .leading)
+                Chip(text: sg.grade, color: Theme.amber); Chip(text: sg.confidence.uppercased(), color: sg.confidence == "confirmed" ? Theme.red : Theme.dim)
+                Text(sg.what.isEmpty ? (sg.place ?? sg.sourceType) : sg.what).font(.system(size: 12)).lineLimit(2)
+            }
+        }
+        Text("Actors, sightings, and dispositions are worked in Sigtoc; the phone shows the live picture.").font(.system(size: 10)).foregroundStyle(Theme.dim)
+    }
+    /// A SPOTREP as filed; the analyst's disposition happens in Sigtoc.
+    @ViewBuilder func reportView(_ r: S2Report) -> some View {
+        kicker("\(r.kind.uppercased()) · \(r.grade) · \(r.status.uppercased())")
+        title(r.reportedBy)
+        HStack(spacing: 10) { Text(ISO.rel(r.at, now: store.now)).font(.system(size: 12)); if !r.reporterRole.isEmpty { Text(r.reporterRole).font(.system(size: 12)).foregroundStyle(Theme.dim) } }
+        if let p = r.place { kv("Place", p) }
+        Text(r.text).font(.system(size: 13))
+        if let d = r.disposition { kv("Disposed", "\(d)" + (r.disposedBy.map { " by " + $0 } ?? "") + (r.dispositionNote.map { " — " + $0 } ?? "")) }
+        else { Text("Awaiting the S2 analyst's disposition: corroborate, link, promote, or dismiss.").font(.system(size: 10)).foregroundStyle(Theme.dim) }
+    }
+}
+
 struct SiteForm: View {
     @Environment(COPStore.self) private var store
     var site: Site? = nil

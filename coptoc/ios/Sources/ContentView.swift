@@ -112,6 +112,7 @@ struct ContentView: View {
                     .background(Theme.panel, in: RoundedRectangle(cornerRadius: 6)).padding(.bottom, 60)
             }
         }
+        .overlay(alignment: .bottomTrailing) { if store.tab == "COP" { SpotrepButton(compact: false).padding(.trailing, 12).padding(.bottom, 96) } }   // §5.10b the field's job: file what you see
         .background(Theme.bg)
     }
 }

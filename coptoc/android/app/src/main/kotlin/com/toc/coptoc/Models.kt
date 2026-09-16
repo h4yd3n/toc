@@ -12,7 +12,7 @@ import kotlinx.serialization.json.double
 @Serializable data class Watch(val id: String = "", val name: String = "", val battleCaptain: String? = null, val status: String = "open", val startedAt: String = "", val endsAt: String = "",
                                val elapsedH: Double = 0.0, val remainingH: Double = 0.0, val overdue: Boolean = false, val inOverlap: Boolean = false, val nextWatch: String = "", val pattern: String = "")
 @Serializable data class Estimate(val section: String, val assessment: String = "", val recommendation: String = "", val updatedBy: String? = null, val updatedAt: String? = null)
-@Serializable data class Summary(val s4Status: String = "green", val s6Status: String = "green", val totalPeople: Int = 0, val present: Int = 0, val traveling: Int = 0, val vipsTraveling: Int = 0, val securityOnShift: Int = 0, val activeThreats: Int = 0,
+@Serializable data class Summary(val s2Actors: Int = 0, val s2ReportsPending: Int = 0, val movementRisks: Int = 0, val s4Status: String = "green", val s6Status: String = "green", val totalPeople: Int = 0, val present: Int = 0, val traveling: Int = 0, val vipsTraveling: Int = 0, val securityOnShift: Int = 0, val activeThreats: Int = 0,
                                  val realThreats: Int = 0, val confirmedLinks: Int = 0, val checkedInFresh: Int = 0, val openPirs: Int = 0, val upcomingEvents: Int = 0, val openIncidents: Int = 0,
                                  val unaccounted: Int = 0, val posture: String = "normal", val defcon: Int = 5, val defconLevels: List<DefconLevel> = emptyList(), val flash: Int = 0, val warningsPending: Int = 0, val offDuty: Int = 0, val unreachable: Int = 0)
 @Serializable data class Site(val s4Status: String? = null, val s6Status: String? = null, val s4Red: Int = 0, val s4Lines: Int = 0, val s6Down: Int = 0, val s6Systems: Int = 0, val s6InUse: String? = null, val id: String, val name: String, val type: String = "", val lat: Double, val lon: Double, val city: String = "", val country: String = "", val posture: String = "normal",
@@ -71,7 +71,7 @@ import kotlinx.serialization.json.double
 @Serializable data class Nai(val id: String, val nai: Int = 0, val name: String = "", val subjectName: String = "", val subjectType: String = "", val subjectId: String? = null, val kind: String = "standing", val lat: Double, val lon: Double, val radiusKm: Double = 50.0,
                              val priority: Int = 3, val windowFrom: String? = null, val windowTo: String? = null, val question: String = "", val coveragePct: Int = 0, val gaps: Int = 0, val pirIds: List<String> = emptyList(), val health: String = "red")
 @Serializable data class MovementLeg(val kind: String = "route", val label: String = "", val fromLat: Double? = null, val fromLon: Double? = null, val toLat: Double = 0.0, val toLon: Double = 0.0, val startAt: String? = null, val endAt: String? = null, val status: String = "planned")
-@Serializable data class Movement(val id: String, val kind: String = "individual", val owner: String = "S3", val name: String = "", val unit: String? = null, val pax: Int = 0, val personIds: List<String> = emptyList(), val isVip: Boolean = false, val purpose: String = "",
+@Serializable data class Movement(val riskFlags: List<MovementRisk> = emptyList(), val id: String, val kind: String = "individual", val owner: String = "S3", val name: String = "", val unit: String? = null, val pax: Int = 0, val personIds: List<String> = emptyList(), val isVip: Boolean = false, val purpose: String = "",
                                   val originName: String = "", val destName: String = "", val destLat: Double = 0.0, val destLon: Double = 0.0, val departAt: String? = null, val returnAt: String = "", val hoursToEta: Double? = null,
                                   val status: String = "planned", val mode: String = "unknown", val headLat: Double? = null, val headLon: Double? = null, val currentLeg: String? = null, val legs: List<MovementLeg> = emptyList(), val health: String = "green")
 @Serializable data class AreaCompact(val id: String, val place: String = "", val worst: String = "unknown", val worstIndicator: String? = null, val strip: List<String> = emptyList(), val assessedBy: String = "", val assessedAt: String = "", val ageDays: Double = 0.0, val stale: Boolean = false)
@@ -85,9 +85,19 @@ import kotlinx.serialization.json.double
         if (a.isNotEmpty() && a[0] is kotlinx.serialization.json.JsonArray) a.map { it.jsonArray[0].jsonPrimitive.double to it.jsonArray[1].jsonPrimitive.double } else listOf(a[0].jsonPrimitive.double to a[1].jsonPrimitive.double)
     } catch (e: Exception) { emptyList() }
 }
+// §5.10b the live S2 picture, Sigtoc's: actors at their last known position, their sightings, the reports still to be disposed of, and the movement legs Intel flagged
+@Serializable data class S2Actor(val id: String, val kind: String = "group", val name: String = "", val aliases: List<String> = emptyList(), val echelon: String = "", val strength: String = "", val equipment: List<String> = emptyList(), val ttps: List<String> = emptyList(),
+                                 val assessedIntent: String = "", val status: String = "active", val caseId: String? = null, val owner: String = "S2", val lat: Double? = null, val lon: Double? = null, val place: String? = null, val lastSeenAt: String? = null, val sightingIds: List<String> = emptyList()) {
+    val glyph get() = when (kind) { "unit" -> "◆"; "individual" -> "●"; "organization" -> "▣"; else -> "◈" }
+}
+@Serializable data class S2Sighting(val id: String, val actorId: String, val at: String = "", val lat: Double, val lon: Double, val place: String? = null, val naiId: String? = null, val sourceType: String = "report", val sourceId: String? = null,
+                                    val reliability: String = "A", val credibility: Int = 2, val grade: String = "", val what: String = "", val confidence: String = "probable")
+@Serializable data class S2Report(val id: String, val kind: String = "spot", val reportedBy: String = "", val reporterRole: String = "", val at: String = "", val lat: Double? = null, val lon: Double? = null, val place: String? = null, val text: String = "",
+                                  val caseId: String? = null, val grade: String = "", val source: String = "", val status: String = "filed", val disposition: String? = null, val disposedBy: String? = null, val dispositionNote: String? = null)
+@Serializable data class MovementRisk(val id: String, val movementId: String = "", val movementName: String = "", val legLabel: String = "", val graphicId: String = "", val graphicName: String = "", val graphicType: String = "", val confidence: String = "", val basis: String = "", val severity: String = "low", val reason: String = "")
 @Serializable data class MapFrame(val centerLat: Double? = null, val centerLon: Double? = null, val radiusKm: Double? = null, val source: String = "none")
 
-@Serializable data class Snapshot(val graphics: List<Graphic> = emptyList(), val nais: List<Nai> = emptyList(), val movements: List<Movement> = emptyList(), val view: MapFrame? = null, val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val restrictedDenied: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
+@Serializable data class Snapshot(val s2Actors: List<S2Actor> = emptyList(), val s2Sightings: List<S2Sighting> = emptyList(), val s2Reports: List<S2Report> = emptyList(), val movementRisks: List<MovementRisk> = emptyList(), val graphics: List<Graphic> = emptyList(), val nais: List<Nai> = emptyList(), val movements: List<Movement> = emptyList(), val view: MapFrame? = null, val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val restrictedDenied: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList())
@@ -104,6 +114,8 @@ sealed interface Selection {
     data class ThreatSel(val id: String) : Selection
     data class EventSel(val id: String) : Selection
     data class IncidentSel(val id: String) : Selection
+    data class ActorSel(val id: String) : Selection
+    data class ReportSel(val id: String) : Selection
 }
 
 @Serializable data class CoverageInfo(val required: Int = 0, val assigned: Int = 0, val gap: Int = 0, val rule: String = "")

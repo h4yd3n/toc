@@ -82,6 +82,30 @@ struct Snapshot: Decodable {
     var operations: [OperationSummary]?
     var nais: [NAI]?, movements: [Movement]?   // §3.4 the derived overlays
     var graphics: [Graphic]?                    // §3.4 the control measures a section drew
+    var s2Actors: [S2Actor]?, s2Sightings: [S2Sighting]?, s2Reports: [S2Report]?, movementRisks: [MovementRisk]?   // §5.10b the live S2 picture
+}
+
+/// §5.10b the other side as a thing with a name: an enemy unit or a threat actor, with its last known position.
+struct S2Actor: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, name: String, aliases: [String], echelon: String, strength: String, equipment: [String], ttps: [String], assessedIntent: String, status: String
+    var caseId: String?, owner: String, lat: Double?, lon: Double?, place: String?, lastSeenAt: String?, sightingIds: [String]
+    var coordinate: CLLocationCoordinate2D? { lat.flatMap { la in lon.map { .init(latitude: la, longitude: $0) } } }
+    var glyph: String { kind == "unit" ? "◆" : kind == "individual" ? "●" : kind == "organization" ? "▣" : "◈" }
+}
+/// One observation of an actor; the chain is the track.
+struct S2Sighting: Decodable, Identifiable, Hashable {
+    var id: String, actorId: String, at: String, lat: Double, lon: Double, place: String?, naiId: String?, sourceType: String, sourceId: String?, reliability: String, credibility: Int, grade: String, what: String, confidence: String
+    var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
+}
+/// A SPOTREP from our own people, on the map until Sigtoc disposes of it.
+struct S2Report: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, reportedBy: String, reporterRole: String, at: String, lat: Double?, lon: Double?, place: String?, text: String, caseId: String?, grade: String, source: String, status: String
+    var disposition: String?, dispositionTargetType: String?, dispositionTargetId: String?, disposedBy: String?, disposedAt: String?, dispositionNote: String?
+    var coordinate: CLLocationCoordinate2D? { lat.flatMap { la in lon.map { .init(latitude: la, longitude: $0) } } }
+}
+/// A movement leg that crosses a live S2 threat graphic — derived on the server, never stored.
+struct MovementRisk: Decodable, Identifiable, Hashable {
+    var id: String, movementId: String, movementName: String, legLabel: String, graphicId: String, graphicName: String, graphicType: String, confidence: String, basis: String, severity: String, reason: String
 }
 
 /// §3.4 a control measure a section drew by hand: a point, a line, or a polygon, typed from the catalog.
@@ -121,6 +145,7 @@ struct MovementLeg: Decodable, Hashable { var kind: String, label: String, fromL
 struct Movement: Decodable, Identifiable, Hashable {
     var id: String, kind: String, owner: String, name: String, unit: String?, pax: Int, personIds: [String], isVip: Bool, purpose: String, originName: String, destName: String, destLat: Double, destLon: Double
     var departAt: String?, returnAt: String, hoursToEta: Double?, status: String, mode: String, headLat: Double?, headLon: Double?, currentLeg: String?, legs: [MovementLeg], health: String
+    var riskFlags: [MovementRisk]?
     var head: CLLocationCoordinate2D? { headLat.flatMap { la in headLon.map { .init(latitude: la, longitude: $0) } } }
 }
 struct AreaCompact: Decodable, Hashable { var id: String, place: String, worst: String, worstIndicator: String?, strip: [String], assessedBy: String, assessedAt: String, ageDays: Double, stale: Bool }
@@ -133,6 +158,7 @@ struct Summary: Decodable {
     var posture: String
     var flash: Int?, warningsPending: Int?, offDuty: Int?, unreachable: Int?
     var defcon: Int?, defconLevels: [DefconLevel]?
+    var s2Actors: Int?, s2ReportsPending: Int?, movementRisks: Int?
 }
 struct DefconLevel: Decodable, Identifiable, Hashable { var defcon: Int, posture: String, meaning: String, sites: Int; var id: Int { defcon } }
 
@@ -237,9 +263,11 @@ struct Incident: Decodable, Identifiable, Hashable {
 }
 
 enum Selection: Identifiable, Hashable {
-    case site(String), person(String), threat(String), event(String), incident(String)
+    case site(String), person(String), threat(String), event(String), incident(String), actor(String), report(String)
     var id: String {
         switch self {
+        case .actor(let s): "actor:\(s)"
+        case .report(let s): "report:\(s)"
         case .site(let s): "site:\(s)"
         case .person(let s): "person:\(s)"
         case .threat(let s): "threat:\(s)"

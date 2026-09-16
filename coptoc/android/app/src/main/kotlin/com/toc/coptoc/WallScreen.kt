@@ -1,5 +1,9 @@
 package com.toc.coptoc
 
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import androidx.compose.foundation.verticalScroll
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -207,11 +211,25 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
 fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    var filing by remember { mutableStateOf(false) }
     TaskingDialogs(st, store, "S2", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
-    Label("", action = { Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } })
+    SpotrepDialog(st, store, filing) { filing = false }
+    Label("", action = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Mini("+ SPOTREP", Palette.amber, st.busy == null) { filing = true }; Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
     val s2State = androidx.compose.foundation.lazy.rememberLazyListState(); s2State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s2State, contentPadding = PaddingValues(bottom = 96.dp)) {
+        // §5.10b the red picture and the field reports, Sigtoc's; the phone files a SPOTREP and shows what came back
+        val actors = snap.s2Actors.filter { it.status == "active" }
+        item { Label("WHO IS OUT THERE", "${actors.size}") }
+        items(actors, key = { it.id }) { a -> RowItem(selected = (st.selection as? Selection.ActorSel)?.id == a.id, onClick = { store.select(Selection.ActorSel(a.id)) }) {
+            Text(a.glyph, color = Palette.red, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold); Text(a.name, color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (a.strength.isNotEmpty()) Text(a.strength, color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace); a.lastSeenAt?.let { Text(it.take(16).replace('T', ' '), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace) } } }
+        if (actors.isEmpty()) item { Text("No actor on the picture.", Modifier.padding(horizontal = 10.dp), color = Palette.dim, fontSize = 10.sp) }
+        val openReports = snap.s2Reports.filter { it.status == "filed" }
+        item { Label("FIELD REPORTS", "${openReports.size} open") }
+        items(openReports.take(8), key = { it.id }) { r -> RowItem(selected = (st.selection as? Selection.ReportSel)?.id == r.id, onClick = { store.select(Selection.ReportSel(r.id)) }) {
+            Chip("${r.kind.uppercase()} ${r.grade}", Palette.amber); Text(r.text, color = Palette.text, fontSize = 10.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text(r.at.take(16).replace('T', ' '), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace) } }
+        if (openReports.isEmpty()) item { Text("Nothing filed and waiting. File a SPOTREP from the field.", Modifier.padding(horizontal = 10.dp), color = Palette.dim, fontSize = 10.sp) }
         taskingsSection(st, store, "S2", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
         item { Label("WARNINGS", "${pending.size} awaiting release", action = { Mini("RUN RULE", enabled = st.busy == null) { store.act("running the warning rule") { runWarningRule() } } }) }
@@ -270,6 +288,10 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
 @Composable
 fun ColumnScope.S3Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
+    if (snap.movementRisks.isNotEmpty()) {   // §5.10b what Intel did to Ops: legs that cross a live threat graphic
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Chip("MOVEMENT RISK ${snap.movementRisks.size}", Palette.red, filled = true)
+            Text(snap.movementRisks.first().reason, color = Palette.text, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)) } }
     androidx.compose.foundation.lazy.LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(snap.events, key = { it.id }) { e -> Card(Palette.purple, selected = (st.selection as? Selection.EventSel)?.id == e.id, onClick = { store.select(Selection.EventSel(e.id)) }) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) { Chip(if (e.status == "active") "LIVE" else "T-${e.daysUntil}d", Palette.purple, filled = true); Text("★ ${e.name}", color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -1573,3 +1595,35 @@ fun TacticalRulerVertical(
     }
 }
 
+
+
+/** §5.10b the SPOTREP: what the field files, in SALUTE order, with the place taken from the board or typed. Cop Talk files it; Sigtoc disposes of it. */
+@Composable
+fun SpotrepDialog(st: WallState, store: Store, open: Boolean, onDone: () -> Unit) {
+    if (!open) return
+    var size by remember { mutableStateOf("") }; var activity by remember { mutableStateOf("") }; var unit by remember { mutableStateOf("") }; var equipment by remember { mutableStateOf("") }
+    var place by remember { mutableStateOf("") }; var notes by remember { mutableStateOf("") }
+    val c = Board.position?.target
+    var lat by remember { mutableStateOf(c?.let { "%.5f".format(it.latitude) } ?: "") }; var lon by remember { mutableStateOf(c?.let { "%.5f".format(it.longitude) } ?: "") }
+    val me = st.snap?.me
+    AlertDialog(onDismissRequest = onDone, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
+        title = { Text("SPOTREP", fontSize = 14.sp, fontFamily = FontFamily.Monospace) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+            OutlinedTextField(size, { size = it }, label = { Text("Size — how many, of what") }, singleLine = true)
+            OutlinedTextField(activity, { activity = it }, label = { Text("Activity — what they were doing") }, singleLine = true)
+            OutlinedTextField(unit, { unit = it }, label = { Text("Unit / description — who") }, singleLine = true)
+            OutlinedTextField(equipment, { equipment = it }, label = { Text("Equipment") }, singleLine = true)
+            OutlinedTextField(place, { place = it }, label = { Text("Place name") }, singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedTextField(lat, { lat = it }, label = { Text("Lat") }, singleLine = true, modifier = Modifier.weight(1f)); OutlinedTextField(lon, { lon = it }, label = { Text("Lon") }, singleLine = true, modifier = Modifier.weight(1f)) }
+            OutlinedTextField(notes, { notes = it }, label = { Text("Notes") }, minLines = 2)
+            Text("Filed by ${me?.name ?: store.api.actor} · graded A2 until an analyst corroborates · time is now", color = Palette.dim, fontSize = 9.sp) } },
+        confirmButton = { TextButton({
+            val lines = listOf("SIZE" to size, "ACTIVITY" to activity, "UNIT" to unit, "EQUIPMENT" to equipment).filter { it.second.isNotBlank() }.map { "${it.first}: ${it.second.trim()}" }
+            val text = (lines + (if (notes.isBlank()) emptyList() else listOf(notes.trim()))).joinToString("\n")
+            if (text.isNotBlank()) {
+                val body = buildJsonObject { put("text", text); put("kind", "spot"); put("reported_by", me?.name ?: store.api.actor); put("reporter_role", me?.role ?: store.api.role)
+                    lat.toDoubleOrNull()?.let { la -> lon.toDoubleOrNull()?.let { lo -> if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) { put("lat", la); put("lon", lo) } } }
+                    if (place.isNotBlank()) put("place", place.trim()) }
+                store.act("filing SPOTREP") { fileReport(body) }; onDone() } }) { Text("FILE", color = Palette.amber) } },
+        dismissButton = { TextButton(onDone) { Text("CANCEL", color = Palette.dim) } })
+}

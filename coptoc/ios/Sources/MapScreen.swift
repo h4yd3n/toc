@@ -119,7 +119,7 @@ struct MapScreen: View {
                     ForEach(Array(mv.legs.enumerated()), id: \.offset) { _, lg in
                         if let fla = lg.fromLat, let flo = lg.fromLon, lg.kind != "lodging" {
                             MapPolyline(coordinates: [CLLocationCoordinate2D(latitude: fla, longitude: flo), CLLocationCoordinate2D(latitude: lg.toLat, longitude: lg.toLon)])
-                                .stroke(movementColor(mv).opacity((lg.status == "done" ? 0.35 : lg.status == "current" ? 0.95 : 0.7) * routeAlpha),
+                                .stroke(((mv.riskFlags?.isEmpty == false) ? Theme.red : movementColor(mv)).opacity((lg.status == "done" ? 0.35 : lg.status == "current" ? 0.95 : 0.7) * routeAlpha),
                                         style: StrokeStyle(lineWidth: lg.status == "current" ? (mv.pax >= 3 ? 3 : 2.2) : 1.4, dash: mv.kind == "shipment" ? [5, 3] : lg.status == "planned" ? [3, 4] : []))
                         }
                     }
@@ -168,6 +168,20 @@ struct MapScreen: View {
                 .annotationTitles(.hidden)
             }
         }
+        // §5.10b the red picture, Sigtoc's: each active actor at its last known position, its track on the S2 tab, and every report still to be disposed of
+        if showsThreatsLayer {
+            ForEach((snap.s2Actors ?? []).filter { $0.status == "active" && $0.coordinate != nil }) { a in
+                if layer == "S2" {
+                    let track = store.sightings(of: a.id).prefix(8).map(\.coordinate)
+                    if track.count >= 2 { MapPolyline(coordinates: Array(track)).stroke(Theme.red.opacity(0.55), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) }
+                    ForEach(store.sightings(of: a.id).prefix(8)) { sg in MapCircle(center: sg.coordinate, radius: 400).foregroundStyle(Theme.red.opacity(sg.confidence == "confirmed" ? 0.5 : 0.25)) }
+                }
+                Annotation(a.name, coordinate: a.coordinate!, anchor: .bottom) { ActorMarker(actor: a).opacity(threatAlpha).onTapGesture { store.selection = .actor(a.id) } }.annotationTitles(.hidden)
+            }
+            ForEach(store.openReports.filter { $0.coordinate != nil }) { r in
+                Annotation(r.id, coordinate: r.coordinate!, anchor: .top) { ReportPin(report: r).opacity(threatAlpha).onTapGesture { store.selection = .report(r.id) } }.annotationTitles(.hidden)
+            }
+        }
     }
 
     func fly(to sel: Selection?, size: CGSize? = nil, animated: Bool = true) {
@@ -179,6 +193,8 @@ struct MapScreen: View {
         case .event(let id): if let e = store.event(id) { target = (e.coordinate, 40_000) }
         case .threat(let id): if let t = store.threat(id) { target = (t.coordinate, max(t.radiusKm * 4_000, 30_000)) }
         case .incident(let id): if let i = store.incident(id) { target = (i.coordinate, max(i.radiusKm * 4_000, 20_000)) }
+        case .actor(let id): if let a = store.actor(id), let c = a.coordinate { target = (c, 30_000) }
+        case .report(let id): if let r = store.report(id), let c = r.coordinate { target = (c, 20_000) }
         }
         guard let (c, d) = target else { return }
 
@@ -284,6 +300,32 @@ struct GraphicMarker: View {
         .foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 2)
         .background(Theme.panel.opacity(g.kind == "point" ? 0.92 : 0.8), in: RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(g.swiftColor, style: StrokeStyle(lineWidth: g.kind == "point" ? 1.5 : 1, dash: g.status == "planned" ? [3, 3] : [])))
+    }
+}
+
+/// §5.10b the red marker: the actor's glyph and name, red, at its last known position.
+struct ActorMarker: View {
+    var actor: S2Actor
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(actor.glyph).font(.system(size: 11, weight: .heavy, design: .monospaced)).foregroundStyle(Theme.red)
+            Text(actor.name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+        }
+        .foregroundStyle(.white).padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Theme.panel.opacity(0.94), in: RoundedRectangle(cornerRadius: 5)).overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.red, lineWidth: 1.5))
+        .shadow(color: Theme.red.opacity(0.5), radius: 8)
+    }
+}
+/// A SPOTREP pin: filed, not yet disposed of.
+struct ReportPin: View {
+    var report: S2Report
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("R").font(.system(size: 10, weight: .heavy, design: .monospaced)).foregroundStyle(.black).frame(width: 16, height: 16).background(Theme.amber, in: Circle())
+            Text("\(report.kind.uppercased()) \(report.grade)").font(.system(size: 9, weight: .semibold, design: .monospaced))
+        }
+        .foregroundStyle(.white).padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Theme.panel.opacity(0.92), in: RoundedRectangle(cornerRadius: 4)).overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.amber, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
     }
 }
 

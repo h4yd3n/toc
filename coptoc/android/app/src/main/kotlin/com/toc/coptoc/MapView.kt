@@ -55,7 +55,7 @@ private fun hex(c: androidx.compose.ui.graphics.Color) = String.format("#%06X", 
  * S1 for S2 changes the overlay and never the view. `framed` makes the opening frame a one-time thing — a refresh
  * fifteen seconds later must not haul the map back while someone is working it.
  */
-private object Board {
+object Board {
     var position: CameraPosition? = null
     var framed = false
     /// Where a phone that remembers nothing and cannot reach the API opens: the Bay Area.
@@ -184,7 +184,7 @@ fun WallMap(
                     val hit = map.queryRenderedFeatures(rect, "blue-dots").firstOrNull() ?: map.queryRenderedFeatures(rect, "threat-rings").firstOrNull()
                     hit?.let { f ->
                         val id = f.getStringProperty("id"); when (f.getStringProperty("kind")) {
-                            "site" -> onSelect(Selection.SiteSel(id)); "traveler" -> onSelect(Selection.PersonSel(id)); "event" -> onSelect(Selection.EventSel(id)); "threat" -> onSelect(Selection.ThreatSel(id)) }
+                            "site" -> onSelect(Selection.SiteSel(id)); "traveler" -> onSelect(Selection.PersonSel(id)); "event" -> onSelect(Selection.EventSel(id)); "threat" -> onSelect(Selection.ThreatSel(id)); "actor" -> onSelect(Selection.ActorSel(id)); "report" -> onSelect(Selection.ReportSel(id)) }
                         true
                     } ?: false
                 }
@@ -235,6 +235,16 @@ private fun resolveTarget(st: WallState, sel: Selection): TargetLocation? {
             if (lat != 0.0 && lon != 0.0) {
                 TargetLocation(lat, lon, maxOf(r * 4000.0, 20_000.0))
             } else null
+        }
+        is Selection.ActorSel -> snap.s2Actors.firstOrNull { it.id == sel.id }?.let { a ->
+            val lat = a.lat ?: 0.0
+            val lon = a.lon ?: 0.0
+            if (lat != 0.0 && lon != 0.0) TargetLocation(lat, lon, 30_000.0) else null
+        }
+        is Selection.ReportSel -> snap.s2Reports.firstOrNull { it.id == sel.id }?.let { r ->
+            val lat = r.lat ?: 0.0
+            val lon = r.lon ?: 0.0
+            if (lat != 0.0 && lon != 0.0) TargetLocation(lat, lon, 30_000.0) else null
         }
     }
 }
@@ -348,14 +358,19 @@ private fun applySnapshotInner(style: Style, st: WallState, layer: String? = nul
             "label" to (if (mv.kind == "shipment") "${mv.name.substringBefore(" → ")} · ETA ${Math.round(mv.hoursToEta ?: 0.0)}h" else "${mv.unit ?: mv.name.substringBefore(" · ")} · ${mv.pax} pax"),
             "color" to hex(if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else Palette.purple), "alpha" to mA) }
     }
-    val blue = sites + travelers + events + movementHeads
+    // §5.10b the red picture, Sigtoc's: active actors at their last known position, and the reports still to be disposed of
+    val actors = if (!showThreatsLayer) emptyList() else s.s2Actors.filter { it.status == "active" && it.lat != null && it.lon != null }.map { a ->
+        feature(a.lon!!, a.lat!!, "id" to a.id, "kind" to "actor", "label" to "${a.glyph} ${a.name}", "color" to hex(Palette.red), "alpha" to tA) }
+    val reports = if (!showThreatsLayer) emptyList() else s.s2Reports.filter { it.status == "filed" && it.lat != null && it.lon != null }.map { r ->
+        feature(r.lon!!, r.lat!!, "id" to r.id, "kind" to "report", "label" to "R · ${r.kind.uppercase()} ${r.grade}", "color" to hex(Palette.amber), "alpha" to tA) }
+    val blue = sites + travelers + events + movementHeads + actors + reports
 
     // §3.4 S2: every active requirement as a named area, colored by how well it is collected; only on the S2 tab
     val nais = if (layer != "S2" || !showThreatsLayer) emptyList() else s.nais.map { n -> Feature.fromGeometry(Polygon.fromLngLats(listOf(ring(n.lat, n.lon, n.radiusKm)))).also { f ->
         f.addStringProperty("id", n.id); f.addStringProperty("color", hex(healthColor(n.health))); f.addNumberProperty("fo", if (n.priority == 1) 0.10 else 0.05); f.addNumberProperty("lo", if (n.priority == 1) 0.9 else 0.55); f.addNumberProperty("lw", if (n.priority == 1) 1.8 else 1.0) } }
     // §3.4 S3: movements leg by leg — a shipment dashed orange, a planned leg dashed, the current leg bold
     val moves = if (!showRoutesLayer) emptyList() else s.movements.flatMap { mv -> mv.legs.filter { it.fromLat != null && it.fromLon != null && it.kind != "lodging" }.map { lg ->
-        val color = if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else if (mv.status == "active") Palette.blue2 else Palette.dim
+        val color = if (mv.riskFlags.isNotEmpty()) Palette.red else if (mv.kind == "shipment") (if (mv.health == "red") Palette.red else Palette.orange) else if (mv.isVip) Palette.amber else if (mv.status == "active") Palette.blue2 else Palette.dim   // §5.10b a leg Intel flagged is red
         Feature.fromGeometry(LineString.fromLngLats(listOf(Point.fromLngLat(lg.fromLon!!, lg.fromLat!!), Point.fromLngLat(lg.toLon, lg.toLat)))).also { f ->
             f.addStringProperty("id", mv.id); f.addStringProperty("color", hex(color)); f.addNumberProperty("lw", if (lg.status == "current") (if (mv.pax >= 3) 3.0 else 2.2) else 1.4)
             f.addNumberProperty("lo", (if (lg.status == "done") 0.35 else if (lg.status == "current") 0.95 else 0.7) * mA); f.addBooleanProperty("dashed", mv.kind == "shipment" || lg.status == "planned") } } }

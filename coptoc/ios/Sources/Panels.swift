@@ -81,6 +81,25 @@ struct IntelScreen: View {
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.blue).disabled(store.busy != nil) }
                 EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S2" })
             }.listRowBackground(Theme.panel)
+            // §5.10b the red picture and the field reports, Sigtoc's; the phone files a SPOTREP and shows what came back
+            Section(header: SectionLabel(text: "WHO IS OUT THERE · \((store.snapshot?.s2Actors ?? []).filter { $0.status == "active" }.count)")) {
+                ForEach((store.snapshot?.s2Actors ?? []).filter { $0.status == "active" }) { a in
+                    Button { store.selection = .actor(a.id) } label: {
+                        HStack(spacing: 6) { Text(a.glyph).foregroundStyle(Theme.red).font(.system(size: 11, weight: .heavy, design: .monospaced)); Text(a.name).font(.system(size: 12, weight: .semibold)).lineLimit(1); Spacer()
+                            if !a.strength.isEmpty { Text(a.strength).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim) }
+                            if let t = a.lastSeenAt { Text(ISO.rel(t, now: store.now)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim) } }
+                    }.buttonStyle(.plain)
+                }
+                if (store.snapshot?.s2Actors ?? []).isEmpty { Text("No actor on the picture.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+            }.listRowBackground(Theme.panel)
+            Section(header: HStack { SectionLabel(text: "FIELD REPORTS · \(store.openReports.count) OPEN"); Spacer(); SpotrepButton(compact: true) }) {
+                ForEach(store.openReports.prefix(8)) { r in
+                    Button { store.selection = .report(r.id) } label: {
+                        HStack(spacing: 6) { Chip(text: "\(r.kind.uppercased()) \(r.grade)", color: Theme.amber); Text(r.text).font(.system(size: 11)).lineLimit(2); Spacer(); Text(ISO.rel(r.at, now: store.now)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim) }
+                    }.buttonStyle(.plain)
+                }
+                if store.openReports.isEmpty { Text("Nothing filed and waiting. File a SPOTREP from the field.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+            }.listRowBackground(Theme.panel)
             TaskingsSection(section: "S2")
             Section(header: SectionLabel(text: "WARNINGS · \(store.pendingWarnings.count) AWAITING RELEASE")) {
                 if store.pendingWarnings.isEmpty {

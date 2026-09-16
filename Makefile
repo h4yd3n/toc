@@ -46,7 +46,7 @@ ios-gen:
 	cd coptoc/ios && xcodegen generate
 
 ios-build: ios-gen
-	cd coptoc/ios && xcodebuild -project TOC.xcodeproj -scheme TOC -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | grep -E "error:|BUILD"
+	cd coptoc/ios && xcodebuild -project TOC.xcodeproj -scheme TOC -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | grep -E "error:|BUILD"
 
 # A real iPhone: paired in Xcode, signed with the team in project.yml. The phone must reach the Mac's API on the LAN.
 #   make ios-device TOC_API=http://$(ipconfig getifaddr en0):8000

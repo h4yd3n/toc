@@ -59,6 +59,8 @@ struct COPClient {
     }
     func setAssessmentStatus(id: String, status: String) async throws { try await send("PATCH", "/v1/cop/assessments/\(id)", ["status": status]) }
     func refreshIntel() async throws { try await send("POST", "/v1/cop/intel/refresh", nil) }
+    /// §5.10b a SPOTREP from the field: Cop Talk files it, Sigtoc disposes of it.
+    func fileReport(_ body: [String: Any]) async throws { try await send("POST", "/v1/s2/reports", body) }
     func checkIn(personId: String, lat: Double, lon: Double, note: String) async throws {
         try await send("POST", "/v1/cop/people/\(personId)/checkin", ["lat": lat, "lon": lon, "note": note])
     }
