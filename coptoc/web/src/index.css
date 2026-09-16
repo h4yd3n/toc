@@ -1463,3 +1463,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .wheel { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 4px; }
 .wheel-row { display: flex; gap: 1px; align-items: center; } .wheel-day { flex: 0 0 26px; font-size: 8.5px; color: var(--dim); }
 .wheel-cell { flex: 1 1 0; height: 7px; background: var(--amber); border-radius: 1px; }
+
+/* §5.10b Phase 3 — COAs, the DSM, the staff products */
+.card.coa.candidate { border-left: 2px solid var(--amber); }
+.card.coa .card-foot select { font: 10px var(--mono); background: var(--panel); color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; padding: 1px 3px; }
+.chip.ml { color: var(--green); border-color: rgba(34,197,94,.5); } .chip.md { color: var(--red); border-color: rgba(239,68,68,.5); }
+.mini.warn { color: var(--amber); border-color: rgba(245,158,11,.5); background: rgba(245,158,11,.1); }
+.dsm { padding: 2px 14px 8px; font-size: 11px; }
+.dsm-row { display: grid; grid-template-columns: 52px 1fr 1fr 74px auto; gap: 6px; align-items: center; padding: 4px 0; border-top: 1px solid var(--line); }
+.dsm-row.dsm-head { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--dim); border-top: 0; }
+.dsm-row.triggered { background: rgba(239,68,68,.08); } .dsm-row.overdue .bad { color: var(--red); } .dsm-row.passed, .dsm-row.cancelled { opacity: .55; }
+.dsm-row .mono { font-family: var(--mono); font-size: 10px; }
+.dform.product .section-label { padding: 8px 0 3px; } .dform.product ul { margin: 0; padding-left: 14px; } .dform.product li { margin: 2px 0; }
+.dform.product .chip.btn { margin-left: 4px; cursor: pointer; }
+.labels-lean .card.coa .card-foot { display: flex !important; }

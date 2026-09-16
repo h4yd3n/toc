@@ -16,6 +16,7 @@ import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
 import { TaskingBox } from './Taskings'
 import { IsrPanel } from './IsrSync'
+import { IpbPanel } from './Ipb'
 import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
 import { ContextRow, RollCallStrip } from './Strips'
 import WeatherPopover from './WeatherPopover'
@@ -770,6 +771,7 @@ export default function App() {
             </li>))}
         </ul>
         <RequirementsPanel reload={briefReload} busy={busy} act={act} onSelect={setSel} role={role} onArea={id => { setAreaId(id); setShowBrief(false) }} />
+        <IpbPanel reload={briefReload} busy={busy} act={act} role={role} pirs={snap?.pirs ?? []} onSelect={setSel} />
         <Question q="What we assess" count={snap?.assessments?.length ?? 0} />
         <ul className="list cards">
           {(snap?.assessments ?? []).map(a => (

@@ -1,4 +1,4 @@
-import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns } from './types'
+import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -79,6 +79,20 @@ export const disseminate = (ptype: string, pid: string, recipients: string[], ch
 export const ackProduct = (ptype: string, pid: string) => req<Distribution>('POST', `/v1/s2/products/${ptype}/${pid}/ack`)
 export const getIsrSync = (days = 7, ahead = 3) => req<IsrSync>('GET', `/v1/s2/isr-sync?days=${days}&ahead=${ahead}`)
 export const getPatterns = (days = 30) => req<Patterns>('GET', `/v1/s2/patterns?days=${days}`)
+export const listCoas = (subject_type?: string, subject_id?: string) => req<ThreatCoa[]>('GET', subject_type && subject_id ? `/v1/s2/coas?subject_type=${subject_type}&subject_id=${subject_id}` : '/v1/s2/coas')
+export const createCoa = (body: { title: string; subject_type: string; subject_id: string; actor_id?: string; narrative?: string; likelihood?: string; confidence?: string; indicators?: string[]; nai_ids?: string[]; graphic_ids?: string[]; most_likely?: boolean; most_dangerous?: boolean; basis?: string }) => req<ThreatCoa>('POST', '/v1/s2/coas', body)
+export const updateCoa = (id: string, body: { title?: string; narrative?: string; likelihood?: string; confidence?: string; indicators?: string[]; nai_ids?: string[]; graphic_ids?: string[]; most_likely?: boolean; most_dangerous?: boolean; status?: 'candidate' | 'assessed' | 'rejected'; basis?: string }) => req<ThreatCoa>('PATCH', `/v1/s2/coas/${id}`, body)
+export const listDecisionPoints = (operation_id?: string) => req<DecisionPoint[]>('GET', operation_id ? `/v1/s2/decision-points?operation_id=${operation_id}` : '/v1/s2/decision-points')
+export const createDecisionPoint = (body: { title: string; subject_type: string; subject_id: string; operation_id?: string; decision?: string; trigger?: string; pir_id?: string; nai_ids?: string[]; coa_ids?: string[]; action?: string; owner_section?: string; latest_time?: string; note?: string }) => req<DecisionPoint>('POST', '/v1/s2/decision-points', body)
+export const updateDecisionPoint = (id: string, body: { status?: 'open' | 'triggered' | 'passed' | 'cancelled'; note?: string; latest_time?: string; decision?: string; trigger?: string; action?: string }) => req<DecisionPoint>('PATCH', `/v1/s2/decision-points/${id}`, body)
+export const getDsm = (operation_id?: string) => req<Dsm>('GET', operation_id ? `/v1/s2/dsm?operation_id=${operation_id}` : '/v1/s2/dsm')
+export const draftIpb = (subject_type: string, subject_id: string) => req<StaffProduct>('POST', '/v1/s2/ipb/draft', { subject_type, subject_id })
+export const draftEstimate = (subject_type: string, subject_id: string) => req<StaffProduct>('POST', '/v1/s2/intel-estimates/draft', { subject_type, subject_id })
+export const draftAnnex = (operation_id: string) => req<StaffProduct>('POST', `/v1/s2/operations/${operation_id}/annex`)
+export const latestAnnex = (operation_id: string) => req<StaffProduct>('GET', `/v1/s2/operations/${operation_id}/annex`)
+export const listStaffProducts = (kind?: string) => req<StaffProductHead[]>('GET', kind ? `/v1/s2/staff-products?kind=${kind}` : '/v1/s2/staff-products')
+export const getStaffProduct = (id: string) => req<StaffProduct>('GET', `/v1/s2/staff-products/${id}`)
+export const setStaffProductStatus = (id: string, status: 'draft' | 'review' | 'approved' | 'released', notes?: string) => req<StaffProduct>('PATCH', `/v1/s2/staff-products/${id}`, { status, notes })
 export const listWarnings = (status?: string) => req<Warning[]>('GET', status ? `/v1/s2/warnings?status=${status}` : '/v1/s2/warnings')
 export const draftWarning = (body: { subject_type: string; subject_id: string; title: string; text?: string; severity?: string; threat_id?: string }) => req<Warning>('POST', '/v1/s2/warnings', body)
 export const suggestWarnings = () => req<{ suggested: Warning[] }>('POST', '/v1/s2/warnings/suggest')

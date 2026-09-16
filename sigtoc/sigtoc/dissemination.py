@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from shared.database import Base
 from . import requirements as R
 
-PRODUCT_TYPES = ("assessment", "area", "intsum")
+PRODUCT_TYPES = ("assessment", "area", "intsum", "warning", "ipb", "estimate", "annex")
 ROLES = ("battle_captain", "ep", "security", "analyst", "ea")
 STALE_HOURS = 2  # unacknowledged this long is a failure worth showing
 

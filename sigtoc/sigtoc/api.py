@@ -27,6 +27,8 @@ from . import dissemination as D
 from .dissemination import DistributionRow
 from . import warning as W
 from .warning import WarningRow
+from . import ipb as B
+from .ipb import DecisionPointRow, S2ProductRow, ThreatCoaRow
 from .work import router as work_router
 
 router = APIRouter(prefix="/v1/s2", tags=["sigtoc"])
@@ -867,6 +869,321 @@ async def release_intsum(intsum_id: str, body: IntsumRelease, session: AsyncSess
     return I.to_dict(row)
 
 
+
+# ---------------------------------------------------------------- §5.10b Phase 3: IPB, threat COAs, decision points, the estimate, the annex
+
+IPB_STAFF = {"battle_captain", "analyst"}
+DP_DECIDERS = {"battle_captain", "analyst", "ea"}
+ANNEX_RELEASERS = {"battle_captain"}
+
+
+def _staff(x_toc_role: Optional[str], what: str, roles=IPB_STAFF) -> None:
+    if (x_toc_role or "").lower() not in roles:
+        raise HTTPException(403, f"{what} needs one of {sorted(roles)}; you are {x_toc_role or 'unspecified'}")
+
+
+async def _actor_names(session: AsyncSession) -> Dict[str, Dict[str, Any]]:
+    return {a.id: {"name": a.name} for a in (await session.execute(select(S2ActorRow))).scalars()}
+
+
+async def _wall(session: AsyncSession) -> Dict[str, Any]:
+    from coptoc.service import build_snapshot
+    return await build_snapshot(session, include_restricted=True, log_limit=1)
+
+
+class CoaCreate(BaseModel):
+    title: str
+    subject_type: Literal["location", "event", "person", "operation", "place"]
+    subject_id: str
+    actor_id: Optional[str] = None
+    narrative: str = ""
+    likelihood: str = "unassessed"
+    confidence: str = "low"
+    indicators: List[str] = []
+    nai_ids: List[str] = []
+    graphic_ids: List[str] = []
+    most_likely: bool = False
+    most_dangerous: bool = False
+    basis: str = ""
+
+class CoaUpdate(BaseModel):
+    title: Optional[str] = None
+    narrative: Optional[str] = None
+    likelihood: Optional[str] = None
+    confidence: Optional[str] = None
+    indicators: Optional[List[str]] = None
+    nai_ids: Optional[List[str]] = None
+    graphic_ids: Optional[List[str]] = None
+    most_likely: Optional[bool] = None
+    most_dangerous: Optional[bool] = None
+    status: Optional[Literal["candidate", "assessed", "rejected"]] = None
+    basis: Optional[str] = None
+
+
+def _check_coa_words(likelihood: Optional[str], confidence: Optional[str]) -> None:
+    if likelihood is not None and likelihood not in B.LIKELIHOOD:
+        raise HTTPException(422, f"likelihood is one of the ICD 203 words: {list(B.LIKELIHOOD[1:])}, or unassessed")
+    if confidence is not None and confidence not in B.CONFIDENCE:
+        raise HTTPException(422, f"confidence is one of {list(B.CONFIDENCE)}")
+
+
+@router.get("/coas")
+async def list_coas(subject_type: Optional[str] = None, subject_id: Optional[str] = None, status: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(ThreatCoaRow).order_by(ThreatCoaRow.created_at))).scalars().all()
+    actors = await _actor_names(session)
+    return [B.coa_dict(c, actors) for c in rows if (subject_type is None or c.subject_type == subject_type) and (subject_id is None or c.subject_id == subject_id) and (status is None or c.status == status)]
+
+
+@router.post("/coas", status_code=201)
+async def create_coa(body: CoaCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """A threat course of action the analyst writes: what the other side may do, what we would see, where."""
+    _staff(x_toc_role, "Writing a threat COA")
+    _check_coa_words(body.likelihood, body.confidence)
+    if not body.title.strip(): raise HTTPException(422, "a COA needs a title")
+    if (body.most_likely or body.most_dangerous) and body.likelihood == "unassessed":
+        raise HTTPException(422, "most likely / most dangerous need a likelihood first")
+    snap = await _wall(session)
+    s = await B.resolve_subject(session, snap, body.subject_type, body.subject_id)
+    if not s: raise HTTPException(404, f"{body.subject_type} {body.subject_id} not on the wall")
+    if body.actor_id and not await session.get(S2ActorRow, body.actor_id): raise HTTPException(404, "actor not found")
+    now = R.now_utc()
+    c = ThreatCoaRow(id=f"COA-{uuid.uuid4().hex[:6].upper()}", title=body.title.strip(), subject_type=body.subject_type, subject_id=body.subject_id, subject_name=s["name"], actor_id=body.actor_id,
+                     narrative=body.narrative, likelihood=body.likelihood, confidence=body.confidence, most_likely=body.most_likely, most_dangerous=body.most_dangerous,
+                     indicators_json=json.dumps(body.indicators), nai_ids_json=json.dumps(body.nai_ids), graphic_ids_json=json.dumps(body.graphic_ids),
+                     status="assessed" if body.likelihood != "unassessed" else "candidate", basis=body.basis, created_by=x_toc_actor or x_toc_role, created_at=now, updated_at=now)
+    session.add(c); await session.commit()
+    await ledger().append_event(content_id=c.id, event_type="s2.coa.created", actor_type="human", actor_id=x_toc_actor or x_toc_role, new_state=c.status, reason=f"{c.title} ({c.likelihood})")
+    return B.coa_dict(c, await _actor_names(session))
+
+
+@router.patch("/coas/{coa_id}")
+async def update_coa(coa_id: str, body: CoaUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The analyst assesses: a likelihood word turns a candidate into an assessed COA; most likely / most dangerous are single flags on the subject."""
+    _staff(x_toc_role, "Assessing a threat COA")
+    c = await session.get(ThreatCoaRow, coa_id)
+    if not c: raise HTTPException(404, "COA not found")
+    _check_coa_words(body.likelihood, body.confidence)
+    old = c.status; changes: Dict[str, Any] = {}
+    for k in ("title", "narrative", "likelihood", "confidence", "basis"):
+        v = getattr(body, k)
+        if v is not None: setattr(c, k, v); changes[k] = v
+    for k in ("indicators", "nai_ids", "graphic_ids"):
+        v = getattr(body, k)
+        if v is not None: setattr(c, f"{k}_json", json.dumps(v)); changes[k] = v
+    if body.status is not None: c.status = body.status; changes["status"] = body.status
+    if c.likelihood != "unassessed" and c.status == "candidate": c.status = "assessed"; changes["status"] = "assessed"
+    if body.status == "candidate" or (body.likelihood == "unassessed" and body.status is None and c.status == "assessed"):
+        c.status = "candidate"; c.most_likely = False; c.most_dangerous = False; changes["status"] = "candidate"
+    for flag in ("most_likely", "most_dangerous"):
+        v = getattr(body, flag)
+        if v is None: continue
+        if v and (c.likelihood == "unassessed" or c.status != "assessed"): raise HTTPException(422, f"{flag} needs an assessed likelihood")
+        if v:
+            for other in await B.coas_for(session, c.subject_type, c.subject_id):
+                if other.id != c.id and getattr(other, flag): setattr(other, flag, False)
+        setattr(c, flag, v); changes[flag] = v
+    c.updated_at = R.now_utc()
+    await session.commit()
+    await ledger().append_event(content_id=c.id, event_type="s2.coa.updated", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=c.status,
+                                reason=", ".join(f"{k}={v}" for k, v in changes.items()) or "no-op", metadata=changes)
+    return B.coa_dict(c, await _actor_names(session))
+
+
+class DpCreate(BaseModel):
+    title: str
+    subject_type: Literal["location", "event", "person", "operation", "place"]
+    subject_id: str
+    operation_id: Optional[str] = None
+    decision: str = ""
+    trigger: str = ""
+    pir_id: Optional[str] = None
+    nai_ids: List[str] = []
+    coa_ids: List[str] = []
+    action: str = ""
+    owner_section: Literal["S1", "S2", "S3", "S4", "S6"] = "S3"
+    latest_time: Optional[datetime] = None
+    note: str = ""
+
+class DpUpdate(BaseModel):
+    title: Optional[str] = None
+    decision: Optional[str] = None
+    trigger: Optional[str] = None
+    pir_id: Optional[str] = None
+    nai_ids: Optional[List[str]] = None
+    coa_ids: Optional[List[str]] = None
+    action: Optional[str] = None
+    owner_section: Optional[Literal["S1", "S2", "S3", "S4", "S6"]] = None
+    latest_time: Optional[datetime] = None
+    status: Optional[Literal["open", "triggered", "passed", "cancelled"]] = None
+    note: Optional[str] = None
+
+
+@router.get("/decision-points")
+async def list_decision_points(operation_id: Optional[str] = None, subject_type: Optional[str] = None, subject_id: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    now = R.now_utc()
+    rows = (await session.execute(select(DecisionPointRow).order_by(DecisionPointRow.created_at))).scalars().all()
+    return [B.dp_dict(d, now) for d in rows if (operation_id is None or d.operation_id == operation_id) and (subject_type is None or d.subject_type == subject_type) and (subject_id is None or d.subject_id == subject_id)]
+
+
+@router.post("/decision-points", status_code=201)
+async def create_decision_point(body: DpCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """A decision point: the decision, what we would have to see (the PIR, the NAIs, the COAs it tells apart), what happens, and no later than when."""
+    _staff(x_toc_role, "Writing a decision point", DP_DECIDERS)
+    if not body.title.strip(): raise HTTPException(422, "a decision point needs a title")
+    snap = await _wall(session)
+    s = await B.resolve_subject(session, snap, body.subject_type, body.subject_id)
+    if not s: raise HTTPException(404, f"{body.subject_type} {body.subject_id} not on the wall")
+    op_id = body.operation_id or s.get("operation_id")
+    if body.operation_id:
+        from coptoc.operations import OperationRow
+        if not await session.get(OperationRow, body.operation_id): raise HTTPException(404, "operation not found")
+    if body.pir_id and not any(p["id"] == body.pir_id for p in snap.get("pirs", [])): raise HTTPException(404, "PIR not found")
+    for cid in body.coa_ids:
+        if not await session.get(ThreatCoaRow, cid): raise HTTPException(404, f"COA {cid} not found")
+    now = R.now_utc()
+    d = DecisionPointRow(id=f"DP-{uuid.uuid4().hex[:6].upper()}", title=body.title.strip(), subject_type=body.subject_type, subject_id=body.subject_id, operation_id=op_id, decision=body.decision,
+                         trigger=body.trigger, pir_id=body.pir_id, nai_ids_json=json.dumps(body.nai_ids), coa_ids_json=json.dumps(body.coa_ids), action=body.action, owner_section=body.owner_section,
+                         latest_time=naive(body.latest_time), status="open", note=body.note, created_by=x_toc_actor or x_toc_role, created_at=now)
+    session.add(d); await session.commit()
+    await ledger().append_event(content_id=d.id, event_type="s2.dp.created", actor_type="human", actor_id=x_toc_actor or x_toc_role, new_state="open", reason=f"{d.title}: {d.decision}"[:200])
+    return B.dp_dict(d, now)
+
+
+@router.patch("/decision-points/{dp_id}")
+async def update_decision_point(dp_id: str, body: DpUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    _staff(x_toc_role, "Deciding a decision point", DP_DECIDERS)
+    d = await session.get(DecisionPointRow, dp_id)
+    if not d: raise HTTPException(404, "decision point not found")
+    old = d.status; changes: Dict[str, Any] = {}
+    for k in ("title", "decision", "trigger", "pir_id", "action", "owner_section", "note"):
+        v = getattr(body, k)
+        if v is not None: setattr(d, k, v); changes[k] = v
+    for k in ("nai_ids", "coa_ids"):
+        v = getattr(body, k)
+        if v is not None: setattr(d, f"{k}_json", json.dumps(v)); changes[k] = v
+    if body.latest_time is not None: d.latest_time = naive(body.latest_time); changes["latest_time"] = R.iso(d.latest_time)
+    now = R.now_utc()
+    if body.status is not None and body.status != d.status:
+        if d.status in ("passed", "cancelled"): raise HTTPException(409, f"decision point is {d.status}")
+        if body.status == "triggered" and not (body.note or d.note).strip(): raise HTTPException(422, "triggering a decision point needs a note: what was seen")
+        d.status = body.status; d.decided_by = x_toc_actor or x_toc_role; d.decided_at = now; changes["status"] = body.status
+    await session.commit()
+    await ledger().append_event(content_id=d.id, event_type="s2.dp.updated", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=d.status,
+                                reason=", ".join(f"{k}={v}" for k, v in changes.items()) or "no-op", metadata=changes)
+    return B.dp_dict(d, now)
+
+
+@router.get("/dsm")
+async def decision_support_matrix(operation_id: Optional[str] = None, subject_type: Optional[str] = None, subject_id: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    """The decision support matrix: decision points joined to their PIR, NAIs and COAs, ordered by no-later-than."""
+    return await B.dsm(session, await _wall(session), R.now_utc(), subject_type=subject_type, subject_id=subject_id, operation_id=operation_id)
+
+
+class ProductDraft(BaseModel):
+    subject_type: Literal["location", "event", "person", "operation", "place"]
+    subject_id: str
+
+class ProductUpdate(BaseModel):
+    status: Literal["draft", "review", "approved", "released"]
+    notes: Optional[str] = None
+
+
+@router.post("/ipb/draft", status_code=201)
+async def draft_ipb(body: ProductDraft, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """IPB in four steps from the wall: the area, its effects, the threat, the threat COAs — with candidates drafted from assessed intent, the event template and the DSM."""
+    _staff(x_toc_role, "Drafting an IPB")
+    snap = await _wall(session)
+    s = await B.resolve_subject(session, snap, body.subject_type, body.subject_id)
+    if not s: raise HTTPException(404, f"{body.subject_type} {body.subject_id} not on the wall")
+    now = R.now_utc()
+    row, new = await B.draft_ipb(session, snap, s, now, x_toc_actor or x_toc_role or "analyst")
+    await session.commit()
+    for c in new:
+        await ledger().append_event(content_id=c.id, event_type="s2.coa.created", actor_type="system", actor_id="rule:ipb", new_state="candidate", reason=f"candidate: {c.title}", metadata={"ipb_id": row.id})
+    await ledger().append_event(content_id=row.id, event_type="s2.product.drafted", actor_type="system", actor_id="rule:ipb", new_state="draft",
+                                reason=f"{row.title}: {len(json.loads(row.product_json)['step3_threat']['actors'])} actors, {len(json.loads(row.product_json)['step4_coas'])} COAs, {len(new)} new candidates",
+                                metadata={"kind": "ipb", "requested_by": x_toc_actor or x_toc_role, "candidates": [c.id for c in new]})
+    return {**B.product_dict(row), "new_candidates": [B.coa_dict(c) for c in new]}
+
+
+@router.post("/intel-estimates/draft", status_code=201)
+async def draft_estimate(body: ProductDraft, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The intelligence estimate: mission, area, threat situation, assessed COAs, effects on our operations, collection, conclusions — counts, cited, never scored."""
+    _staff(x_toc_role, "Drafting an intelligence estimate")
+    snap = await _wall(session)
+    s = await B.resolve_subject(session, snap, body.subject_type, body.subject_id)
+    if not s: raise HTTPException(404, f"{body.subject_type} {body.subject_id} not on the wall")
+    now = R.now_utc()
+    row = await B.draft_estimate(session, snap, s, now)
+    await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.product.drafted", actor_type="system", actor_id="rule:estimate", new_state="draft",
+                                reason=f"{row.title}: " + " ".join(json.loads(row.product_json)["conclusions"])[:220], metadata={"kind": "estimate", "requested_by": x_toc_actor or x_toc_role})
+    return B.product_dict(row)
+
+
+@router.post("/operations/{op_id}/annex", status_code=201)
+async def draft_annex(op_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """Annex B (Intelligence) to an operation, assembled from the approved IPB and estimate, the COAs, the DSM, the collection plan, and the warnings."""
+    _staff(x_toc_role, "Drafting an intelligence annex")
+    snap = await _wall(session)
+    s = await B.resolve_subject(session, snap, "operation", op_id)
+    if not s: raise HTTPException(404, "operation not found, or its subject is off the wall")
+    now = R.now_utc()
+    row = await B.draft_annex(session, snap, s, now)
+    await session.commit()
+    prod = json.loads(row.product_json)
+    await ledger().append_event(content_id=row.id, event_type="s2.product.drafted", actor_type="system", actor_id="rule:annex", new_state="draft",
+                                reason=f"{row.title}" + ("" if prod["releasable"] else " — needs " + " and ".join(prod["missing"])), metadata={"kind": "annex", "operation_id": op_id, "requested_by": x_toc_actor or x_toc_role})
+    return B.product_dict(row)
+
+
+@router.get("/operations/{op_id}/annex")
+async def latest_annex(op_id: str, session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(S2ProductRow).where(S2ProductRow.kind == "annex", S2ProductRow.operation_id == op_id).order_by(S2ProductRow.drafted_at.desc()))).scalars().all()
+    if not rows: raise HTTPException(404, "no annex drafted for this operation")
+    return B.product_dict(rows[0])
+
+
+@router.get("/staff-products")
+async def list_staff_products(kind: Optional[str] = None, subject_type: Optional[str] = None, subject_id: Optional[str] = None, operation_id: Optional[str] = None, session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(S2ProductRow).order_by(S2ProductRow.drafted_at.desc()))).scalars().all()
+    return [B.product_dict(p, full=False) for p in rows if (kind is None or p.kind == kind) and (subject_type is None or p.subject_type == subject_type)
+            and (subject_id is None or p.subject_id == subject_id) and (operation_id is None or p.operation_id == operation_id)]
+
+
+@router.get("/staff-products/{pid}")
+async def get_staff_product(pid: str, session: AsyncSession = Depends(get_session)):
+    p = await session.get(S2ProductRow, pid)
+    if not p: raise HTTPException(404, "product not found")
+    return {**B.product_dict(p), "blockers": await B.approval_blockers(session, p)}
+
+
+@router.patch("/staff-products/{pid}")
+async def set_staff_product_status(pid: str, body: ProductUpdate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """draft → review → approved by the analyst or Battle Captain; an annex is *released* by the Battle Captain only, and only with an approved IPB and estimate behind it."""
+    p = await session.get(S2ProductRow, pid)
+    if not p: raise HTTPException(404, "product not found")
+    if body.status == "released":
+        if p.kind != "annex": raise HTTPException(422, "only an annex is released; an IPB or estimate is approved")
+        _staff(x_toc_role, "Releasing an annex", ANNEX_RELEASERS)
+    else:
+        _staff(x_toc_role, "Deciding a staff product")
+    if p.status in ("approved", "released") and body.status not in ("approved", "released"):
+        raise HTTPException(409, f"{p.title} is {p.status}; draft a new one instead of reopening it")
+    if body.status in ("approved", "released"):
+        blockers = await B.approval_blockers(session, p)
+        if blockers: raise HTTPException(409, f"cannot {body.status.replace('ed', 'e')} {p.title}: " + "; ".join(blockers))
+        if p.kind == "annex" and body.status == "approved": raise HTTPException(422, "an annex is released, not approved")
+    old = p.status
+    p.status = body.status
+    if body.notes is not None: p.notes = body.notes
+    if body.status in ("approved", "released"): p.decided_by, p.decided_at = x_toc_actor or x_toc_role, R.now_utc()
+    if p.kind == "annex" and body.status == "released":
+        prod = json.loads(p.product_json); prod["released_by"] = p.decided_by; prod["released_at"] = R.iso(p.decided_at); p.product_json = json.dumps(prod)
+    await session.commit()
+    await ledger().append_event(content_id=p.id, event_type="s2.product.status", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=p.status, reason=f"{p.title}: {old} → {p.status}")
+    return B.product_dict(p)
+
 # ---------------------------------------------------------------- §5.10 #4 dissemination
 
 DISSEMINATORS = {"battle_captain", "analyst"}
@@ -897,6 +1214,10 @@ async def _product(session: AsyncSession, ptype: str, pid: str):
         a = await session.get(WarningRow, pid)
         if not a: raise HTTPException(404, "warning not found")
         return a.title, a.status, a.created_at, a.status == "released"
+    if ptype in B.PRODUCT_KINDS:
+        a = await session.get(S2ProductRow, pid)
+        if not a or a.kind != ptype: raise HTTPException(404, f"{ptype} not found")
+        return a.title, a.status, a.drafted_at, a.status in ("approved", "released")
     raise HTTPException(404, f"unknown product type {ptype}")
 
 

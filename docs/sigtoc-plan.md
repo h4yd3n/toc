@@ -8,7 +8,9 @@ lifted into PRD §5 as each phase lands.
 the S2 threat-graphic types with confidence and basis, and movement risks derived for S3, all on the wall; the phones
 followed on 16 September (SPOTREP filing, actors and report pins, red risky legs). Phase 2 landed the same day (PRD
 v3.38): the RFI kind, collection tasked from an NAI with PIRs moving to COLLECTING, the ISR sync view, pattern of
-life, and threshold rules as settings. Phase 3 is next.
+life, and threshold rules as settings. Phase 3 landed the same evening (PRD v3.39): threat COAs in ICD 203 words,
+decision points and the DSM, the IPB, the intelligence estimate, and Annex B to an operation. Phase 4 (the graphic
+INTSUM; sources beyond the feeds) is the open remainder.
 
 **Scope:** this is a cross-module plan, not a request to bury all of Sigtoc inside Cop Talk. Sigtoc is a separate
 module / sub-repo and remains the canonical home for intelligence objects and analyst workflow. Cop Talk gets the live
