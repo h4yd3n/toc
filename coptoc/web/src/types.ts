@@ -78,7 +78,7 @@ export interface Assessment {
 }
 export interface LogEntry { id: string; at: string; type: string; actor: string; actor_type: string; subject: string; old: string | null; new: string | null; summary: string | null }
 export interface Summary { s4_status?: Health; s6_status?: Health; taskings_open?: number; taskings_overdue?: number;
-  s2_actors?: number; s2_reports_pending?: number; movement_risks?: number
+  s2_actors?: number; s2_reports_pending?: number; movement_risks?: number; decisions_open?: number; decisions_overdue?: number
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
@@ -169,7 +169,7 @@ export interface WeatherInfo {
   awc_url: string
 }
 
-export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
+export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
   s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]
@@ -198,9 +198,13 @@ export interface SourceInfo { id: string; name: string; indicators: string[]; ac
 
 // §5.10 / §5.11 — organic reports and the case graph
 export interface Evidence { report_id: string; quote: string; source: string; reliability: string; credibility: number; at: string | null }
-export interface CaseEntity { id: string; type: string; name: string; aliases: string[]; status: 'suggested' | 'confirmed' | 'rejected'; evidence: Evidence[]; decided_by: string | null }
-export interface CaseRel { id: string; from: string; to: string; type: string; status: 'suggested' | 'confirmed' | 'rejected'; grade: string; evidence: Evidence[]; from_name?: string; to_name?: string; first_seen: string | null; last_seen: string | null }
-export interface CaseEvent { id: string; at: string | null; place: string | null; type: string; summary: string; participants: string[]; status: 'suggested' | 'confirmed' | 'rejected'; evidence: Evidence[] }
+/** §5.11 — `origin: 'sigtoc'` is the live picture drawn into the case: an actor, a sighting, or the line between the
+ *  two. It is derived on read, never reviewed, and never enters the confirm/reject queue. */
+export type CaseOrigin = 'case' | 'sigtoc'
+export type CaseStatus = 'suggested' | 'confirmed' | 'rejected' | 'derived'
+export interface CaseEntity { id: string; type: string; name: string; aliases: string[]; status: CaseStatus; evidence: Evidence[]; decided_by: string | null; origin?: CaseOrigin; attributes?: Record<string, string> }
+export interface CaseRel { id: string; from: string; to: string; type: string; status: CaseStatus; grade: string; evidence: Evidence[]; from_name?: string; to_name?: string; first_seen: string | null; last_seen: string | null; origin?: CaseOrigin }
+export interface CaseEvent { id: string; at: string | null; place: string | null; type: string; summary: string; participants: string[]; status: CaseStatus; evidence: Evidence[]; origin?: CaseOrigin; confidence?: string }
 export interface Report { id: string; kind: string; reported_by: string; reporter_role: string; at: string; place: string | null; text: string; case_id: string | null; grade: string; source: string }
 export interface Case { id: string; title: string; kind: 'general' | 'person' | 'site' | 'actor'; subject_type: string | null; subject_id: string | null; summary: string; status: 'open' | 'closed'
   opened_by: string; opened_at: string; closed_at: string | null; access_roles: string[]; entities?: number; relationships?: number; events?: number; pending_review?: number }
@@ -294,6 +298,9 @@ export interface Patterns { days: number; generated_at: string; since_intsum: { 
 export type Likelihood = 'unassessed' | 'almost no chance' | 'very unlikely' | 'unlikely' | 'roughly even chance' | 'likely' | 'very likely' | 'almost certain'
 export interface ThreatCoa { id: string; title: string; subject_type: string; subject_id: string; subject_name: string; actor_id: string | null; actor_name: string | null; narrative: string; likelihood: Likelihood; confidence: 'low' | 'moderate' | 'high'
   most_likely: boolean; most_dangerous: boolean; indicators: string[]; nai_ids: string[]; graphic_ids: string[]; status: 'candidate' | 'assessed' | 'rejected'; basis: string; created_by: string; created_at: string; updated_at: string }
+/** The slice of a decision point the S3 strip needs: what is decided, by when, and whether the clock has run out. */
+export interface SnapDecisionPoint { id: string; title: string; subject_type: string; subject_id: string; operation_id: string | null; decision: string; trigger: string; action: string
+  owner_section: SectionCode; latest_time: string | null; overdue: boolean; status: 'open' | 'triggered'; note: string; pir_id: string | null; nai_ids: string[]; coa_ids: string[] }
 export interface DecisionPoint { id: string; title: string; subject_type: string; subject_id: string; operation_id: string | null; decision: string; trigger: string; pir_id: string | null; nai_ids: string[]; coa_ids: string[]; action: string
   owner_section: SectionCode; latest_time: string | null; overdue: boolean; status: 'open' | 'triggered' | 'passed' | 'cancelled'; note: string; created_by: string; created_at: string; decided_by: string | null; decided_at: string | null }
 export interface DsmRow extends DecisionPoint { pir: { id: string; question: string; status: string } | null; nais: { id: string; name: string; coverage_pct: number; health: Health }[]; coas: { id: string; title: string; likelihood: Likelihood }[] }

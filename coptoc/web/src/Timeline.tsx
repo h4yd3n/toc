@@ -3,7 +3,7 @@
 // rest of the 90 days is squeezed so a summit in five weeks is still on the board. Spans that began before now cross the
 // NOW line. The handover brief's "significant events this shift" is this left half, read out.
 import { useEffect, useRef } from 'react'
-import type { CopEvent, Selection, Snapshot, Trip, WatchLogEntry } from './types'
+import type { CopEvent, Selection, SnapDecisionPoint, Snapshot, Trip, WatchLogEntry } from './types'
 
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
 const DAY = 864e5, HOUR = 36e5
@@ -26,7 +26,7 @@ function subjectSelection(snap: Snapshot, subject: string): Selection {
   return null
 }
 
-export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { snap: Snapshot | null; now: number; sel: Selection; onSelect: (s: Selection) => void; onOp: (id: string) => void; scrub?: number | null; onScrub?: (t: number | null, pinned?: boolean) => void }) {
+export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub, onDecision }: { snap: Snapshot | null; now: number; sel: Selection; onSelect: (s: Selection) => void; onOp: (id: string) => void; scrub?: number | null; onScrub?: (t: number | null, pinned?: boolean) => void; onDecision?: (d: SnapDecisionPoint) => void }) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const t0 = now
@@ -98,6 +98,17 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
   }
   const scrubX = scrub != null ? px(scrub) : null
   const log: WatchLogEntry[] = (snap?.watch_log ?? []).filter(e => +new Date(e.at) >= tBack)
+  // §5.10b Phase 3 — the decisions S2 wrote, on the strip that plans the movement they govern. A decision point with
+  // no no-later-than has no place in time and stays in the matrix; one whose clock ran out is pinned at the left, red.
+  const dps: { dp: SnapDecisionPoint; t: number }[] = (snap?.decision_points ?? [])
+    .filter(d => d.latest_time)
+    .map(d => ({ dp: d, t: +new Date(d.latest_time!) }))
+    .filter(d => !isNaN(d.t) && d.t <= tFar)
+    .sort((a, b) => a.t - b.t)
+  const dpTitle = ({ dp, t }: { dp: SnapDecisionPoint; t: number }) =>
+    `${dp.title} · ${dp.owner_section}\nNLT ${new Date(t).toUTCString().slice(5, 22)}Z${dp.overdue ? ' — OVERDUE' : ''}` +
+    `${dp.decision ? `\nDecide: ${dp.decision}` : ''}${dp.trigger ? `\nTrigger: ${dp.trigger}` : ''}${dp.action ? `\nAction: ${dp.action}` : ''}` +
+    `${dp.status === 'triggered' ? `\nTRIGGERED${dp.note ? ` — ${dp.note}` : ''}` : ''}`
 
   const scrollTo = (left: number) => { scrollRef.current?.scrollTo({ left, behavior: 'smooth' }) }
   const scrollBy = (delta: number) => { scrollRef.current?.scrollBy({ left: delta, behavior: 'smooth' }) }
@@ -148,6 +159,11 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
             <div className="tl-near" style={{ left: `${wBack + wNear}px` }}><span>+48h</span></div>
             <div className="tl-horizon" style={{ left: `${totalWidth - 90}px` }}><span>{Math.round(days)} days</span></div>
           </div>
+          {dps.length > 0 && <div className="tl-dps">
+            <span className="tl-dps-tag dim">DECISIONS</span>
+            {dps.map(d => <i key={d.dp.id} className={`tl-dp ${d.dp.status} ${d.dp.overdue ? 'overdue' : ''}`} style={{ left: `${px(d.t)}px` }} title={dpTitle(d)}
+              onClick={e => { e.stopPropagation(); onDecision?.(d.dp) }}><b>◆</b><span>{d.dp.title.split(' — ')[0]}</span></i>)}
+          </div>}
           <div className="tl-log" style={{ width: `${wBack}px` }}>
             {log.map(e => { const s = subjectSelection(snap, e.subject); return <i key={e.id} className={`tl-ev b-${e.bucket} ${s ? 'jump' : ''}`} style={{ left: `${(px(+new Date(e.at)) / Math.max(1, wBack)) * 100}%`, background: BUCKET_COLOR[e.bucket] ?? BUCKET_COLOR.other }} title={`${hhmm(+new Date(e.at))} · ${BUCKET_LABEL[e.bucket] ?? e.bucket} · ${e.summary ?? e.type} — ${e.actor}`} onClick={() => s && onSelect(s)} /> })}
             {log.length === 0 && <span className="tl-quiet dim">nothing logged this watch</span>}
@@ -157,6 +173,7 @@ export function Timeline({ snap, now, sel, onSelect, onOp, scrub, onScrub }: { s
             {watchEnd && watchEnd > t0 && <div className="tl-watch" style={{ left: `${wBack}px`, width: `${Math.max(0, px(watchEnd) - wBack)}px` }} title={`the ${snap.watch!.name} watch until ${hhmm(watchEnd)}`} />}
             {ticks.filter(k => k.major).map(k => <div key={k.t} className="tl-grid" style={{ left: `${px(k.t)}px` }} />)}
             <div className="tl-grid now" style={{ left: `${wBack}px` }} />
+            {dps.map(d => <div key={d.dp.id} className={`tl-grid dp ${d.dp.status} ${d.dp.overdue ? 'overdue' : ''}`} style={{ left: `${px(d.t)}px` }} />)}
             {eventLanes > 0 && lanes.length > eventLanes && <div className="tl-sep" style={{ top: `${eventLanes * 20 + 2}px` }} />}
             {spans.map(s => { const l = laneOf.get(s.id) ?? 0; const left = px(s.start), right = px(s.end); const w = Math.max(right - left, 18)
               const active = (sel?.type === 'event' && sel.id === s.id) || (sel?.type === 'person' && s.kind === 'trip' && snap.trips.find(t => t.id === s.id)?.person_id === sel.id)

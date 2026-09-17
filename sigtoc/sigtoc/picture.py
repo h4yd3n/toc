@@ -275,3 +275,75 @@ def assess_traveler_exposure(
 
     return matches
 
+
+
+# ---------------------------------------------------------------- §5.11 the workbench: actors and sightings in a case
+
+def _sighting_evidence(s: S2SightingRow) -> Dict[str, Any]:
+    """A sighting cites itself the way a report does: where it came from, graded, with what was seen as the quote."""
+    return {"report_id": s.source_id or s.id, "quote": (s.what or "")[:240], "source": s.source_type,
+            "reliability": s.reliability, "credibility": int(s.credibility), "at": iso(s.at)}
+
+
+async def case_actor_view(session: AsyncSession, case_id: str, entities: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """The live picture inside a case (§5.11): the actors it holds as nodes, their sightings as events, and a line from
+    an actor to every entity the same report produced.
+
+    Derived on every read and never stored. An actor is Sigtoc's own object, so it arrives `confirmed`; the lines are
+    `derived` — they are the reports' arithmetic, not an analyst's confirmation, and they never enter the review queue.
+    An actor belongs to this case if it names the case, or if one of its sightings came from a report filed into it."""
+    from .cases import ReportRow
+
+    reports = (await session.execute(select(ReportRow).where(ReportRow.case_id == case_id))).scalars().all()
+    report_ids = {r.id for r in reports}
+    actors = (await session.execute(select(S2ActorRow))).scalars().all()
+    sightings = (await session.execute(select(S2SightingRow).order_by(S2SightingRow.at))).scalars().all()
+    by_actor: Dict[str, List[S2SightingRow]] = {}
+    for s in sightings:
+        by_actor.setdefault(s.actor_id, []).append(s)
+    mine = [a for a in actors if a.case_id == case_id or any(s.source_id in report_ids for s in by_actor.get(a.id, []))]
+    if not mine:
+        return {"entities": [], "relationships": [], "events": []}
+
+    # an entity is reachable from a report id: that is the join the line is drawn on
+    ents_by_report: Dict[str, List[Dict[str, Any]]] = {}
+    for e in entities:
+        if e.get("status") == "rejected":
+            continue
+        for ev in e.get("evidence", []):
+            rid = ev.get("report_id")
+            if rid:
+                ents_by_report.setdefault(rid, []).append(e)
+
+    out_ents, out_rels, out_events = [], [], []
+    for a in mine:
+        track = by_actor.get(a.id, [])
+        out_ents.append({
+            "id": a.id, "type": "actor", "name": a.name, "aliases": _json_list(a.aliases_json),
+            "attributes": {k: v for k, v in (("kind", a.kind), ("echelon", a.echelon), ("strength", a.strength),
+                                             ("actor_status", a.status), ("assessed_intent", a.assessed_intent),
+                                             ("last_seen", a.place or ""), ("last_seen_at", iso(a.last_seen_at) or "")) if v},
+            "status": "confirmed", "origin": "sigtoc", "evidence": [_sighting_evidence(s) for s in track],
+            "merged_into": None, "decided_by": a.owner, "decided_at": iso(a.updated_at),
+        })
+        seen_pairs = {}
+        for s in track:
+            out_events.append({
+                "id": s.id, "at": iso(s.at), "lat": s.lat, "lon": s.lon, "place": s.place, "type": "sighting",
+                "summary": s.what or f"{a.name} sighted", "participants": [a.id], "status": "confirmed", "origin": "sigtoc",
+                "evidence": [_sighting_evidence(s)], "decided_by": s.created_by, "confidence": s.confidence,
+            })
+            for e in ents_by_report.get(s.source_id or "", []):
+                key = e["id"]
+                prev = seen_pairs.get(key)
+                if prev:
+                    prev["last_seen"] = iso(s.at)
+                    prev["evidence"].append(_sighting_evidence(s))
+                    continue
+                rel = {"id": f"der_{a.id}_{e['id']}", "from": a.id, "to": e["id"], "type": "reported_with",
+                       "first_seen": iso(s.at), "last_seen": iso(s.at), "status": "derived", "origin": "sigtoc",
+                       "evidence": [_sighting_evidence(s)], "grade": f"{s.reliability}{int(s.credibility)}",
+                       "decided_by": None}
+                seen_pairs[key] = rel
+                out_rels.append(rel)
+    return {"entities": out_ents, "relationships": out_rels, "events": out_events}

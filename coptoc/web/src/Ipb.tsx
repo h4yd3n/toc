@@ -67,7 +67,7 @@ export function IpbPanel({ reload, busy, act, role, pirs, onSelect }: { reload: 
     </div>}
     {dsm && dsm.rows.length > 0 && <div className="dsm">
       <div className="dsm-row dsm-head"><span>DP</span><span>DECISION · TRIGGER</span><span>PIR · NAI · COA</span><span>NLT</span><span /></div>
-      {dsm.rows.map(r => <div key={r.id} className={`dsm-row ${r.status} ${r.overdue ? 'overdue' : ''}`} title={`${r.title}\n${r.decision}\nTrigger: ${r.trigger}\nAction: ${r.action}${r.note ? `\n${r.note}` : ''}`}>
+      {dsm.rows.map(r => <div key={r.id} data-dp={r.id} className={`dsm-row ${r.status} ${r.overdue ? 'overdue' : ''}`} title={`${r.title}\n${r.decision}\nTrigger: ${r.trigger}\nAction: ${r.action}${r.note ? `\n${r.note}` : ''}`}>
         <span className="mono">{r.title.split(' — ')[0]}</span>
         <span><b>{r.decision || r.title}</b>{r.trigger ? <span className="dim"> · {r.trigger}</span> : null}</span>
         <span className="dim small">{r.pir ? <span title={r.pir.question}>{r.pir.id} {r.pir.status}</span> : '—'}{r.nais.length ? ` · ${r.nais.map(n => n.name).join(', ')}` : ''}{r.coas.length ? ` · ${r.coas.map(c => c.likelihood).join(', ')}` : ''}</span>

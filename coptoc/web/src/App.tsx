@@ -26,7 +26,7 @@ import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } f
 import * as api from './api'
 import Workspaces from './Workspaces'
 import { useDestination } from './navigation'
-import type { Draw, GraphicType, Overlay, UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, SectionCode, Selection, Snapshot, Threat, Trip } from './types'
+import type { Draw, GraphicType, Overlay, SnapDecisionPoint, ThreatCoa, UserInfo, Assessment, CopEvent, Coverage, Incident, Layers, Location, Person, Role, RosterStatus, SectionCode, Selection, Snapshot, Threat, Trip } from './types'
 
 const TYPE_LABEL: Record<string, string> = { hq: 'HQ', office: 'OFFICE', datacenter: 'DATA CENTER', residence: 'RESIDENCE', venue: 'VENUE', airfield: 'AIRFIELD', cp: 'CP', fob: 'FOB', farp: 'FARP', range: 'RANGE' }
 const SITE_TYPES = ['hq', 'cp', 'fob', 'farp', 'airfield', 'range', 'office', 'datacenter', 'venue', 'residence'] as const
@@ -131,6 +131,17 @@ export default function App() {
     else if (section === 'S2') setRightPanel('right')
     else { setS3Open(true); setS3Flash(true); setOverlay('S3'); document.querySelector('.bottom')?.scrollIntoView({ block: 'end' }); window.setTimeout(() => setS3Flash(false), 1200) }
   }
+  /** A decision point on the S3 strip opens the matrix it belongs to, under the S2 panel, on its own row. */
+  const openDecision = (d: SnapDecisionPoint) => {
+    setRightPanel('right')
+    window.setTimeout(() => {
+      const el = document.querySelector(`[data-dp="${d.id}"]`)
+      if (!el) return
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.classList.add('dsm-jump')
+      window.setTimeout(() => el.classList.remove('dsm-jump'), 1600)
+    }, 120)
+  }
   const sectionOn = (code: string) => (snap?.sections?.find(x => x.code === code)?.enabled ?? (code !== 'S4' && code !== 'S6')) && can(code)
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code
@@ -170,7 +181,18 @@ export default function App() {
   const [catalog, setCatalog] = useState<GraphicType[]>([])
   const [draw, setDraw] = useState<Draw | null>(null)
   const [drawMenu, setDrawMenu] = useState(false)
+  // §5.10b Phase 3 — a COA's graphic set as one named overlay: pick the course of action, its own graphics and the
+  // NAIs it would be seen in come forward, everything else on the board falls back to context.
+  const [coas, setCoas] = useState<ThreatCoa[]>([])
+  const [coaId, setCoaId] = useState<string | null>(null)
+  const [coaMenu, setCoaMenu] = useState(false)
   useEffect(() => { api.graphicsCatalog().then(d => setCatalog(d.types)).catch(() => {}) }, [snap?.profile])
+  useEffect(() => {
+    if (overlay !== 'S2') { setCoaId(null); setCoaMenu(false); return }
+    api.listCoas().then(setCoas).catch(() => setCoas([]))
+  }, [overlay, briefReload])
+  const coaSets = coas.filter(c => c.status !== 'rejected' && c.graphic_ids.length > 0)
+  const activeCoa = coaSets.find(c => c.id === coaId) ?? null
   const finishDraw = (d: Draw | null) => {
     if (!d) return
     const pts = d.points.filter((p, i, a) => i === 0 || p[0] !== a[i - 1][0] || p[1] !== a[i - 1][1])
@@ -191,7 +213,7 @@ export default function App() {
     const k = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) }
       if (e.key === 'Escape') {
-        setDraw(null); setDrawMenu(false); setOverlayMenuOpen(false); setShowDefcon(false); setShowSettings(false);
+        setDraw(null); setDrawMenu(false); setCoaMenu(false); setCoaId(null); setOverlayMenuOpen(false); setShowDefcon(false); setShowSettings(false);
         setSel(null); setOpId(null); setShowIntsum(false); setShowPlan(false); setAreaId(null); setAreaMode(null); setShowBrief(false); setCmd(false);
         setShowWeather(false);
         if (!isCop && !workspaceDetail) navigate({ page: 'cop' })
@@ -424,7 +446,7 @@ export default function App() {
       <main className="center" onClick={() => { setShowSettings(false); setOverlayMenuOpen(false); setShowWeather(false) }}>
         {isCop ? (
           <>
-            <MapView onTaskCollection={taskCollection} snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} />
+            <MapView onTaskCollection={taskCollection} snapshot={snap} selection={sel} layers={layers} onSelect={setSel} overlay={overlay} timeBack={timeBack} scrub={scrub?.t ?? null} draw={draw} onDrawPoint={onDrawPoint} onDrawFinish={() => finishDraw(draw)} outlineOnly={outlineOnly} coa={activeCoa} />
             {s && (
               <div
                 className="map-stats-pill"
@@ -573,6 +595,17 @@ export default function App() {
                   <div className="ovbar" onClick={e => e.stopPropagation()}>
                     {(['COP', 'S1', 'S2', 'S3', 'S4', 'S6'] as Overlay[]).filter(o => o === 'COP' || sectionOn(o)).map(o => <button key={o} className={`ov ${overlay === o ? 'on' : ''} ${o !== 'COP' ? 'sec-' + o : ''}`} title={o === 'COP' ? 'everything, the common operating picture' : `${o}'s overlay: its own things forward, the rest dimmed`} onClick={() => { setOverlay(o); if (o === 'S4') setLayers(l => ({ ...l, s4: true })); if (o === 'S6') setLayers(l => ({ ...l, s6: true })) }}>{o}</button>)}
                     {overlay === 'S2' && <span className="ovtime">{([[12, '12h'], [72, '3d'], [720, '30d'], [null, 'ALL']] as [number | null, string][]).map(([h, l]) => <button key={l} className={`ov time ${timeBack === h ? 'on' : ''}`} title="threats observed within this window" onClick={() => setTimeBack(h)}>{l}</button>)}</span>}
+                    {overlay === 'S2' && coaSets.length > 0 && <span className="ovtime">
+                      <button className={`ov coa ${coaMenu ? 'on' : ''} ${activeCoa ? 'sel' : ''}`}
+                        title={activeCoa ? `${activeCoa.title}\n${activeCoa.likelihood}, ${activeCoa.confidence} confidence${activeCoa.actor_name ? ` · ${activeCoa.actor_name}` : ''} · ${activeCoa.graphic_ids.length} graphic${activeCoa.graphic_ids.length === 1 ? '' : 's'} forward${activeCoa.narrative ? `\n${activeCoa.narrative}` : ''}` : "draw one course of action's whole graphic set as a single named overlay"}
+                        onClick={() => { setCoaMenu(v => !v); setDrawMenu(false) }}>◧ {activeCoa ? `${activeCoa.title} · ${activeCoa.likelihood}` : 'COA ▾'}</button>
+                      {activeCoa && <button className="ov time on" title="back to the S2 overlay" onClick={() => setCoaId(null)}>×</button>}
+                    </span>}
+                    {coaMenu && <div className="drawmenu coamenu">
+                      {coaSets.map(c => <button key={c.id} className={`drawitem ${coaId === c.id ? 'on' : ''}`} onClick={() => { setCoaId(coaId === c.id ? null : c.id); setCoaMenu(false); setOverlay('S2') }}>
+                        <b style={{ color: c.most_dangerous ? '#ef4444' : '#fbbf24' }}>{c.most_likely ? 'ML' : c.most_dangerous ? 'MD' : '◆'}</b> {c.title}
+                        <span className="dim"> · {c.likelihood} · {c.graphic_ids.length} graphic{c.graphic_ids.length === 1 ? '' : 's'}{c.nai_ids.length ? ` · ${c.nai_ids.length} NAI` : ''}</span></button>)}
+                    </div>}
                     {overlay !== 'COP' && overlay !== 'S1' && can(overlay, 'edit') && !draw && <span className="ovtime"><button className={`ov draw ${drawMenu ? 'on' : ''}`} title={`draw a control measure ${overlay} owns`} onClick={() => setDrawMenu(v => !v)}>✎ DRAW ▾</button></span>}
                     {drawMenu && !draw && <div className="drawmenu">
                       {catalog.filter(t => t.section === overlay).flatMap(t => t.kinds.map(k => <button key={t.type + k} className="drawitem" style={{ borderLeftColor: t.color }} onClick={() => { setDraw({ type: t, kind: k, points: [] }); setDrawMenu(false) }}><b style={{ color: t.color }}>{t.glyph}</b> {t.label}<span className="dim"> · {k}</span></button>))}
@@ -815,7 +848,7 @@ export default function App() {
               ]} />}
             </PanelHead>
             <EstimateLine e={snap?.estimates?.find(e => e.section === 'S3')} role={role} busy={busy} act={act} />
-            <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} />
+            <Timeline snap={snap} now={now} sel={sel} onSelect={setSel} onOp={id => { setOpId(id); setShowBrief(false) }} scrub={scrub?.t ?? null} onScrub={onScrub} onDecision={openDecision} />
           </div>
         )}
         {logOpen && (

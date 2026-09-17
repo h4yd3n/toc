@@ -517,6 +517,16 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     s2_actors_out = [s2_actor_out(a, s2_sightings_by_actor.get(a.id, [])) for a in s2_actor_rows]
     s2_sightings_out = [s2_sighting_out(s) for s in s2_sighting_rows]
     s2_reports_out = [s2_report_out(r) for r in s2_report_rows]
+    # §5.10b Phase 3 — the decision points S2 wrote, on S3's strip: a decision has a no-later-than, and the watch that
+    # plans movement is the watch that has to see the deadline. The matrix itself stays under the S2 panel.
+    from sigtoc.ipb import DecisionPointRow, dp_dict
+    dp_rows = (await session.execute(select(DecisionPointRow).where(DecisionPointRow.status.in_(("open", "triggered")))
+                                     .order_by(DecisionPointRow.latest_time.is_(None), DecisionPointRow.latest_time))).scalars().all()
+    decision_points_out = [{k: d[k] for k in ("id", "title", "subject_type", "subject_id", "operation_id", "decision", "trigger", "action",
+                                              "owner_section", "latest_time", "overdue", "status", "note", "pir_id", "nai_ids", "coa_ids")}
+                           for d in (dp_dict(r, now) for r in dp_rows)]
+    summary["decisions_open"] = sum(1 for d in decision_points_out if d["status"] == "open")
+    summary["decisions_overdue"] = sum(1 for d in decision_points_out if d["overdue"])
     summary["s2_actors"] = len(s2_actors_out)
     summary["s2_reports_pending"] = sum(1 for r in s2_reports_out if r["status"] == "filed")
     summary["movement_risks"] = len(movement_risks_out)
@@ -538,6 +548,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
         "graphics": graphics_out, "s2_actors": s2_actors_out, "s2_sightings": s2_sightings_out, "s2_reports": s2_reports_out, "movement_risks": movement_risks_out,
+        "decision_points": decision_points_out,
     }
 
 

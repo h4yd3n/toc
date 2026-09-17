@@ -1597,33 +1597,46 @@ fun TacticalRulerVertical(
 
 
 
-/** §5.10b the SPOTREP: what the field files, in SALUTE order, with the place taken from the board or typed. Cop Talk files it; Sigtoc disposes of it. */
+/** §5.10b the field report: SPOTREP in SALUTE order, SITREP, a NOTE, or a LIAISON report that names the outside source
+ *  it came from. Cop Talk files it; Sigtoc disposes of it. Our own people are graded A; a liaison source carries the
+ *  grade the analyst has given it, F until it has been judged (LOE 5). */
 @Composable
 fun SpotrepDialog(st: WallState, store: Store, open: Boolean, onDone: () -> Unit) {
     if (!open) return
+    var kind by remember { mutableStateOf("spot") }
+    var source by remember { mutableStateOf("") }
     var size by remember { mutableStateOf("") }; var activity by remember { mutableStateOf("") }; var unit by remember { mutableStateOf("") }; var equipment by remember { mutableStateOf("") }
     var place by remember { mutableStateOf("") }; var notes by remember { mutableStateOf("") }
     val c = Board.position?.target
     var lat by remember { mutableStateOf(c?.let { "%.5f".format(it.latitude) } ?: "") }; var lon by remember { mutableStateOf(c?.let { "%.5f".format(it.longitude) } ?: "") }
     val me = st.snap?.me
+    val kinds = listOf("spot" to "SPOTREP", "sitrep" to "SITREP", "note" to "NOTE", "liaison" to "LIAISON")
+    val salute = kind == "spot"
     AlertDialog(onDismissRequest = onDone, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
-        title = { Text("SPOTREP", fontSize = 14.sp, fontFamily = FontFamily.Monospace) },
+        title = { Text(kinds.first { it.first == kind }.second, fontSize = 14.sp, fontFamily = FontFamily.Monospace) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
-            OutlinedTextField(size, { size = it }, label = { Text("Size — how many, of what") }, singleLine = true)
-            OutlinedTextField(activity, { activity = it }, label = { Text("Activity — what they were doing") }, singleLine = true)
-            OutlinedTextField(unit, { unit = it }, label = { Text("Unit / description — who") }, singleLine = true)
-            OutlinedTextField(equipment, { equipment = it }, label = { Text("Equipment") }, singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { kinds.forEach { (k, label) -> Chip(label, if (kind == k) Palette.amber else Palette.dim, filled = kind == k) { kind = k } } }
+            if (kind == "liaison") OutlinedTextField(source, { source = it }, label = { Text("Liaison source (SFPD Southern Station)") }, singleLine = true,
+                supportingText = { Text("an unknown name becomes a source at F until the analyst grades it", fontSize = 9.sp, color = Palette.dim) })
+            if (salute) {
+                OutlinedTextField(size, { size = it }, label = { Text("Size — how many, of what") }, singleLine = true)
+                OutlinedTextField(activity, { activity = it }, label = { Text("Activity — what they were doing") }, singleLine = true)
+                OutlinedTextField(unit, { unit = it }, label = { Text("Unit / description — who") }, singleLine = true)
+                OutlinedTextField(equipment, { equipment = it }, label = { Text("Equipment") }, singleLine = true)
+            }
             OutlinedTextField(place, { place = it }, label = { Text("Place name") }, singleLine = true)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedTextField(lat, { lat = it }, label = { Text("Lat") }, singleLine = true, modifier = Modifier.weight(1f)); OutlinedTextField(lon, { lon = it }, label = { Text("Lon") }, singleLine = true, modifier = Modifier.weight(1f)) }
-            OutlinedTextField(notes, { notes = it }, label = { Text("Notes") }, minLines = 2)
-            Text("Filed by ${me?.name ?: store.api.actor} · graded A2 until an analyst corroborates · time is now", color = Palette.dim, fontSize = 9.sp) } },
+            OutlinedTextField(notes, { notes = it }, label = { Text(if (salute) "Notes" else "What was reported") }, minLines = 2)
+            Text("Filed by ${me?.name ?: store.api.actor} · ${if (kind == "liaison") "graded at the source's reliability" else "graded A2 until an analyst corroborates"} · time is now", color = Palette.dim, fontSize = 9.sp) } },
         confirmButton = { TextButton({
-            val lines = listOf("SIZE" to size, "ACTIVITY" to activity, "UNIT" to unit, "EQUIPMENT" to equipment).filter { it.second.isNotBlank() }.map { "${it.first}: ${it.second.trim()}" }
+            val lines = if (salute) listOf("SIZE" to size, "ACTIVITY" to activity, "UNIT" to unit, "EQUIPMENT" to equipment).filter { it.second.isNotBlank() }.map { "${it.first}: ${it.second.trim()}" } else emptyList()
             val text = (lines + (if (notes.isBlank()) emptyList() else listOf(notes.trim()))).joinToString("\n")
             if (text.isNotBlank()) {
-                val body = buildJsonObject { put("text", text); put("kind", "spot"); put("reported_by", me?.name ?: store.api.actor); put("reporter_role", me?.role ?: store.api.role)
+                val body = buildJsonObject { put("text", text); put("kind", kind); put("reported_by", me?.name ?: store.api.actor); put("reporter_role", me?.role ?: store.api.role)
+                    if (kind == "liaison" && source.isNotBlank()) put("liaison_source", source.trim())
                     lat.toDoubleOrNull()?.let { la -> lon.toDoubleOrNull()?.let { lo -> if (Math.abs(la) <= 90 && Math.abs(lo) <= 180) { put("lat", la); put("lon", lo) } } }
                     if (place.isNotBlank()) put("place", place.trim()) }
-                store.act("filing SPOTREP") { fileReport(body) }; onDone() } }) { Text("FILE", color = Palette.amber) } },
+                store.act("filing ${kinds.first { it.first == kind }.second}") { fileReport(body) }; onDone() } }) { Text("FILE", color = Palette.amber) } },
         dismissButton = { TextButton(onDone) { Text("CANCEL", color = Palette.dim) } })
 }
+

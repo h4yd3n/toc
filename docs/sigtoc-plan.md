@@ -11,8 +11,10 @@ v3.38): the RFI kind, collection tasked from an NAI with PIRs moving to COLLECTI
 life, and threshold rules as settings. Phase 3 landed the same evening (PRD v3.39): threat COAs in ICD 203 words,
 decision points and the DSM, the IPB, the intelligence estimate, and Annex B to an operation. Phase 4 landed on
 17 September (PRD v3.40): the graphic INTSUM (the red picture with a map), the area assessment's link to the actors
-and threat graphics inside each place, and liaison sources graded by the analyst over time. The plan's four phases
-are built; what remains is listed at the end of PRD §5.10b.
+and threat graphics inside each place, and liaison sources graded by the analyst over time. The four things the phases
+left open closed on 17 September as well (PRD v3.41): actors and their sightings are node types in the analyst's
+workbench, decision points sit on the S3 strip at their no-later-than, a COA's graphic set comes forward as one named
+overlay, and Android files every report kind with the liaison source named. The plan is built.
 
 **Scope:** this is a cross-module plan, not a request to bury all of Sigtoc inside Cop Talk. Sigtoc is a separate
 module / sub-repo and remains the canonical home for intelligence objects and analyst workflow. Cop Talk gets the live

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { Map as MLMap, Marker } from 'maplibre-gl'
-import type { CopEvent, Draw, Layers, Location, Movement, Overlay, Person, Selection, Snapshot, NAI } from './types'
+import type { CopEvent, Draw, Layers, Location, Movement, Overlay, Person, Selection, Snapshot, NAI, ThreatCoa } from './types'
 import { arc, circle } from './geo'
 
 // Free, keyless vector basemap. Attribution is carried in the style JSON.
@@ -54,6 +54,9 @@ interface Props {
   outlineOnly?: boolean
   /** §5.10b Phase 2: TASK on an NAI label raises a collection tasking on S3 for it. */
   onTaskCollection?: (nai: NAI) => void
+  /** §5.10b Phase 3: a course of action drawn as one named overlay — its graphic set and the NAIs it would be seen
+   *  in come forward; the rest of the board falls back to context. Null when no COA is up. */
+  coa?: ThreatCoa | null
 }
 const HOUR = 36e5
 // how far the other sections' things fade under each overlay: an overlay sits on the base, the base stays
@@ -63,15 +66,15 @@ const ageFactor = (iso: string, now: number) => { const d = (now - +new Date(iso
 const HEALTH_COLOR: Record<string, string> = { green: '#22c55e', amber: '#f59e0b', red: '#ef4444' }
 const RATING_LETTER: Record<string, string> = { green: 'G', amber: 'A', red: 'R', unknown: '?' }
 
-export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly, onTaskCollection }: Props) {
+export default function MapView({ snapshot, selection, layers, onSelect, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly, onTaskCollection, coa }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const map = useRef<MLMap | null>(null)
   const markers = useRef<Marker[]>([])
   const loaded = useRef(false)
   const framed = useRef(savedBoard() != null)   // applied once, and never over a board this browser remembers
   const waiting = useRef(false)                // an opening frame queued against a style that has not landed yet
-  const propsRef = useRef({ snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly })
-  propsRef.current = { snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly }
+  const propsRef = useRef({ snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly, coa })
+  propsRef.current = { snapshot, layers, onSelect, selection, overlay, timeBack, scrub, draw, onDrawPoint, onDrawFinish, outlineOnly, coa }
 
   // ---- init ----
   useEffect(() => {
@@ -160,14 +163,18 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
 
   // ---- data layers ----
   function renderData(m: MLMap) {
-    const { snapshot, layers, overlay, timeBack, scrub, outlineOnly } = propsRef.current
+    const { snapshot, layers, overlay, timeBack, scrub, outlineOnly, coa } = propsRef.current
     if (!snapshot || !m.getSource('threats')) return
     const now = Date.now()
     const s2 = overlay === 'S2', s3 = overlay === 'S3', cop = overlay === 'COP'
     const cut = timeBack != null ? now - timeBack * HOUR : null
+    // a COA overlay is a sheet of its own: its graphics and its NAIs are the picture, everything else is context
+    const coaGfx = coa ? new Set(coa.graphic_ids) : null
+    const coaNai = coa ? new Set(coa.nai_ids) : null
+    const coaWeight = coaGfx ? 0.35 : 1
     // threats: on the COP and the S2 overlay in full, faded with age; a quarter-strength context under the other sections
     const threats = m.getSource('threats') as maplibregl.GeoJSONSource
-    const tWeight = cop || s2 ? 1 : DIM
+    const tWeight = (cop || s2 ? 1 : DIM) * coaWeight
     threats.setData({ type: 'FeatureCollection', features: layers.threats ? (snapshot.threats ?? []).filter(t => cut == null || +new Date(t.observed_at) >= cut).map(t => { const a = ageFactor(t.observed_at, now) * tWeight; return {
       type: 'Feature', properties: { id: t.id, color: SEV_COLOR[t.severity], fo: outlineOnly ? 0 : 0.06 + 0.16 * a, lo: 0.3 + 0.65 * a, confirmed: t.confirmed_links.length > 0 },
       geometry: { type: 'Polygon', coordinates: [circle(t.lat, t.lon, t.radius_km)] },
@@ -185,14 +192,14 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     // NAIs: every active requirement as a named area, colored by how well it is collected; full on S2, faint on the COP, gone elsewhere
     const nais = m.getSource('nais') as maplibregl.GeoJSONSource
     const nWeight = s2 ? 1 : cop ? 0.35 : 0
-    nais.setData({ type: 'FeatureCollection', features: nWeight === 0 ? [] : (snapshot.nais ?? []).map(n => ({
-      type: 'Feature', properties: { id: n.id, color: HEALTH_COLOR[n.health], fo: (n.priority === 1 ? 0.10 : 0.05) * nWeight, lo: (n.priority === 1 ? 0.9 : 0.55) * nWeight, lw: n.priority === 1 ? 1.8 : 1 },
-      geometry: { type: 'Polygon', coordinates: [circle(n.lat, n.lon, n.radius_km)] },
-    })) })
+    nais.setData({ type: 'FeatureCollection', features: nWeight === 0 ? [] : (snapshot.nais ?? []).map(n => { const w = nWeight * (coaNai ? (coaNai.has(n.id) ? 1.4 : 0.2) : 1); return {
+      type: 'Feature', properties: { id: n.id, color: HEALTH_COLOR[n.health], fo: (n.priority === 1 ? 0.10 : 0.05) * w, lo: Math.min(1, (n.priority === 1 ? 0.9 : 0.55) * w), lw: coaNai?.has(n.id) ? 2.4 : n.priority === 1 ? 1.8 : 1 },
+      geometry: { type: 'Polygon' as const, coordinates: [circle(n.lat, n.lon, n.radius_km)] },
+    } }) })
     // the graphics: the owning section's forward, the rest dimmed; a range is loud only in its window
     const gfx = m.getSource('graphics') as maplibregl.GeoJSONSource
     gfx.setData({ type: 'FeatureCollection', features: (snapshot.graphics ?? []).filter(g => g.kind !== 'point').map(g => {
-      const w = (cop || overlay === g.section ? 1 : DIM) * (g.status === 'planned' ? 0.7 : 1) * (g.window_from && !g.in_window ? 0.45 : 1)
+      const w = (coaGfx ? (coaGfx.has(g.id) ? 1 : DIM * 0.6) : (cop || overlay === g.section ? 1 : DIM)) * (g.status === 'planned' ? 0.7 : 1) * (g.window_from && !g.in_window ? 0.45 : 1)
       const sel = selection?.type === 'graphic' && selection.id === g.id
       return { type: 'Feature' as const, properties: { id: g.id, color: g.color, dash: g.dash, fo: (g.type === 'range' && g.in_window ? 0.22 : 0.07) * w, lo: (sel ? 1 : 0.85) * w, lw: sel ? 3.5 : g.type === 'boundary' || g.type === 'phase_line' ? 1.5 : 2.5 },
         geometry: g.kind === 'polygon' ? { type: 'Polygon' as const, coordinates: [[...(g.geometry as [number, number][]), (g.geometry as [number, number][])[0]]] } : { type: 'LineString' as const, coordinates: g.geometry as [number, number][] } }
@@ -211,7 +218,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     })) })
     // movements, leg by leg: what is not moving at the scrubbed moment dims; under other overlays everything that moves is context
     const routes = m.getSource('routes') as maplibregl.GeoJSONSource
-    const mWeight = s3 || cop ? 1 : overlay === 'S4' ? 0.6 : DIM
+    const mWeight = (s3 || cop ? 1 : overlay === 'S4' ? 0.6 : DIM) * coaWeight
     const activeAt = (mv: Movement, t: number) => (mv.depart_at ? +new Date(mv.depart_at) <= t : true) && +new Date(mv.return_at) >= t
     routes.setData({ type: 'FeatureCollection', features: layers.routes ? (snapshot.movements ?? []).flatMap(mv => {
       const w = (overlay === 'S4' ? (mv.kind === 'shipment' ? 1 : DIM) : mWeight) * (scrub != null && !activeAt(mv, scrub) ? 0.15 : 1)
@@ -224,11 +231,12 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
       }))
     }) : [] })
   }
-  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers, overlay, timeBack, scrub, draw, selection, outlineOnly])
+  useEffect(() => { if (map.current && loaded.current) { renderData(map.current); renderMarkers(map.current) } }, [snapshot, layers, overlay, timeBack, scrub, draw, selection, outlineOnly, coa?.id])
 
   // ---- markers with screen-space clustering ----
   function renderMarkers(m: MLMap) {
-    const { snapshot, layers, onSelect, selection, overlay, timeBack, scrub } = propsRef.current
+    const { snapshot, layers, onSelect, selection, overlay, timeBack, scrub, coa } = propsRef.current
+    const coaGfx = coa ? new Set(coa.graphic_ids) : null
     markers.current.forEach(mk => mk.remove()); markers.current = []
     if (!snapshot) return
     const now = Date.now()
@@ -239,8 +247,8 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     const movementOf = (pid: string) => movements.find(mv => mv.person_ids.includes(pid))
     const inbound = (lid: string) => movements.filter(mv => mv.kind === 'shipment' && (snapshot.locations ?? []).find(l => l.id === lid && l.name === mv.dest_name))
     // what dims under this overlay: a person is S1's and S3's, an event S3's, a site everyone's base
-    const dimPerson = (p: Person) => (overlay === 'S2' || overlay === 'S4' || overlay === 'S6') || (scrub != null && (() => { const mv = movementOf(p.id); return mv ? !activeAt(mv, scrub) : false })())
-    const dimEvent = (e: CopEvent) => (overlay !== 'COP' && overlay !== 'S3') || (scrub != null && !(+new Date(e.start_at) <= scrub && +new Date(e.end_at) >= scrub))
+    const dimPerson = (p: Person) => coaGfx != null || (overlay === 'S2' || overlay === 'S4' || overlay === 'S6') || (scrub != null && (() => { const mv = movementOf(p.id); return mv ? !activeAt(mv, scrub) : false })())
+    const dimEvent = (e: CopEvent) => coaGfx != null || (overlay !== 'COP' && overlay !== 'S3') || (scrub != null && !(+new Date(e.start_at) <= scrub && +new Date(e.end_at) >= scrub))
     const pts: Point[] = []
     if (layers.locations) for (const l of (snapshot.locations ?? [])) {
       if (l.sensitivity === 'restricted' && !layers.residences) continue
@@ -361,7 +369,7 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
     }
     // §3.4 point graphics and the labels of lines and polygons: the glyph and the name, in the section's color
     for (const g of snapshot.graphics ?? []) {
-      const w = cop || overlay === g.section
+      const w = coaGfx ? coaGfx.has(g.id) : cop || overlay === g.section
       const div = document.createElement('div')
       const sel = selection?.type === 'graphic' && selection.id === g.id
       div.className = `mk mk-gfx ${g.kind} ${g.status}${w ? '' : ' dim'}${sel ? ' selected' : ''}${g.window_from && !g.in_window ? ' outside' : ''}`

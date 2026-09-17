@@ -27,12 +27,17 @@ struct SpotrepForm: View {
     @State private var size = ""; @State private var activity = ""; @State private var unit = ""; @State private var equipment = ""; @State private var place = ""; @State private var notes = ""
     @State private var lat = ""; @State private var lon = ""
     @State private var kind = "spot"
+    @State private var source = ""
     @State private var problem: String? = nil
     var body: some View {
         NavigationStack {
             Form {
                 Section("What you saw") {
                     Picker("Kind", selection: $kind) { Text("SPOTREP").tag("spot"); Text("SITREP").tag("sitrep"); Text("NOTE").tag("note"); Text("LIAISON").tag("liaison") }.pickerStyle(.segmented)
+                    if kind == "liaison" {
+                        TextField("Liaison source (SFPD Southern Station)", text: $source)
+                        Text("An unknown name becomes a source at F until the analyst grades it.").font(.system(size: 10)).foregroundStyle(Theme.dim)
+                    }
                     TextField("Size — how many, of what", text: $size)
                     TextField("Activity — what they were doing", text: $activity)
                     TextField("Unit / description — who", text: $unit)
@@ -44,7 +49,7 @@ struct SpotrepForm: View {
                     Button("Use the centre of the board") { if let c = store.board?.center { lat = String(format: "%.5f", c.latitude); lon = String(format: "%.5f", c.longitude) } }.font(.system(size: 12))
                 }
                 Section("Anything else") { TextField("Notes", text: $notes, axis: .vertical).lineLimit(2...5) }
-                Section { Text("Filed by \(store.me?.name ?? store.client.actor) · graded A2 until an analyst corroborates · time is now").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+                Section { Text("Filed by \(store.me?.name ?? store.client.actor) · \(kind == "liaison" ? "graded at the source's reliability" : "graded A2 until an analyst corroborates") · time is now").font(.system(size: 11)).foregroundStyle(Theme.dim) }
                 if let problem { Text(problem).font(.system(size: 12)).foregroundStyle(Theme.red) }
             }
             .navigationTitle("SPOTREP")
@@ -60,6 +65,7 @@ struct SpotrepForm: View {
         let text = (lines + (notes.trim().isEmpty ? [] : [notes.trim()])).joined(separator: "\n")
         guard !text.isEmpty else { problem = "Say what you saw."; return }
         var body: [String: Any] = ["text": text, "kind": kind, "reported_by": store.me?.name ?? store.client.actor, "reporter_role": store.me?.role ?? store.client.role]
+        if kind == "liaison", !source.trim().isEmpty { body["liaison_source"] = source.trim() }
         if let la = Double(lat), let lo = Double(lon), abs(la) <= 90, abs(lo) <= 180 { body["lat"] = la; body["lon"] = lo }
         if !place.trim().isEmpty { body["place"] = place.trim() }
         store.act("filing SPOTREP") { try await store.client.fileReport(body) }

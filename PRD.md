@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.40
+**Version:** v3.41
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -372,7 +372,7 @@ at once, which is what a fusion cell is.
 
 The object that carries a request from one staff section to another: S2 asks S3 for a collection asset over an area (a drone over the FARP during the rotation); S3 asks S6 to confirm PACE for an operation; S3 asks S4 for fuel at a site; S3 asks S1 for gate security at a ceremony. A tasking has who asked and who owes, what it is for (an operation, event, requirement, site, or trip), the asset or capability wanted, a window, a priority, and a status — requested → accepted → scheduled → complete, or declined with a reason. Raising one needs edit on the section it comes from; answering needs edit on the section it goes to; the Battle Captain can do either. A tasking whose window has opened and is not complete is late, and reads red. Every step is on the ledger; the handover brief carries what is open per section. Each section's panel on the wall, and each section's tab on the phones, shows what that section owes (with ACCEPT / SCHEDULE / COMPLETE / DECLINE), what it is waiting on, and a RAISE form. **Taskings create things when accepted (v3.29, Decision Y).** The tasking is the ask; the thing the owing section makes to answer it lives on that section's board. Accepting a *collection* tasking on a site, event, or trip opens an S3 operation with a collection skeleton (assign the asset, confirm the window and airspace, brief the requirement, fly and report to S2). Accepting a *supply* tasking books a planned shipment on the S4 board, categorised from the ask, due at the window. Accepting a *comms* or *coverage* (or movement / other) tasking whose subject already has an operation adds a task to it, owned by the answering section; with no operation it stays a plain ask. Each is linked both ways: completing the tasking closes what it made; the shipment arriving, the task done, or the operation closed completes the tasking with the result on it. Both objects log the link. The tasking card shows what it made as a chip that opens it.
 
-### 5.10b Sigtoc as a working section — the live S2 picture **[BUILT, phases 1–4]** (6–17 Sep 2026; plan in `docs/sigtoc-plan.md`)
+### 5.10b Sigtoc as a working section — the live S2 picture **[BUILT, phases 1–5]** (6–17 Sep 2026; plan in `docs/sigtoc-plan.md`)
 
 The plan of 5 September set out the other side of the picture — the red force, the threat overlay, field reporting, pattern analysis, thresholds, IPB products, the decision support matrix — in four phases. Phase 1 landed on 6 September under a boundary the author set the night before (Decision AA): **Sigtoc owns the intelligence objects; Cop Talk displays the live slice and can file reports back in.** Nothing Cop Talk does creates intelligence; a Sigtoc disposition decides what a report becomes.
 
@@ -407,7 +407,12 @@ The plan of 5 September set out the other side of the picture — the red force,
 - **The rated area assessment links to the live picture.** Each candidate place lists the active actors last seen inside it (with sightings in the lookback) and the threat graphics drawn in it. Listed, not scored: a place with an actor in it is shown, not marked down (Decision I holds).
 - **Liaison sources, graded over time** (LOE 5; `sigtoc/liaison.py`, table `s2_liaison_sources`, `/v1/s2/liaison-sources`). A report of kind `liaison` names its source — host-nation police, a venue's security desk, a partner guard force, an installation's police — and an unknown name becomes a source at **F** (cannot be judged). The report carries the source's reliability *at filing*; earlier reports keep the grade they were filed at. The analyst grades the source (A–F, with a note on the history) informed by its **track record**, derived from what became of its reports: corroborated, linked, or promoted count as borne out; dismissed counts against; awaiting disposition is neither. The record never sets the grade. On the wall as *Who else reports to us*; the wall's report form and the iOS SPOTREP form file LIAISON.
 
-**Still open from the plan:** the workbench's actors and sightings as link-chart node types; decision points on the S3 timeline; COA graphic sets as one named overlay; Android's SPOTREP form has no kind selector yet, so it files SPOTREPs only.
+**Phase 5 — the four things the plan left open** (17 Sep):
+
+- **Actors and sightings in the workbench** (§5.11). The case graph now carries the live picture beside the case's own evidence: an **actor is a node** (type `actor`, red, drawn as a diamond), each of its **sightings is a dated event** on the timeline and in the time wheel, and a **derived line** runs from the actor to every entity the same report produced. An actor belongs to a case if it names the case or if one of its sightings came from a report filed into it. The lines are `derived`, not `suggested`: they are the reports' arithmetic, never an analyst's confirmation, so they are drawn dotted, they never enter the review queue, and confirming or rejecting one is refused. A *Live picture* toggle takes them off and leaves the case as the analyst built it. Nothing is stored — it is computed on every read, like a movement risk.
+- **Decision points on the S3 timeline.** The snapshot carries the open and triggered decision points (`snapshot.decision_points`, counted in the summary), and the strip draws a **decision lane** under its axis: a diamond at each *no later than*, amber while open, red once the clock has run out, purple once triggered, with a dashed line down through the movement planned under it. A decision point with no NLT has no place in time and stays in the matrix. Clicking one opens the S2 panel at its row in the DSM.
+- **A COA's graphic set as one named overlay.** On the S2 overlay the wall offers the assessed COAs that carry graphics; picking one brings **its whole set forward under its own name** — the COA's graphics at full strength, the NAIs it says we would see it in drawn heavier, every other graphic, threat, movement and person falling back to context. A COA's graphic ids are checked when it is written: a set that names a graphic nobody drew would come forward as an empty sheet.
+- **The phones file more than a SPOTREP.** Android's form gained the kind selector iOS and the wall already had — SPOTREP (SALUTE), SITREP, NOTE, LIAISON — and both phones now name the **liaison source** on a LIAISON report, so it is graded at that source's reliability (LOE 5) instead of at the reporter's.
 
 ### 5.12 Staff workspaces and AI analysis **[BUILT]** (6–8 Sep 2026; contract in `docs/WORKSPACE_API.md`)
 
@@ -470,7 +475,7 @@ suggested until confirmed.
 **Not in scope.** Ingesting a platform's full event firehose; bulk data fusion; anything that competes with Gotham on
 volume. Cases are case-sized. The value is provenance on every line, not scale.
 
-**Status:** **[BUILT]** model with `Report`/`Case`, entities / relationships / events with evidence on every line, suggest→confirm review queue, analyst-decided alias merges, and the data for all three views (`/cases/{id}/views`: link chart nodes and edges with grade and status, timeline, 7×24 time wheel with the pattern stated as a sentence). Extraction is a cited heuristic (names, handles, plates, phones, emails, association in one sentence) with the model path behind `ANTHROPIC_API_KEY`. **[NEXT]** the pictures themselves; extraction from collected signals, not only reports.
+**Status:** **[BUILT]** model with `Report`/`Case`, entities / relationships / events with evidence on every line, suggest→confirm review queue, analyst-decided alias merges, the three views drawn on the wall (link chart, timeline, 7×24 time wheel with the pattern stated as a sentence; data at `/cases/{id}/views`), and — since 17 Sep — **the live picture inside the case**: actors as node types, their sightings as events, and a derived, cited line from an actor to every entity the same report produced (§5.10b Phase 5). Extraction is a cited heuristic (names, handles, plates, phones, emails, association in one sentence) with the model path behind `ANTHROPIC_API_KEY`. **[NEXT]** extraction from collected signals, not only reports.
 
 ### 5.9 Decisions for §5 (2026-09-02)
 
@@ -720,6 +725,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.41** — 17 Sep: Sigtoc plan phase 5 (§5.10b): actors and sightings as node types in the workbench (§5.11), decision points on the S3 strip, a COA's graphic set as one named overlay, and the phones' report-kind selector with the liaison source named at filing.
 - **v3.40** — 17 Sep: Sigtoc plan phase 4 (§5.10b): the graphic INTSUM's red picture with a map, the area assessment's link to actors and threat graphics, liaison sources graded by the analyst over time (LOE 5).
 - **v3.39** — 16 Sep: Sigtoc plan phase 3 (§5.10b): threat COAs in ICD 203 words, decision points and the DSM, the IPB, the intelligence estimate, Annex B to an operation, all rule-drafted and human-released.
 - **v3.38** — 16 Sep: Sigtoc plan phase 1 on the phones and phase 2 on the wall (§5.10b): RFI tasking kind, collection tasked from an NAI moving PIRs to COLLECTING, the ISR synchronisation view, pattern of life, threshold rules as settings.

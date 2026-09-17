@@ -719,13 +719,23 @@ async def open_case(body: CaseCreate, session: AsyncSession = Depends(get_sessio
     return C.case_dict(c)
 
 
+async def _with_actors(session: AsyncSession, case_id: str, g: Dict[str, Any]) -> Dict[str, Any]:
+    """§5.11 — the case graph with Sigtoc's live picture drawn into it: actors as nodes, sightings as events, and a
+    derived line from an actor to every entity the same report produced. Nothing here is stored or reviewable."""
+    extra = await P.case_actor_view(session, case_id, g["entities"])
+    if not extra["entities"]:
+        return g
+    return {"entities": g["entities"] + extra["entities"], "relationships": g["relationships"] + extra["relationships"],
+            "events": sorted(g["events"] + extra["events"], key=lambda x: x["at"] or "")}
+
+
 @router.get("/cases/{case_id}")
 async def get_case(case_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
     """Every read is on the ledger (Decision Q)."""
     c = await session.get(CaseRow, case_id)
     if not c: raise HTTPException(404, "case not found")
     await _read_logged(c, x_toc_role, x_toc_actor)
-    g = await C.case_graph(session, case_id)
+    g = await _with_actors(session, case_id, await C.case_graph(session, case_id))
     reports = [C.report_dict(r) for r in (await session.execute(select(ReportRow).where(ReportRow.case_id == case_id).order_by(ReportRow.at))).scalars()]
     pending = [x for x in g["entities"] + g["relationships"] + g["events"] if x["status"] == "suggested"]
     return {**C.case_dict(c, {"pending_review": len(pending)}), "graph": g, "reports": reports,
@@ -793,11 +803,11 @@ async def case_views(case_id: str, entity_id: Optional[str] = None, confirmed_on
     c = await session.get(CaseRow, case_id)
     if not c: raise HTTPException(404, "case not found")
     await _read_logged(c, x_toc_role, x_toc_actor)
-    g = await C.case_graph(session, case_id, include=("confirmed",) if confirmed_only else ("suggested", "confirmed"))
+    g = await _with_actors(session, case_id, await C.case_graph(session, case_id, include=("confirmed",) if confirmed_only else ("suggested", "confirmed")))
     return {"case_id": case_id,
-            "link_chart": {"nodes": [{"id": e["id"], "label": e["name"], "type": e["type"], "status": e["status"]} for e in g["entities"]],
-                           "edges": [{"id": r["id"], "from": r["from"], "to": r["to"], "type": r["type"], "status": r["status"], "grade": r["grade"], "dashed": r["status"] != "confirmed"} for r in g["relationships"]]},
-            "timeline": [{"id": v["id"], "at": v["at"], "summary": v["summary"], "participants": v["participants"], "status": v["status"], "place": v["place"]} for v in g["events"]],
+            "link_chart": {"nodes": [{"id": e["id"], "label": e["name"], "type": e["type"], "status": e["status"], "origin": e.get("origin", "case")} for e in g["entities"]],
+                           "edges": [{"id": r["id"], "from": r["from"], "to": r["to"], "type": r["type"], "status": r["status"], "grade": r["grade"], "dashed": r["status"] != "confirmed", "origin": r.get("origin", "case")} for r in g["relationships"]]},
+            "timeline": [{"id": v["id"], "at": v["at"], "summary": v["summary"], "participants": v["participants"], "status": v["status"], "place": v["place"], "type": v["type"], "origin": v.get("origin", "case")} for v in g["events"]],
             "time_wheel": C.time_wheel(g["events"], entity_id),
             "analysis": {"links": C.link_summary(g), "pattern": C.time_wheel(g["events"], entity_id)["pattern"]}}
 
@@ -999,6 +1009,14 @@ class CoaUpdate(BaseModel):
     basis: Optional[str] = None
 
 
+async def _check_coa_graphics(session: AsyncSession, graphic_ids: Optional[List[str]]) -> None:
+    """The graphic set is what the wall draws when the COA is brought up as one overlay, so it has to point at graphics
+    that exist. A COA naming a graphic nobody drew would come forward as an empty sheet."""
+    for gid in graphic_ids or []:
+        if not await session.get(GraphicRow, gid):
+            raise HTTPException(404, f"graphic {gid} not found: a COA's graphic set is what the overlay draws")
+
+
 def _check_coa_words(likelihood: Optional[str], confidence: Optional[str]) -> None:
     if likelihood is not None and likelihood not in B.LIKELIHOOD:
         raise HTTPException(422, f"likelihood is one of the ICD 203 words: {list(B.LIKELIHOOD[1:])}, or unassessed")
@@ -1025,6 +1043,7 @@ async def create_coa(body: CoaCreate, session: AsyncSession = Depends(get_sessio
     s = await B.resolve_subject(session, snap, body.subject_type, body.subject_id)
     if not s: raise HTTPException(404, f"{body.subject_type} {body.subject_id} not on the wall")
     if body.actor_id and not await session.get(S2ActorRow, body.actor_id): raise HTTPException(404, "actor not found")
+    await _check_coa_graphics(session, body.graphic_ids)
     now = R.now_utc()
     c = ThreatCoaRow(id=f"COA-{uuid.uuid4().hex[:6].upper()}", title=body.title.strip(), subject_type=body.subject_type, subject_id=body.subject_id, subject_name=s["name"], actor_id=body.actor_id,
                      narrative=body.narrative, likelihood=body.likelihood, confidence=body.confidence, most_likely=body.most_likely, most_dangerous=body.most_dangerous,
@@ -1042,6 +1061,7 @@ async def update_coa(coa_id: str, body: CoaUpdate, session: AsyncSession = Depen
     c = await session.get(ThreatCoaRow, coa_id)
     if not c: raise HTTPException(404, "COA not found")
     _check_coa_words(body.likelihood, body.confidence)
+    await _check_coa_graphics(session, body.graphic_ids)
     old = c.status; changes: Dict[str, Any] = {}
     for k in ("title", "narrative", "likelihood", "confidence", "basis"):
         v = getattr(body, k)

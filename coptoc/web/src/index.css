@@ -1012,6 +1012,26 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .tl-log { position: relative; height: 12px; margin-top: 2px; background: rgba(148,163,184,.06); border-right: 2px solid var(--red); }
 .tl-ev { position: absolute; top: 2px; width: 3px; height: 8px; border-radius: 1px; transform: translateX(-1px); } .tl-ev.jump { cursor: pointer; } .tl-ev:hover { height: 12px; top: 0; }
 .tl-quiet { position: absolute; left: 6px; top: 0; font: 8.5px var(--mono); letter-spacing: .08em; }
+/* §5.10b Phase 3 — a COA drawn as one named overlay: the button wears the COA's name, the menu marks the one that is up. */
+.ov.coa { white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.ov.coa.sel { border-color: var(--amber); color: var(--amber); }
+.drawmenu.coamenu .drawitem.on { background: rgba(251,191,36,.14); }
+/* the row a decision point lands on when the S3 strip jumps to the matrix */
+.dsm-row.dsm-jump { outline: 1px solid var(--amber); background: rgba(251,191,36,.12); }
+/* §5.10b Phase 3 — the decision lane on the S3 strip: what the commander has to decide, where its clock runs out. Amber
+   while it is open, red once the no-later-than has passed, purple once it has been triggered. Clicking one opens the matrix. */
+.tl-dps { position: relative; height: 14px; margin-top: 2px; border-bottom: 1px dotted var(--line-2); }
+.tl-dps-tag { position: absolute; left: 4px; top: 2px; font: 800 8px var(--mono); letter-spacing: .12em; z-index: 1; }
+.tl-dp { position: absolute; top: 0; display: flex; align-items: center; gap: 3px; height: 13px; padding: 0 4px 0 2px; transform: translateX(-4px);
+  font: 800 8.5px var(--mono); letter-spacing: .06em; white-space: nowrap; cursor: pointer; font-style: normal;
+  color: var(--amber); background: var(--panel); border: 1px solid rgba(251,191,36,.45); border-radius: 2px; z-index: 2; }
+.tl-dp:hover { background: rgba(251,191,36,.18); }
+.tl-dp span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+.tl-dp.overdue { color: var(--red); border-color: rgba(239,68,68,.7); }
+.tl-dp.triggered { color: #e9d5ff; border-color: rgba(192,132,252,.6); }
+.tl-grid.dp { border-left: 1px dashed rgba(251,191,36,.45); z-index: 1; }
+.tl-grid.dp.overdue { border-left-color: rgba(239,68,68,.6); }
+.tl-grid.dp.triggered { border-left-color: rgba(192,132,252,.5); }
 .tl-body { position: relative; overflow-x: hidden; overflow-y: auto; max-height: 112px; }
 .tl-past { position: absolute; top: 0; bottom: 0; background: rgba(148,163,184,.04); }
 .tl-watch { position: absolute; top: 0; bottom: 0; background: rgba(59,130,246,.07); border-right: 1px dashed rgba(96,165,250,.4); }
