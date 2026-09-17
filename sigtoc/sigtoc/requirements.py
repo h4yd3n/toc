@@ -54,7 +54,7 @@ CATALOG: List[Dict[str, Any]] = [
     {"id": "nws",         "name": "NWS / NOAA alerts (US)",      "indicators": ["natural_hazard"],              "access": "free, keyless", "reliability": "A", "cadence": "hourly",  "built": True},
     {"id": "reliefweb",   "name": "ReliefWeb",                   "indicators": ["natural_hazard", "civil_unrest"], "access": "free, keyless", "reliability": "B", "cadence": "daily", "built": False},
     {"id": "acled",       "name": "ACLED",                       "indicators": ["civil_unrest"],                "access": "free key",      "reliability": "B", "cadence": "daily",   "built": True},
-    {"id": "gdelt",       "name": "GDELT",                       "indicators": ["civil_unrest", "crowd"],       "access": "free",          "reliability": "C", "cadence": "hourly",  "built": False},
+    {"id": "gdelt",       "name": "GDELT",                       "indicators": ["civil_unrest", "crowd"],       "access": "free, keyless", "reliability": "C", "cadence": "hourly",  "built": True},
     {"id": "clstr",       "name": "CLSTR news clusters",         "indicators": ["civil_unrest", "crowd", "targeted"], "access": "free key, 100/day", "reliability": "F", "cadence": "every few hours", "built": True},
     {"id": "who_don",     "name": "WHO Disease Outbreak News",   "indicators": ["health"],                      "access": "free RSS",      "reliability": "A", "cadence": "daily",   "built": True},
     {"id": "state_dept",  "name": "State Dept advisories (RSS)", "indicators": ["advisory"],                    "access": "free",          "reliability": "A", "cadence": "daily",   "built": True},

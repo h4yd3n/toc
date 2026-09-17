@@ -2,7 +2,7 @@
 import os
 from typing import Any, Awaitable, Callable, Dict, List, Sequence, Tuple
 
-from . import acled, clstr, fcdo, frontier_cti, nws, state_dept, usgs, who_don
+from . import acled, clstr, fcdo, frontier_cti, gdelt, nws, state_dept, usgs, who_don
 from .gdacs import collect_gdacs
 
 Points = Sequence[Tuple[float, float]]
@@ -18,6 +18,7 @@ COLLECTORS: Dict[str, Dict[str, Any]] = {
     "acled":        {"scope": "point",   "run": lambda p, c: acled.collect_acled(p, c), "configured": acled.configured},
     "clstr":        {"scope": "country", "run": lambda p, c: clstr.collect_clstr(p, c), "configured": clstr.configured},
     "frontier_cti": {"scope": "country", "run": lambda p, c: frontier_cti.collect_frontier_cti(p, c), "configured": frontier_cti.configured},
+    "gdelt":        {"scope": "country", "run": lambda p, c: gdelt.collect_gdelt(p, c)},
 }
 
 

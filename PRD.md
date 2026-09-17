@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.46
+**Version:** v3.47
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -339,7 +339,7 @@ Domains held for deployment: **coptoc.com**, **sigtoc.com**, **modtoc.com** — 
 | Earthquakes | USGS | free, keyless | **[BUILT]** live — M6+ anywhere, anything within 400 km of a blue-force point |
 | Severe weather (US) | NWS / NOAA alerts | free, keyless | **[BUILT]** live — polygon alerts within 150 km; zone-only alerts resolved through the zone endpoint, cached, at most 25 lookups per run |
 | Humanitarian / conflict situation | ReliefWeb API | free, needs an approved `appname` | **[LATER]** — v1 is decommissioned and v2 refuses unregistered app names |
-| Civil unrest, political violence | ACLED · GDELT | free key + email · free | ACLED **[BUILT]**, live when `ACLED_API_KEY` + `ACLED_EMAIL` are set (parser follows the documented shape; untested live). GDELT **[LATER]** — the GEO API is gone and the DOC API is rate-limited and has no coordinates |
+| Civil unrest, political violence | ACLED · GDELT | free key + email · free, keyless | ACLED **[BUILT]**, live when `ACLED_API_KEY` + `ACLED_EMAIL` are set (parser follows the documented shape; untested live). GDELT **[BUILT 17 Sep]** on the DOC 2.0 API, graded C and country-scoped: the GEO API that carried coordinates is gone, so an item is *press reporting*, not an observed event — it is placed at our own ground in that country like every other country-scoped source, says so in its own summary, and two articles about one protest stay two articles until an analyst says otherwise |
 | Clustered news events by country, with timelines | CLSTR (clstr.news) — a new, single-maintainer service; multi-source clusters and "situations", ~30–90 min behind the wires by design | free key, 100 req/day, 7-day history | **[BUILT]** trial, live when `CLSTR_API_KEY` is set; country-scoped; source reliability **F** until it earns a grade; its significance score is theirs, never ours |
 | Health notices | WHO Disease Outbreak News | free JSON (the RSS is gone) | **[BUILT]** live — country-scoped |
 | Travel advisories | State Dept RSS · FCDO Atom | free | **[BUILT]** live — country-scoped; level 3–4 / advise-against draw a ring at our site in that country, lower levels a marker only |
@@ -666,7 +666,7 @@ COP never writes back to a source system.
 | S2 | Natural hazards | GDACS (UN OCHA / EC JRC) — free, keyless | **[BUILT]** live |
 | S2 | Earthquakes, severe weather | USGS earthquake feed, NWS/NOAA alerts, national met services | USGS + NWS **[BUILT]** live |
 | S2 | Country and city advisories | State Dept, FCDO, OSAC | State Dept + FCDO **[BUILT]** live, country-scoped; OSAC **[LATER]** (login) |
-| S2 | Civil unrest, crime, conflict events | ACLED, GDELT, news RSS | ACLED **[BUILT]** (key); CLSTR **[BUILT]** (key); GDELT **[LATER]** |
+| S2 | Civil unrest, crime, conflict events | ACLED, GDELT, news RSS | ACLED **[BUILT]** (key); CLSTR **[BUILT]** (key); GDELT **[BUILT]** (keyless, articles not events) |
 | S2 | Targeted threats, online chatter | Commercial intel (Flashpoint, Recorded Future, Dataminr) | **[LATER]** premium connectors |
 | S6 | Contact channel | Phone/SMS (Twilio), Slack, mass-notification (Everbridge) | tel: links, outbound SMS + Slack, inbound SMS **[BUILT]** (simulated without credentials) — Everbridge **[LATER]** |
 
@@ -729,6 +729,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.47** — 17 Sep: the GDELT DOC 2.0 collector (§5.3, §13), keyless and country-scoped, carrying press reporting as press reporting at grade C.
 - **v3.46** — 17 Sep: the sign-in layer (§9, README): scrypt passwords, bearer tokens signed with `TOC_SECRET`, `TOC_AUTH=on` refusing header identity, and startup guards against the dev secret and an open CORS policy.
 - **v3.45** — 17 Sep: intake beyond S4 (§5.13): document kinds, S6 maintenance notices into the comms board, and the retention rule that purges an original while keeping the decision.
 - **v3.44** — 17 Sep: four of §5.12's remaining items (`docs/WORKSPACE_API.md`): typed case-graph proposals a human applies after review, operation/requirement assignment scopes, repeat suppression across assignments, and case matching for loose reporting.
