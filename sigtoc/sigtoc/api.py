@@ -1,7 +1,7 @@
 """Sigtoc's own API (Decision 3a). Mounted into the COP app under /v1/s2 and runnable standalone: `make run-s2`."""
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
@@ -463,6 +463,74 @@ async def attach_report(report_id: str, body: AttachReport, session: AsyncSessio
         await session.commit()
         await ledger().append_event(content_id=c.id, event_type="s2.report.attached", actor_type="human", actor_id=x_toc_actor or x_toc_role, reason=f"Attached {r.id} to {c.title}")
     return C.report_dict(r)
+
+
+class AttachSignal(BaseModel):
+    signal_id: str          # a collected threat's id: the signal the collectors brought in
+
+
+@router.get("/cases/{case_id}/signals")
+async def case_signal_candidates(case_id: str, days: int = 30, limit: int = 40, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """§5.11 — the collected signals an analyst could read into this case: what the collectors brought in over the
+    lookback, newest first, with the grade each would be filed at and whether it is already in the case."""
+    from coptoc.db_models import ThreatRow
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    await _read_logged(c, x_toc_role, x_toc_actor)
+    cut = R.now_utc() - timedelta(days=max(1, min(days, 365)))
+    rows = [t for t in (await session.execute(select(ThreatRow).order_by(ThreatRow.observed_at.desc()))).scalars() if t.observed_at >= cut][:max(1, min(limit, 200))]
+    grades = await _source_grades(session)
+    filed = await _filed_signal_ids(session, case_id)
+    return [{"id": t.id, "title": t.title, "summary": t.summary, "source": t.source, "severity": t.severity, "country": t.country,
+             "url": t.url, "synthetic": bool(t.synthetic), "observed_at": R.iso(t.observed_at),
+             "grade": f"{grades.get(t.source, 'F')}6", "filed": t.id in filed} for t in rows]
+
+
+async def _source_grades(session: AsyncSession) -> Dict[str, str]:
+    """The reliability each source is graded at in the collection plan — the analyst's setting, not a guess (Decision K).
+    Keyed by the name a collected threat carries in `source`, matched against the catalog's id and name."""
+    out: Dict[str, str] = {}
+    for c in await R.catalog(session):
+        for key in (c["id"], c["name"]):
+            out[key] = c["reliability"]
+            out[key.lower()] = c["reliability"]
+    return out
+
+
+async def _filed_signal_ids(session: AsyncSession, case_id: str) -> set:
+    """Which signals this case has already read: the ids cited in its evidence."""
+    ids = set()
+    for model in (EntityRow, RelationshipRow, CaseEventRow):
+        for row in (await session.execute(select(model).where(model.case_id == case_id))).scalars():
+            for ev in json.loads(row.evidence_json or "[]"):
+                if ev.get("signal_id"): ids.add(ev["signal_id"])
+    return ids
+
+
+@router.post("/cases/{case_id}/signals", status_code=201)
+async def file_signal_into_case(case_id: str, body: AttachSignal, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """§5.11 — read a collected signal into the case graph. Same extraction as a report and the same rule (Decision P):
+    everything it produces is `suggested` until the analyst confirms it, and every line cites the signal it came from.
+    The grade is the collection plan's reliability for that source over credibility 6: one uncorroborated open-source
+    item says nothing about whether it is true, and corroborating it is the analyst's act, not the machine's."""
+    from coptoc.db_models import ThreatRow
+    if (x_toc_role or "").lower() not in CASE_OPENERS:
+        raise HTTPException(403, "Reading a collected signal into a case is the analyst's or the Battle Captain's")
+    c = await session.get(CaseRow, case_id)
+    if not c: raise HTTPException(404, "case not found")
+    if c.status != "open": raise HTTPException(409, "case is closed")
+    t = await session.get(ThreatRow, body.signal_id)
+    if not t: raise HTTPException(404, "signal not found")
+    await _read_logged(c, x_toc_role, x_toc_actor)
+    if body.signal_id in await _filed_signal_ids(session, case_id):
+        raise HTTPException(409, "that signal is already in this case")
+    grade = (await _source_grades(session)).get(t.source, "F")
+    known = [e.name for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == c.id, EntityRow.status == "confirmed"))).scalars()]
+    extracted = await C.file_signal_into_case(session, t, c, known, grade)
+    await ledger().append_event(content_id=c.id, event_type="s2.signal.filed", actor_type="human", actor_id=x_toc_actor or x_toc_role,
+                                reason=f"{t.source}: {t.title[:100]} — suggested {extracted['entities']} entities, {extracted['relationships']} links, {extracted['events']} events",
+                                metadata={"signal_id": t.id, "grade": f"{grade}6", **extracted})
+    return {"case_id": case_id, "signal_id": t.id, "grade": f"{grade}6", "source": t.source, "extracted": extracted}
 
 
 @router.get("/actors")

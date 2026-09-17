@@ -197,7 +197,8 @@ export interface Coverage { requirements: number; fully_covered: number; avg_cov
 export interface SourceInfo { id: string; name: string; indicators: string[]; access: string; reliability: string; cadence: string; built: boolean; enabled: boolean; configured: boolean; last_collected_at: string | null; last_result: string | null; cadences: string[] }
 
 // §5.10 / §5.11 — organic reports and the case graph
-export interface Evidence { report_id: string; quote: string; source: string; reliability: string; credibility: number; at: string | null }
+/** §5.11 — every line traces to what it came from: a report from our own people, or a collected signal. */
+export interface Evidence { report_id?: string; signal_id?: string; quote: string; source: string; reliability: string; credibility: number; at: string | null }
 /** §5.11 — `origin: 'sigtoc'` is the live picture drawn into the case: an actor, a sighting, or the line between the
  *  two. It is derived on read, never reviewed, and never enters the confirm/reject queue. */
 export type CaseOrigin = 'case' | 'sigtoc'
@@ -205,6 +206,8 @@ export type CaseStatus = 'suggested' | 'confirmed' | 'rejected' | 'derived'
 export interface CaseEntity { id: string; type: string; name: string; aliases: string[]; status: CaseStatus; evidence: Evidence[]; decided_by: string | null; origin?: CaseOrigin; attributes?: Record<string, string> }
 export interface CaseRel { id: string; from: string; to: string; type: string; status: CaseStatus; grade: string; evidence: Evidence[]; from_name?: string; to_name?: string; first_seen: string | null; last_seen: string | null; origin?: CaseOrigin }
 export interface CaseEvent { id: string; at: string | null; place: string | null; type: string; summary: string; participants: string[]; status: CaseStatus; evidence: Evidence[]; origin?: CaseOrigin; confidence?: string }
+/** §5.11 — a collected signal an analyst may read into a case: what the collectors brought in, and the grade it files at. */
+export interface CaseSignal { id: string; title: string; summary: string; source: string; severity: string; country: string | null; url: string | null; synthetic: boolean; observed_at: string; grade: string; filed: boolean }
 export interface Report { id: string; kind: string; reported_by: string; reporter_role: string; at: string; place: string | null; text: string; case_id: string | null; grade: string; source: string }
 export interface Case { id: string; title: string; kind: 'general' | 'person' | 'site' | 'actor'; subject_type: string | null; subject_id: string | null; summary: string; status: 'open' | 'closed'
   opened_by: string; opened_at: string; closed_at: string | null; access_roles: string[]; entities?: number; relationships?: number; events?: number; pending_review?: number }

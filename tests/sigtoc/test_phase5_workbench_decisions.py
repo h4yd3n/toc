@@ -172,3 +172,32 @@ def test_the_field_can_file_every_report_kind_the_phones_now_offer(client, kind)
         assert d["source"].startswith("liaison:") and d["grade"] == "F2" and d["liaison_source"]["name"] == "SFPD Southern Station"
     else:
         assert d["grade"] == "A2" and d["source"] == "ops"
+
+
+# ---------------------------------------------------------------- §5.11 — collected signals read into a case
+
+def test_a_collected_signal_can_be_read_into_a_case_cited_and_suggested(client):
+    """The workbench's [NEXT]: extraction from collected signals, not only reports. Same extraction, same rule."""
+    cands = client.get(f"/v1/s2/cases/{CASE}/signals", headers=AN)
+    assert cands.status_code == 200, cands.text
+    rows = cands.json()
+    assert rows and all(not r["filed"] for r in rows)
+    # the grade is the collection plan's reliability for that source over credibility 6 — cannot be judged
+    assert all(r["grade"].endswith("6") for r in rows)
+    sig = rows[0]
+    r = client.post(f"/v1/s2/cases/{CASE}/signals", json={"signal_id": sig["id"]}, headers=AN)
+    assert r.status_code == 201, r.text
+    d = r.json()
+    assert d["signal_id"] == sig["id"] and d["grade"] == sig["grade"] and d["extracted"]["events"] >= 1
+    # every line it produced cites the signal, not a report, and waits for the analyst
+    g = client.get(f"/v1/s2/cases/{CASE}", headers=AN).json()["graph"]
+    from_signal = [x for x in g["entities"] + g["relationships"] + g["events"] if any(v.get("signal_id") == sig["id"] for v in x["evidence"])]
+    assert from_signal, "the signal should have produced at least the event it is"
+    assert {x["status"] for x in from_signal} == {"suggested"}, "Decision P: the machine suggests, the analyst confirms"
+    ev = from_signal[0]["evidence"][0]
+    assert ev["signal_id"] == sig["id"] and "report_id" not in ev and ev["credibility"] == 6 and ev["quote"]
+    # it shows as filed, and reading it twice is refused rather than duplicating the graph
+    assert next(x for x in client.get(f"/v1/s2/cases/{CASE}/signals", headers=AN).json() if x["id"] == sig["id"])["filed"]
+    assert client.post(f"/v1/s2/cases/{CASE}/signals", json={"signal_id": sig["id"]}, headers=AN).status_code == 409
+    assert client.post(f"/v1/s2/cases/{CASE}/signals", json={"signal_id": "thr_nope"}, headers=AN).status_code == 404
+    assert client.post(f"/v1/s2/cases/{CASE}/signals", json={"signal_id": sig["id"]}, headers=SEC).status_code == 403

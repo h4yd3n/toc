@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.42
+**Version:** v3.43
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -477,7 +477,9 @@ suggested until confirmed.
 **Not in scope.** Ingesting a platform's full event firehose; bulk data fusion; anything that competes with Gotham on
 volume. Cases are case-sized. The value is provenance on every line, not scale.
 
-**Status:** **[BUILT]** model with `Report`/`Case`, entities / relationships / events with evidence on every line, suggest→confirm review queue, analyst-decided alias merges, the three views drawn on the wall (link chart, timeline, 7×24 time wheel with the pattern stated as a sentence; data at `/cases/{id}/views`), and — since 17 Sep — **the live picture inside the case**: actors as node types, their sightings as events, and a derived, cited line from an actor to every entity the same report produced (§5.10b Phase 5). Extraction is a cited heuristic (names, handles, plates, phones, emails, association in one sentence) with the model path behind `ANTHROPIC_API_KEY`. **[NEXT]** extraction from collected signals, not only reports.
+**Status:** **[BUILT]** model with `Report`/`Case`, entities / relationships / events with evidence on every line, suggest→confirm review queue, analyst-decided alias merges, the three views drawn on the wall (link chart, timeline, 7×24 time wheel with the pattern stated as a sentence; data at `/cases/{id}/views`), and — since 17 Sep — **the live picture inside the case**: actors as node types, their sightings as events, and a derived, cited line from an actor to every entity the same report produced (§5.10b Phase 5). Extraction is a cited heuristic (names, handles, plates, phones, emails, association in one sentence) with the model path behind `ANTHROPIC_API_KEY`.
+
+**Collected signals feed the graph too (17 Sep).** Evidence was always *a `report_id` **or** a `signal_id`*; now both exist. `GET /cases/{id}/signals` lists what the collectors brought in over a lookback with the grade each would file at and whether the case already holds it; `POST /cases/{id}/signals` reads one in. The extraction, the review queue and Decision P are the same as for a report — the machine suggests, the analyst confirms — and the only differences are the citation (`signal_id`, with the collected text as the quote) and the grade: **the collection plan's reliability for that source over credibility 6**. Six is *cannot be judged*, and it is the honest floor for one uncorroborated open-source item; raising it is the analyst's act, not the machine's. A signal is refused a second time rather than duplicating the graph, and the wall offers it as a SIGNALS tab in the case.
 
 ### 5.9 Decisions for §5 (2026-09-02)
 
@@ -727,6 +729,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.43** — 17 Sep: the workbench reads collected signals, not only organic reports (§5.11): `signal_id` evidence, the signals tab on a case, the source's plan grade over credibility 6.
 - **v3.42** — 17 Sep: the staff products on the phones (§5.10b): the decision points under S2 and S3 with TRIGGERED / PASSED where the watch stands, the COAs, the liaison sources, and the products' status on iOS and Android.
 - **v3.41** — 17 Sep: Sigtoc plan phase 5 (§5.10b): actors and sightings as node types in the workbench (§5.11), decision points on the S3 strip, a COA's graphic set as one named overlay, and the phones' report-kind selector with the liaison source named at filing.
 - **v3.40** — 17 Sep: Sigtoc plan phase 4 (§5.10b): the graphic INTSUM's red picture with a map, the area assessment's link to actors and threat graphics, liaison sources graded by the analyst over time (LOE 5).

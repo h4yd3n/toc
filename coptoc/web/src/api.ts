@@ -1,4 +1,4 @@
-import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
+import type { CaseSignal, Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -93,6 +93,9 @@ export const latestAnnex = (operation_id: string) => req<StaffProduct>('GET', `/
 export const listStaffProducts = (kind?: string) => req<StaffProductHead[]>('GET', kind ? `/v1/s2/staff-products?kind=${kind}` : '/v1/s2/staff-products')
 export const getStaffProduct = (id: string) => req<StaffProduct>('GET', `/v1/s2/staff-products/${id}`)
 export const setStaffProductStatus = (id: string, status: 'draft' | 'review' | 'approved' | 'released', notes?: string) => req<StaffProduct>('PATCH', `/v1/s2/staff-products/${id}`, { status, notes })
+// §5.11 — collected signals read into a case: the candidates, and the one act that files one
+export const caseSignals = (caseId: string, days = 30) => req<CaseSignal[]>('GET', `/v1/s2/cases/${caseId}/signals?days=${days}`)
+export const fileSignalIntoCase = (caseId: string, signal_id: string) => req<{ case_id: string; signal_id: string; grade: string; source: string; extracted: { entities: number; relationships: number; events: number; evidence_added: number } }>('POST', `/v1/s2/cases/${caseId}/signals`, { signal_id })
 export const listLiaisonSources = () => req<LiaisonSource[]>('GET', '/v1/s2/liaison-sources')
 export const createLiaisonSource = (body: { name: string; kind?: string; reliability?: string; notes?: string }) => req<LiaisonSource>('POST', '/v1/s2/liaison-sources', body)
 export const gradeLiaisonSource = (id: string, body: { reliability?: string; kind?: string; notes?: string; note?: string }) => req<LiaisonSource>('PATCH', `/v1/s2/liaison-sources/${id}`, body)

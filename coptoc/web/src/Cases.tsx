@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as api from './api'
 import { CaseVisuals } from './CaseVisuals'
-import type { Case, CaseDetail, CaseEntity, Evidence, Queue, Role } from './types'
+import type { Case, CaseDetail, CaseEntity, CaseSignal, Evidence, Queue, Role } from './types'
 
 const CASE_OPENERS = ['battle_captain', 'analyst']
 const REPORT_FILERS = ['battle_captain', 'security', 'analyst', 'ea', 'ep']
@@ -44,16 +44,17 @@ export function CasesPanel({ reload, busy, act, role, onChanged, selectedCase, o
 function Cite({ ev }: { ev: Evidence[] }) {
   const e = ev[0]
   if (!e) return null
-  return <span className="cite dim" title={ev.map(x => `${x.report_id} [${x.reliability}${x.credibility}]: “${x.quote}”`).join('\n')}>[{e.reliability}{e.credibility}] “{e.quote.length > 70 ? e.quote.slice(0, 70) + '…' : e.quote}”{ev.length > 1 && ` +${ev.length - 1}`}</span>
+  return <span className="cite dim" title={ev.map(x => `${x.report_id ?? `signal ${x.signal_id}`} [${x.reliability}${x.credibility}]: “${x.quote}”`).join('\n')}>[{e.reliability}{e.credibility}] “{e.quote.length > 70 ? e.quote.slice(0, 70) + '…' : e.quote}”{ev.length > 1 && ` +${ev.length - 1}`}</span>
 }
 
 /** The review queue is the v1 workbench (§5.11): every suggested fact with its citation, and the three views' findings as sentences. */
 function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy: string | null; act: Act; role: Role; reload: number; onChanged: () => void }) {
   const [d, setD] = useState<CaseDetail | null>(null)
   const [q, setQ] = useState<Queue | null>(null)
-  const [tab, setTab] = useState<'queue' | 'graph' | 'reports'>('queue')
+  const [tab, setTab] = useState<'queue' | 'graph' | 'reports' | 'signals'>('queue')
+  const [signals, setSignals] = useState<CaseSignal[]>([])
   const [mergeFrom, setMergeFrom] = useState<CaseEntity | null>(null)
-  const load = () => { api.getCase(id).then(setD).catch(() => setD(null)); api.getQueue(id).then(setQ).catch(() => setQ(null)) }
+  const load = () => { api.getCase(id).then(setD).catch(() => setD(null)); api.getQueue(id).then(setQ).catch(() => setQ(null)); api.caseSignals(id).then(setSignals).catch(() => setSignals([])) }
   useEffect(() => { load() }, [id, reload])
   const can = CASE_OPENERS.includes(role)
   const decideThen = (kind: 'entity' | 'relationship' | 'event', item: string, decision: 'confirm' | 'reject') => act(`${decision}ing`, () => api.decide(id, kind, item, decision).then(() => { load(); onChanged() }))
@@ -62,7 +63,7 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
   return (
     <div className="plan casev" onClick={e => e.stopPropagation()}>
       <div className="tabs">
-        {(['queue', 'graph', 'reports'] as const).map(t => <button key={t} className={`chip btn ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>{t.toUpperCase()}{t === 'queue' && q ? ` ${q.total}` : ''}</button>)}
+        {(['queue', 'graph', 'reports', 'signals'] as const).map(t => <button key={t} className={`chip btn ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>{t.toUpperCase()}{t === 'queue' && q ? ` ${q.total}` : ''}{t === 'signals' && signals.length ? ` ${signals.filter(x => !x.filed).length}` : ''}</button>)}
         {can && d.status === 'open' && <button className="mini" disabled={!!busy} onClick={() => act('closing case', () => api.closeCase(id).then(onChanged))}>CLOSE CASE</button>}
       </div>
       {tab === 'queue' && q && <>
@@ -86,6 +87,20 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
         </div>)}
       </>}
       {tab === 'graph' && <CaseVisuals detail={d} />}
+      {/* §5.11 — the collected signals an analyst can read into the case. Same extraction as a report, same rule:
+          everything it finds is suggested until confirmed, and every line cites the signal it came from. */}
+      {tab === 'signals' && <>
+        <div className="dim small">What the collectors brought in over the last 30 days. Reading one in extracts from its text the same way a SPOTREP is read, cited to the signal and graded at the source&apos;s reliability over credibility 6 — one uncorroborated open-source item says nothing about whether it is true.</div>
+        {signals.length === 0 && <div className="dim small">Nothing collected in the window.</div>}
+        {signals.map(g => <div key={g.id} className="qitem">
+          <span className={`chip small ${g.severity === 'critical' || g.severity === 'elevated' ? 'amber' : ''}`}>{g.severity.toUpperCase()}</span>
+          <span className="qname" title={g.summary}>{g.title}</span>
+          <span className="cite dim">{g.source}{g.synthetic ? ' · synthetic' : ''} · {g.grade} · {when(g.observed_at)}</span>
+          {can && <span className="qbtns">{g.filed
+            ? <span className="chip small green">IN THIS CASE</span>
+            : <button className="mini ok" disabled={!!busy || d.status !== 'open'} onClick={() => act('reading the signal into the case', () => api.fileSignalIntoCase(id, g.id).then(() => { load(); onChanged() }))}>READ IN</button>}</span>}
+        </div>)}
+      </>}
       {tab === 'reports' && <>
         {d.reports.length === 0 && <div className="dim small">No reports filed into this case.</div>}
         {d.reports.map(r => <div key={r.id} className="rpt"><div className="rpt-head"><span className="chip small">{r.kind.toUpperCase()}</span> <span>{r.reported_by}{r.reporter_role && <span className="dim"> · {r.reporter_role}</span>}</span> <span className="chip small green">{r.grade}</span> <span className="dim">{when(r.at)}{r.place ? ` · ${r.place}` : ''}</span></div><div className="rpt-text">{r.text}</div></div>)}

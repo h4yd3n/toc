@@ -5,6 +5,7 @@ needs the Battle Captain or the S2 lead, and every read of a case goes on the le
 timeline, and time wheel are renderings of this graph — the data for all three is served here (§5.11)."""
 import json
 import os
+from dataclasses import dataclass
 
 from shared import settings
 import re
@@ -123,8 +124,44 @@ class CaseEventRow(Base):
 
 # ---------------------------------------------------------------- evidence
 
+@dataclass
+class Source:
+    """What an extraction reads and cites. §5.11's Evidence is a `report_id` **or** a `signal_id`: an organic report
+    from our own people, or a signal a collector brought in. Everything downstream — the entities, the links, the
+    events, the review queue — is identical; only the citation and the grade differ."""
+    key: str            # "report_id" or "signal_id"
+    id: str
+    text: str
+    at: datetime
+    kind: str           # the event type an extracted event takes: spot | sitrep | note | liaison | signal
+    source: str         # "ops" for our own people, the collector's name for a signal
+    reliability: str    # A–F: our own people are A; a source is graded in the collection plan (Decision K)
+    credibility: int    # 1–6
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    place: Optional[str] = None
+
+
+def source_of_report(r: ReportRow) -> Source:
+    return Source(key="report_id", id=r.id, text=r.text, at=r.at, kind=r.kind, source=r.source,
+                  reliability=r.reliability, credibility=r.credibility, lat=r.lat, lon=r.lon, place=r.place)
+
+
+def source_of_signal(threat: Any, reliability: str) -> Source:
+    """A collected signal read into a case (§5.11 [NEXT]). The reliability is the grade the collection plan carries
+    for that source — the analyst's own setting (Decision K) — and the credibility is **6, cannot be judged**: one
+    open-source item, uncorroborated, says nothing about whether it is true. Corroborating it is the analyst's act."""
+    return Source(key="signal_id", id=threat.id, text=f"{threat.title}. {threat.summary}".strip(), at=threat.observed_at,
+                  kind="signal", source=threat.source, reliability=reliability, credibility=6,
+                  lat=threat.lat, lon=threat.lon, place=threat.country)
+
+
+def evidence_from(src: Source, quote: str) -> Dict[str, Any]:
+    return {src.key: src.id, "quote": quote[:240], "source": src.source, "reliability": src.reliability, "credibility": src.credibility, "at": iso(src.at)}
+
+
 def evidence_from_report(r: ReportRow, quote: str) -> Dict[str, Any]:
-    return {"report_id": r.id, "quote": quote[:240], "source": r.source, "reliability": r.reliability, "credibility": r.credibility, "at": iso(r.at)}
+    return evidence_from(source_of_report(r), quote)
 
 
 # ---------------------------------------------------------------- extraction — suggests, never asserts
@@ -132,7 +169,7 @@ def evidence_from_report(r: ReportRow, quote: str) -> Dict[str, Any]:
 HANDLE = re.compile(r"(?<![\w@])@([A-Za-z0-9_]{3,30})")
 PHONE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-PLATE = re.compile(r"\b(?:plate|license|licence|reg(?:istration)?)\s*[:#]?\s*([A-Z0-9]{2,4}[- ]?[A-Z0-9]{2,4})\b", re.I)
+PLATE = re.compile(r"\b(?:plate|license|licence|reg(?:istration)?)\b\s*[:#]?\s*([A-Z0-9]{2,4}[- ]?[A-Z0-9]{2,4})\b", re.I)  # \b after the word: "REGIONAL" is not a plate
 NAME = re.compile(r"\b((?:[A-Z][a-z]+|[A-Z]\.)(?:\s(?:[A-Z][a-z]+|[A-Z]\.)){1,2})\b")  # "Marcus Vane", "M. Vane", "J. R. Ortiz"
 NOT_NAMES = {"North America", "South America", "United States", "New York", "San Francisco", "Battle Captain", "Security Officer",
              "Executive Protection", "Watch Floor", "Market Street", "Front Desk", "North Gate", "South Gate"}
@@ -142,16 +179,16 @@ ASSOC = re.compile(r"\b(with|alongside|together with|accompanied by|meeting|met|
 TIME_HINT = re.compile(r"\b(\d{1,2}:\d{2})\b")
 
 
-def heuristic_extract(report: ReportRow, known_names: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+def heuristic_extract(src: Source, known_names: List[str]) -> Dict[str, List[Dict[str, Any]]]:
     """Cheap, honest extraction for when there is no model: handles, phones, emails, plates, capitalized names, and an
     `associate` link between two people named in the same sentence with an association word. Every item is cited."""
-    text = report.text
+    text = src.text
     ents: List[Dict[str, Any]] = []
     seen = set()
     def add(t, name, sentence):
         key = (t, name.lower())
         if key in seen: return
-        seen.add(key); ents.append({"type": t, "name": name, "evidence": evidence_from_report(report, sentence)})
+        seen.add(key); ents.append({"type": t, "name": name, "evidence": evidence_from(src, sentence)})
     sentences = re.split(r"(?<!\b[A-Z]\.)(?<=[.!?])\s+", text)  # don't split on an initial ("M. Vane")
     for s in sentences:
         for m in HANDLE.finditer(s): add("account", "@" + m.group(1), s)
@@ -176,10 +213,10 @@ def heuristic_extract(report: ReportRow, known_names: List[str]) -> Dict[str, Li
         if len(people) >= 2 and ASSOC.search(s):
             for i in range(len(people)):
                 for j in range(i + 1, len(people)):
-                    rels.append({"from": people[i]["name"], "to": people[j]["name"], "type": "associate", "evidence": evidence_from_report(report, s)})
-    events = [{"at": iso(report.at), "lat": report.lat, "lon": report.lon, "place": report.place, "type": report.kind,
+                    rels.append({"from": people[i]["name"], "to": people[j]["name"], "type": "associate", "evidence": evidence_from(src, s)})
+    events = [{"at": iso(src.at), "lat": src.lat, "lon": src.lon, "place": src.place, "type": src.kind,
                "summary": sentences[0][:200] if sentences else text[:200], "participants": [e["name"] for e in ents if e["type"] in ("person", "account")][:6],
-               "evidence": evidence_from_report(report, sentences[0] if sentences else text)}]
+               "evidence": evidence_from(src, sentences[0] if sentences else text)}]
     return {"entities": ents, "relationships": rels, "events": events}
 
 
@@ -191,7 +228,7 @@ Every item must carry the exact quote from the report that supports it. Do not i
 do not add anything the text does not say. Everything you return will be shown to a human as a suggestion.""" % (list(ENTITY_TYPES), list(RELATIONSHIP_TYPES))
 
 
-async def model_extract(report: ReportRow) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+async def model_extract(src: Source) -> Optional[Dict[str, List[Dict[str, Any]]]]:
     try:
         from anthropic import AsyncAnthropic
     except ImportError:
@@ -199,18 +236,18 @@ async def model_extract(report: ReportRow) -> Optional[Dict[str, List[Dict[str, 
     try:
         client = AsyncAnthropic(api_key=settings.get("ANTHROPIC_API_KEY"))
         resp = await client.messages.create(model=settings.get("TOC_MODEL") or "claude-opus-5", max_tokens=2048, system=SYSTEM,
-                                            messages=[{"role": "user", "content": report.text}])
+                                            messages=[{"role": "user", "content": src.text}])
         if resp.stop_reason == "refusal":
             return None
         text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", "") == "text")
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
-        ents = [{"type": e["type"] if e.get("type") in ENTITY_TYPES else "person", "name": str(e["name"]).strip(), "evidence": evidence_from_report(report, str(e.get("quote", "")))}
+        ents = [{"type": e["type"] if e.get("type") in ENTITY_TYPES else "person", "name": str(e["name"]).strip(), "evidence": evidence_from(src, str(e.get("quote", "")))}
                 for e in data.get("entities", []) if e.get("name")]
-        rels = [{"from": r["from"], "to": r["to"], "type": r["type"] if r.get("type") in RELATIONSHIP_TYPES else "associate", "evidence": evidence_from_report(report, str(r.get("quote", "")))}
+        rels = [{"from": r["from"], "to": r["to"], "type": r["type"] if r.get("type") in RELATIONSHIP_TYPES else "associate", "evidence": evidence_from(src, str(r.get("quote", "")))}
                 for r in data.get("relationships", []) if r.get("from") and r.get("to")]
-        evs = [{"at": iso(report.at), "lat": report.lat, "lon": report.lon, "place": report.place, "type": report.kind, "summary": str(e.get("summary", ""))[:200],
-                "participants": [str(p) for p in e.get("participants", [])][:6], "evidence": evidence_from_report(report, str(e.get("quote", "")))} for e in data.get("events", [])]
-        return {"entities": ents, "relationships": rels, "events": evs or heuristic_extract(report, [])["events"]}
+        evs = [{"at": iso(src.at), "lat": src.lat, "lon": src.lon, "place": src.place, "type": src.kind, "summary": str(e.get("summary", ""))[:200],
+                "participants": [str(p) for p in e.get("participants", [])][:6], "evidence": evidence_from(src, str(e.get("quote", "")))} for e in data.get("events", [])]
+        return {"entities": ents, "relationships": rels, "events": evs or heuristic_extract(src, [])["events"]}
     except Exception:  # noqa: BLE001
         return None
 
@@ -222,11 +259,21 @@ def use_model() -> bool:
 # ---------------------------------------------------------------- filing into a case
 
 async def file_report_into_case(session: AsyncSession, report: ReportRow, case: CaseRow, known_names: List[str]) -> Dict[str, int]:
-    """Extract from the report and add everything as `suggested`. Existing confirmed entities with the same name gain
+    return await file_into_case(session, source_of_report(report), case, known_names)
+
+
+async def file_signal_into_case(session: AsyncSession, threat: Any, case: CaseRow, known_names: List[str], reliability: str) -> Dict[str, int]:
+    """§5.11 — a collected signal read into the case graph, cited by `signal_id`. Same extraction, same suggest-only
+    rule (Decision P): the machine proposes, the analyst confirms."""
+    return await file_into_case(session, source_of_signal(threat, reliability), case, known_names)
+
+
+async def file_into_case(session: AsyncSession, src: Source, case: CaseRow, known_names: List[str]) -> Dict[str, int]:
+    """Extract from the source and add everything as `suggested`. Existing confirmed entities with the same name gain
     evidence instead of being duplicated — that is alias resolution's simplest form."""
-    ex = (await model_extract(report)) if use_model() else None
+    ex = (await model_extract(src)) if use_model() else None
     if ex is None:
-        ex = heuristic_extract(report, known_names)
+        ex = heuristic_extract(src, known_names)
     existing = {(e.type, e.name.lower()): e for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == case.id, EntityRow.merged_into.is_(None)))).scalars()}
     by_name: Dict[str, EntityRow] = {}
     created = {"entities": 0, "relationships": 0, "events": 0, "evidence_added": 0}
@@ -245,13 +292,13 @@ async def file_report_into_case(session: AsyncSession, report: ReportRow, case: 
         if not a or not b or a.id == b.id: continue
         dup = (await session.execute(select(RelationshipRow).where(RelationshipRow.case_id == case.id, RelationshipRow.from_id == a.id, RelationshipRow.to_id == b.id, RelationshipRow.type == r["type"]))).scalar_one_or_none()
         if dup:
-            ev = json.loads(dup.evidence_json); ev.append(r["evidence"]); dup.evidence_json = json.dumps(ev); dup.last_seen = report.at; created["evidence_added"] += 1
+            ev = json.loads(dup.evidence_json); ev.append(r["evidence"]); dup.evidence_json = json.dumps(ev); dup.last_seen = src.at; created["evidence_added"] += 1
         else:
-            session.add(RelationshipRow(id=f"rel_{uuid.uuid4().hex[:8]}", case_id=case.id, from_id=a.id, to_id=b.id, type=r["type"], first_seen=report.at, last_seen=report.at, evidence_json=json.dumps([r["evidence"]])))
+            session.add(RelationshipRow(id=f"rel_{uuid.uuid4().hex[:8]}", case_id=case.id, from_id=a.id, to_id=b.id, type=r["type"], first_seen=src.at, last_seen=src.at, evidence_json=json.dumps([r["evidence"]])))
             created["relationships"] += 1
     for ev in ex["events"]:
         parts = [by_name[p.lower()].id for p in ev.get("participants", []) if p.lower() in by_name]
-        session.add(CaseEventRow(id=f"cev_{uuid.uuid4().hex[:8]}", case_id=case.id, at=datetime.fromisoformat(ev["at"].replace("Z", "")) if ev.get("at") else report.at,
+        session.add(CaseEventRow(id=f"cev_{uuid.uuid4().hex[:8]}", case_id=case.id, at=datetime.fromisoformat(ev["at"].replace("Z", "")) if ev.get("at") else src.at,
                                  lat=ev.get("lat"), lon=ev.get("lon"), place=ev.get("place"), type=ev.get("type", "observation"), summary=ev["summary"],
                                  participants_json=json.dumps(parts), evidence_json=json.dumps([ev["evidence"]])))
         created["events"] += 1
