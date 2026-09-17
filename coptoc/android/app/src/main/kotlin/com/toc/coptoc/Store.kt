@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 
 data class WallState(
     val snap: Snapshot? = null, val requirements: List<Requirement> = emptyList(), val intsums: List<IntsumHead> = emptyList(), val cases: List<CaseHead> = emptyList(), val operation: Operation? = null,
+    val coas: List<ThreatCoa> = emptyList(), val liaisonSources: List<LiaisonSource> = emptyList(), val staffProducts: List<StaffProductHead> = emptyList(),
     val users: List<UserInfo> = emptyList(), val userId: String = Ui.userId,
     val role: String = "battle_captain", val restricted: Boolean = true, val busy: String? = null, val error: String? = null,
     val selection: Selection? = null, val lastRefresh: Long = 0L,
@@ -19,6 +20,11 @@ data class WallState(
     val viewportHeightMiles: Double = 0.0, val viewportHeightKm: Double = 0.0,
     val distanceUnit: String = "mi",
 )
+
+/** §5.10b Phase 3 — the decisions with a clock, soonest first; one whose no-later-than has passed floats to the top. */
+val WallState.decisionPoints: List<SnapDecisionPoint>
+    get() = (snap?.decisionPoints ?: emptyList()).sortedWith(
+        compareByDescending<SnapDecisionPoint> { it.overdue }.thenBy { it.latestTime == null }.thenBy { it.latestTime ?: "" }.thenBy { it.title })
 
 /** The wall's state on the phone: one snapshot, refreshed every 15 s and after every write. */
 class Store : ViewModel() {
@@ -90,7 +96,10 @@ class Store : ViewModel() {
             val r = runCatching { api.requirements() }.getOrDefault(emptyList())
             val i = runCatching { api.intsums() }.getOrDefault(emptyList())
             val c = runCatching { api.cases() }.getOrDefault(emptyList())
-            _state.update { it.copy(snap = s, requirements = r, intsums = i, cases = c, error = null, lastRefresh = System.currentTimeMillis()) }
+            val co = runCatching { api.coas() }.getOrDefault(emptyList())
+            val ls = runCatching { api.liaisonSources() }.getOrDefault(emptyList())
+            val sp = runCatching { api.staffProducts() }.getOrDefault(emptyList())
+            _state.update { it.copy(snap = s, requirements = r, intsums = i, cases = c, coas = co, liaisonSources = ls, staffProducts = sp, error = null, lastRefresh = System.currentTimeMillis()) }
         } catch (e: Exception) {
             _state.update { it.copy(error = "API: ${e.message ?: e::class.simpleName} (${api.baseUrl})") }
         }

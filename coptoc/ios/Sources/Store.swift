@@ -57,6 +57,21 @@ final class COPStore {
     var intsums: [IntsumHead] = []
     var warnings: [Warning] = []
     var cases: [CaseHead] = []
+    var coas: [ThreatCoa] = []
+    var liaisonSources: [LiaisonSource] = []
+    var staffProducts: [StaffProductHead] = []
+    /// §5.10b Phase 3 — the decisions with a clock, soonest first; a passed no-later-than floats to the top.
+    var decisionPoints: [SnapDecisionPoint] {
+        (snapshot?.decisionPoints ?? []).sorted { a, b in
+            if a.overdue != b.overdue { return a.overdue }
+            switch (a.latestTime, b.latestTime) {
+            case let (x?, y?): return x < y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.title < b.title
+            }
+        }
+    }
     var error: String?
     var activeWorkspaceSection: String?
     var busy: String?
@@ -136,7 +151,9 @@ final class COPStore {
             snapshot = try await client.snapshot(restricted: showRestricted); error = nil
             frameOpening()
             async let r = client.requirements(); async let i = client.intsums(); async let w = client.warnings(); async let c = client.cases()
+            async let co = client.coas(); async let ls = client.liaisonSources(); async let sp = client.staffProducts()
             requirements = (try? await r) ?? []; intsums = (try? await i) ?? []; warnings = (try? await w) ?? []; cases = (try? await c) ?? []
+            coas = (try? await co) ?? []; liaisonSources = (try? await ls) ?? []; staffProducts = (try? await sp) ?? []
         }
         catch let e as DecodingError { self.error = "contract drift: \(e)" }  // name the missing key, not just "data is missing"
         catch { self.error = error.localizedDescription }

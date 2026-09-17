@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.41
+**Version:** v3.42
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -414,6 +414,8 @@ The plan of 5 September set out the other side of the picture — the red force,
 - **A COA's graphic set as one named overlay.** On the S2 overlay the wall offers the assessed COAs that carry graphics; picking one brings **its whole set forward under its own name** — the COA's graphics at full strength, the NAIs it says we would see it in drawn heavier, every other graphic, threat, movement and person falling back to context. A COA's graphic ids are checked when it is written: a set that names a graphic nobody drew would come forward as an empty sheet.
 - **The phones file more than a SPOTREP.** Android's form gained the kind selector iOS and the wall already had — SPOTREP (SALUTE), SITREP, NOTE, LIAISON — and both phones now name the **liaison source** on a LIAISON report, so it is graded at that source's reliability (LOE 5) instead of at the reporter's.
 
+**Phases 3–5 on the phones** (17 Sep). The staff products were the wall's alone; the watch carries a phone. Both phones now show, under S2, *What we decide, and when* (the decision points, soonest first, a passed no-later-than at the top), *What the other side may do* (the COAs with their ICD 203 word, ML and MD flags, narrative and indicators), *Who else reports to us* (liaison sources with their grade and track record), and the staff products with their status. The decisions also sit under **S3**, because the watch that plans the movement is the watch that has to see the deadline: red once the clock has run out, and the Battle Captain, the analyst or the EA can mark one TRIGGERED — with a note saying what was seen, which the server requires — or PASSED from where they are standing. Everything else on the phone stays read-only: the wall writes the products, the phone reads them and decides.
+
 ### 5.12 Staff workspaces and AI analysis **[BUILT]** (6–8 Sep 2026; contract in `docs/WORKSPACE_API.md`)
 
 Each section has a workspace: its records, its editing tools, and its assignments. S1 has manual person entry, a searchable roster, duty updates, import, the task organization, and accountability; S2 has report entry with owned drafts, report-to-case attachment, case review, the link chart, timeline, and time wheel, collection controls, products, and AI assignments; S3 has activity entry, schedule import, planning, and taskings; S4 inventory, shipments, and intake (§5.13); S6 systems and PACE. Coptoc owns personnel, activities, supplies, shipments, systems, taskings, and the COP; Sigtoc owns reports, case evidence, case review, and intelligence products.
@@ -572,7 +574,7 @@ Matches the Washi pattern — a web app and two native apps against one backend.
 | :--- | :--- | :--- |
 | **Web** | React 19, Vite, TypeScript, MapLibre GL | **[TONIGHT]** |
 | **Backend** | FastAPI, SQLAlchemy, SQLite → Postgres | **[TONIGHT]** |
-| **iOS** | SwiftUI, MapKit, XcodeGen | **[BUILT]** — `coptoc/ios`, the wall with watch chip, estimates, roll call; S2 panels **[NEXT]** |
+| **iOS** | SwiftUI, MapKit, XcodeGen | **[BUILT]** — `coptoc/ios`, the wall with watch chip, estimates, roll call, the S2 panels through the staff products (§5.10b) |
 | **Android** | Kotlin, Jetpack Compose, MapLibre Native | **[BUILT]** — `coptoc/android`, the wall with S1/S2/S3/S6 panels, detail sheets, and every role-gated action; built and run on the Pixel 7 emulator |
 
 The native apps are native for a reason: the map has to be fluid and the animations have to be immediate, and that's what MapKit and Compose are for. The web app is built against the same `/v1/cop` contract, so the apps share the backend and the data model, not the UI code.
@@ -725,6 +727,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.42** — 17 Sep: the staff products on the phones (§5.10b): the decision points under S2 and S3 with TRIGGERED / PASSED where the watch stands, the COAs, the liaison sources, and the products' status on iOS and Android.
 - **v3.41** — 17 Sep: Sigtoc plan phase 5 (§5.10b): actors and sightings as node types in the workbench (§5.11), decision points on the S3 strip, a COA's graphic set as one named overlay, and the phones' report-kind selector with the liaison source named at filing.
 - **v3.40** — 17 Sep: Sigtoc plan phase 4 (§5.10b): the graphic INTSUM's red picture with a map, the area assessment's link to actors and threat graphics, liaison sources graded by the analyst over time (LOE 5).
 - **v3.39** — 16 Sep: Sigtoc plan phase 3 (§5.10b): threat COAs in ICD 203 words, decision points and the DSM, the IPB, the intelligence estimate, Annex B to an operation, all rule-drafted and human-released.

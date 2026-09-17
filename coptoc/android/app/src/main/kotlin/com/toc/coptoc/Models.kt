@@ -100,13 +100,30 @@ import kotlinx.serialization.json.double
 @Serializable data class Snapshot(val s2Actors: List<S2Actor> = emptyList(), val s2Sightings: List<S2Sighting> = emptyList(), val s2Reports: List<S2Report> = emptyList(), val movementRisks: List<MovementRisk> = emptyList(), val graphics: List<Graphic> = emptyList(), val nais: List<Nai> = emptyList(), val movements: List<Movement> = emptyList(), val view: MapFrame? = null, val taskings: TaskingBoard? = null, val me: Me? = null, val profile: String = "military", val teams: List<Team> = emptyList(), val sections: List<SectionCfg> = emptyList(), val s4: S4Board? = null, val s6: S6Board? = null, val generatedAt: String = "", val restrictedIncluded: Boolean = false, val restrictedDenied: Boolean = false, val watch: Watch? = null, val estimates: List<Estimate> = emptyList(), val summary: Summary = Summary(),
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
-                                  val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList())
+                                  val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList(),
+                                  val decisionPoints: List<SnapDecisionPoint> = emptyList())
+
+/** §5.10b Phase 3 — a decision the commander owes, with the time it has to be made by. The matrix lives on the wall;
+ *  the phone shows the decision, its trigger, what happens, and whether the clock has run out. */
+@Serializable data class SnapDecisionPoint(val id: String, val title: String = "", val subjectType: String = "", val subjectId: String = "", val operationId: String? = null,
+                                           val decision: String = "", val trigger: String = "", val action: String = "", val ownerSection: String = "S3",
+                                           val latestTime: String? = null, val overdue: Boolean = false, val status: String = "open", val note: String = "",
+                                           val pirId: String? = null, val naiIds: List<String> = emptyList(), val coaIds: List<String> = emptyList())
 
 // Sigtoc (read side on the phone)
 @Serializable data class Coverage(val covered: Int = 0, val total: Int = 0, val pct: Int = 0, val gaps: List<String> = emptyList())
 @Serializable data class Requirement(val id: String, val kind: String = "standing", val subjectType: String = "", val subjectName: String = "", val question: String = "", val priority: Int = 2,
                                      val status: String = "active", val owner: String = "", val windowFrom: String? = null, val windowTo: String? = null, val coverage: Coverage = Coverage())
 @Serializable data class IntsumHead(val id: String, val status: String = "draft", val headline: String = "", val nstr: Boolean = false, val releasedBy: String? = null)
+/** §5.10b Phase 3 — what the other side may do, in ICD 203 words. Written on the wall; the phone reads it. */
+@Serializable data class ThreatCoa(val id: String, val title: String = "", val subjectName: String = "", val actorName: String? = null, val narrative: String = "",
+                                   val likelihood: String = "unassessed", val confidence: String = "low", val mostLikely: Boolean = false, val mostDangerous: Boolean = false,
+                                   val indicators: List<String> = emptyList(), val naiIds: List<String> = emptyList(), val graphicIds: List<String> = emptyList(), val status: String = "candidate")
+/** §5.10b Phase 4 (LOE 5) — a source outside our own people, graded A–F by the analyst. */
+@Serializable data class LiaisonRecord(val reports: Int = 0, val filed: Int = 0, val corroborated: Int = 0, val linked: Int = 0, val promoted: Int = 0, val dismissed: Int = 0, val disposed: Int = 0, val borneOut: Int = 0, val lastReportAt: String? = null)
+@Serializable data class LiaisonSource(val id: String, val name: String = "", val kind: String = "other", val reliability: String = "F", val notes: String = "", val gradedBy: String? = null, val record: LiaisonRecord = LiaisonRecord())
+/** §5.10b Phase 3 — the head of a staff product: the IPB, the estimate, or Annex B. */
+@Serializable data class StaffProductHead(val id: String, val kind: String = "ipb", val title: String = "", val subjectName: String = "", val status: String = "draft", val draftedBy: String = "", val draftedAt: String = "", val decidedBy: String? = null)
 
 sealed interface Selection {
     data class SiteSel(val id: String) : Selection

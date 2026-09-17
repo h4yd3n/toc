@@ -41,6 +41,12 @@ class CopClient(
     suspend fun requirements(): List<Requirement> = json.decodeFromString(get("/v1/s2/requirements?status=active"))
     suspend fun intsums(): List<IntsumHead> = json.decodeFromString(get("/v1/s2/intsum"))
     suspend fun cases(): List<CaseHead> = json.decodeFromString(get("/v1/s2/cases"))
+    // §5.10b Phase 3–5 on the phone, read-only; the wall writes them
+    suspend fun coas(): List<ThreatCoa> = json.decodeFromString(get("/v1/s2/coas"))
+    suspend fun liaisonSources(): List<LiaisonSource> = json.decodeFromString(get("/v1/s2/liaison-sources"))
+    suspend fun staffProducts(): List<StaffProductHead> = json.decodeFromString(get("/v1/s2/staff-products"))
+    /** The one write: the watch decides a decision point where it sees it. Triggering needs a note — what was seen. */
+    suspend fun decideDecisionPoint(id: String, status: String, note: String) = send("PATCH", "/v1/s2/decision-points/$id", buildJsonObject { put("status", status); if (note.isNotBlank()) put("note", note) })
     suspend fun operation(id: String): Operation = json.decodeFromString(get("/v1/cop/operations/$id"))
     suspend fun releaseWarning(id: String) = send("POST", "/v1/s2/warnings/$id/release", buildJsonObject { })
     suspend fun cancelWarning(id: String) = send("POST", "/v1/s2/warnings/$id/cancel", buildJsonObject { })

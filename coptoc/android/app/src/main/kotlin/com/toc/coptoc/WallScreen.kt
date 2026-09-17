@@ -212,8 +212,10 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
     var filing by remember { mutableStateOf(false) }
+    var triggering by remember { mutableStateOf<SnapDecisionPoint?>(null) }
     TaskingDialogs(st, store, "S2", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     SpotrepDialog(st, store, filing) { filing = false }
+    DecisionTriggerDialog(store, triggering) { triggering = null }
     Label("", action = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Mini("+ SPOTREP", Palette.amber, st.busy == null) { filing = true }; Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
     val s2State = androidx.compose.foundation.lazy.rememberLazyListState(); s2State.driveDock()
@@ -231,6 +233,8 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
             Chip("${r.kind.uppercase()} ${r.grade}", Palette.amber); Text(r.text, color = Palette.text, fontSize = 10.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text(r.at.take(16).replace('T', ' '), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace) } }
         if (openReports.isEmpty()) item { Text("Nothing filed and waiting. File a SPOTREP from the field.", Modifier.padding(horizontal = 10.dp), color = Palette.dim, fontSize = 10.sp) }
         taskingsSection(st, store, "S2", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        decisionsSection(st, store) { triggering = it }
+        s2ProductsSections(st)
         val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
         item { Label("WARNINGS", "${pending.size} awaiting release", action = { Mini("RUN RULE", enabled = st.busy == null) { store.act("running the warning rule") { runWarningRule() } } }) }
         items(pending, key = { it.id }) { w ->
@@ -631,7 +635,9 @@ fun agendaRows(snap: Snapshot): List<AgendaRow> {
 fun ColumnScope.S3Phone(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
+    var s3Triggering by remember { mutableStateOf<SnapDecisionPoint?>(null) }
     TaskingDialogs(st, store, "S3", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
+    DecisionTriggerDialog(store, s3Triggering) { s3Triggering = null }
     val today = java.time.LocalDate.now()
     val rows = remember(snap) { agendaRows(snap) }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState(); listState.driveDock()
@@ -660,6 +666,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
         onPick = { d -> scrubbed = d; val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
     LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S3", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        decisionsSection(st, store) { s3Triggering = it }
         item { EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
         items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
             when (val r = rows[i]) {
@@ -977,6 +984,69 @@ private fun androidx.compose.foundation.layout.BoxWithConstraintsScope.SectionSh
 
 
 // ---------------------------------------------------------------- §5.10 taskings on the phone: what a section owes and what it is waiting on
+
+/** §5.10b Phase 3 — the decision support matrix, where the watch is. The wall writes decision points and joins them to
+ *  their PIR, NAIs and COAs; the phone shows the decision, what would trigger it, and the time it has to be made by.
+ *  It sits on S3 as well as S2 because the watch that plans the movement is the watch that has to see the deadline. */
+fun androidx.compose.foundation.lazy.LazyListScope.decisionsSection(st: WallState, store: Store, onTrigger: (SnapDecisionPoint) -> Unit) {
+    val rows = st.decisionPoints
+    if (rows.isEmpty()) return
+    val overdue = rows.count { it.overdue }
+    val decider = st.role in listOf("battle_captain", "analyst", "ea")
+    item { Label("WHAT WE DECIDE, AND WHEN", "${rows.size}" + (if (overdue > 0) " · $overdue overdue" else "")) }
+    items(rows, key = { "dp_" + it.id }) { d ->
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 7.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("◆", color = if (d.overdue) Palette.red else if (d.status == "triggered") Palette.blue2 else Palette.amber, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                Text(d.title, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Chip(d.ownerSection)
+                Text(d.latestTime?.let { "NLT " + it.take(16).replace('T', ' ') } ?: "no clock", color = if (d.overdue) Palette.red else Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace) }
+            if (d.decision.isNotBlank()) Text(d.decision, color = Palette.text, fontSize = 10.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (d.trigger.isNotBlank()) Text("Trigger: ${d.trigger}", color = Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (d.status == "triggered") Text("TRIGGERED" + (if (d.note.isBlank()) "" else " · ${d.note}"), color = Palette.blue2, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (decider && d.status == "open") Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Mini("TRIGGERED", Palette.amber, st.busy == null) { onTrigger(d) }
+                Mini("PASSED", Palette.dim, st.busy == null) { store.act("passing the decision point") { decideDecisionPoint(d.id, "passed", "") } } }
+            HorizontalDivider(thickness = 0.5.dp, color = Palette.line) } }
+}
+
+/** §5.10b Phase 3–4 — what the other side may do, who else reports to us, and the staff products. Read-only here. */
+fun androidx.compose.foundation.lazy.LazyListScope.s2ProductsSections(st: WallState) {
+    val coas = st.coas.filter { it.status != "rejected" }
+    if (coas.isNotEmpty()) {
+        item { Label("WHAT THE OTHER SIDE MAY DO", "${coas.size}") }
+        items(coas, key = { "coa_" + it.id }) { c ->
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 7.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (c.mostLikely) Chip("ML", Palette.amber, filled = true)
+                    if (c.mostDangerous) Chip("MD", Palette.red, filled = true)
+                    Text(c.title, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Chip(c.status.uppercase(), if (c.status == "assessed") Palette.green else Palette.dim) }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(c.likelihood, color = if (c.likelihood == "unassessed") Palette.amber else Palette.text, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    if (c.likelihood != "unassessed") Text("· ${c.confidence} confidence", color = Palette.dim, fontSize = 11.sp)
+                    c.actorName?.let { Text("· $it", color = Palette.dim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+                if (c.narrative.isNotBlank()) Text(c.narrative, color = Palette.text, fontSize = 10.5.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                if (c.indicators.isNotEmpty()) Text("Indicators: ${c.indicators.joinToString("; ")}", color = Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                HorizontalDivider(thickness = 0.5.dp, color = Palette.line) } }
+    }
+    if (st.liaisonSources.isNotEmpty()) {
+        item { Label("WHO ELSE REPORTS TO US", "${st.liaisonSources.size}") }
+        items(st.liaisonSources, key = { "lsn_" + it.id }) { l ->
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(l.reliability, if (l.reliability == "F") Palette.dim else if (l.reliability <= "B") Palette.green else Palette.amber, filled = true)
+                Text(l.name, color = Palette.text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text("${l.record.reports} rpt · ${l.record.borneOut} borne out", color = Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace) } }
+    }
+    if (st.staffProducts.isNotEmpty()) {
+        item { Label("STAFF PRODUCTS", "${st.staffProducts.count { it.status == "approved" || it.status == "released" }} approved") }
+        items(st.staffProducts.take(6), key = { "sp_" + it.id }) { p ->
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(p.kind.uppercase(), Palette.blue2)
+                Text(p.title, color = Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Chip(p.status.uppercase(), if (p.status == "approved" || p.status == "released") Palette.green else Palette.dim) } }
+    }
+}
 
 fun androidx.compose.foundation.lazy.LazyListScope.taskingsSection(st: WallState, store: Store, section: String, raising: Boolean, onRaise: () -> Unit, onDecline: (Tasking) -> Unit) {
     val board = st.snap?.taskings ?: return
@@ -1596,6 +1666,21 @@ fun TacticalRulerVertical(
 }
 
 
+
+/** §5.10b Phase 3 — triggering a decision point needs a note: what was seen. The server refuses it without one. */
+@Composable
+fun DecisionTriggerDialog(store: Store, dp: SnapDecisionPoint?, onDone: () -> Unit) {
+    if (dp == null) return
+    var note by remember(dp.id) { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDone, containerColor = Palette.panel, titleContentColor = Palette.text, textContentColor = Palette.text,
+        title = { Text("Triggered — what was seen?", fontSize = 13.sp, fontFamily = FontFamily.Monospace) },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(dp.title, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            if (dp.trigger.isNotBlank()) Text(dp.trigger, color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            OutlinedTextField(note, { note = it }, label = { Text("What was seen") }, minLines = 2) } },
+        confirmButton = { TextButton({ if (note.isNotBlank()) { store.act("triggering the decision point") { decideDecisionPoint(dp.id, "triggered", note.trim()) }; onDone() } }) { Text("TRIGGER", color = Palette.amber) } },
+        dismissButton = { TextButton(onDone) { Text("CANCEL", color = Palette.dim) } })
+}
 
 /** §5.10b the field report: SPOTREP in SALUTE order, SITREP, a NOTE, or a LIAISON report that names the outside source
  *  it came from. Cop Talk files it; Sigtoc disposes of it. Our own people are graded A; a liaison source carries the

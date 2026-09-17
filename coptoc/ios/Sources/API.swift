@@ -95,6 +95,10 @@ struct COPClient {
     func intsums() async throws -> [IntsumHead] { try await fetch("/v1/s2/intsum") }
     func warnings() async throws -> [Warning] { try await fetch("/v1/s2/warnings") }
     func cases() async throws -> [CaseHead] { try await fetch("/v1/s2/cases") }
+    // §5.10b Phase 3–5 on the phone, read-only: the wall writes these, the watch reads them
+    func coas() async throws -> [ThreatCoa] { try await fetch("/v1/s2/coas") }
+    func liaisonSources() async throws -> [LiaisonSource] { try await fetch("/v1/s2/liaison-sources") }
+    func staffProducts() async throws -> [StaffProductHead] { try await fetch("/v1/s2/staff-products") }
     func distribution(_ ptype: String, _ pid: String) async throws -> Distribution { try await fetch("/v1/s2/products/\(ptype)/\(pid)/distribution") }
     // Sigtoc writes
     func releaseWarning(id: String) async throws { try await send("POST", "/v1/s2/warnings/\(id)/release", [:]) }
@@ -103,6 +107,10 @@ struct COPClient {
     func draftIntsum() async throws { try await send("POST", "/v1/s2/intsum/draft", [:]) }
     func releaseIntsum(id: String) async throws { try await send("POST", "/v1/s2/intsum/\(id)/release", [:]) }
     func runWarningRule() async throws { try await send("POST", "/v1/s2/warnings/suggest", [:]) }
+    /// §5.10b Phase 3: the watch decides a decision point where it sees it. Triggering one needs a note — what was seen.
+    func decideDecisionPoint(id: String, status: String, note: String) async throws {
+        try await send("PATCH", "/v1/s2/decision-points/\(id)", note.isEmpty ? ["status": status] : ["status": status, "note": note])
+    }
 
     private func fetch<T: Decodable>(_ path: String) async throws -> T {
         var req = URLRequest(url: baseURL.appending(path: path.split(separator: "?").first.map(String.init) ?? path))

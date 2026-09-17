@@ -83,6 +83,16 @@ struct Snapshot: Decodable {
     var nais: [NAI]?, movements: [Movement]?   // §3.4 the derived overlays
     var graphics: [Graphic]?                    // §3.4 the control measures a section drew
     var s2Actors: [S2Actor]?, s2Sightings: [S2Sighting]?, s2Reports: [S2Report]?, movementRisks: [MovementRisk]?   // §5.10b the live S2 picture
+    var decisionPoints: [SnapDecisionPoint]?   // §5.10b Phase 3, on the strip and in the S2 panel: what we decide, and when
+}
+
+/// §5.10b Phase 3 — a decision the commander owes, with the time it has to be made by. The matrix lives on the wall;
+/// what the phone needs is the decision, what would trigger it, what happens, and whether the clock has run out.
+struct SnapDecisionPoint: Decodable, Identifiable, Hashable {
+    var id: String, title: String, subjectType: String, subjectId: String, operationId: String?
+    var decision: String, trigger: String, action: String, ownerSection: String
+    var latestTime: String?, overdue: Bool, status: String, note: String
+    var pirId: String?, naiIds: [String], coaIds: [String]
 }
 
 /// §5.10b the other side as a thing with a name: an enemy unit or a threat actor, with its last known position.
@@ -313,3 +323,21 @@ struct Requirement: Decodable, Identifiable, Hashable {
 struct IntsumHead: Decodable, Identifiable, Hashable { var id: String, status: String, headline: String, nstr: Bool, releasedBy: String? }
 struct CaseHead: Decodable, Identifiable, Hashable { var id: String, title: String, kind: String, status: String, openedBy: String, entities: Int?, relationships: Int?, events: Int?, pendingReview: Int? }
 struct Distribution: Decodable, Hashable { var sent: Int, acknowledged: Int, unacknowledged: [String] }
+
+// §5.10b Phase 3–4 read on the phone: what the other side may do, who else reports to us, and the staff products.
+/// A threat course of action, carrying an ICD 203 likelihood word — never a number.
+struct ThreatCoa: Decodable, Identifiable, Hashable {
+    var id: String, title: String, subjectType: String, subjectId: String, subjectName: String
+    var actorId: String?, actorName: String?, narrative: String, likelihood: String, confidence: String
+    var mostLikely: Bool, mostDangerous: Bool, indicators: [String], naiIds: [String], graphicIds: [String], status: String
+}
+/// A source outside our own people, graded A–F by the analyst; the record is what became of its reports.
+struct LiaisonSource: Decodable, Identifiable, Hashable {
+    struct Record: Decodable, Hashable { var reports: Int, filed: Int, corroborated: Int, linked: Int, promoted: Int, dismissed: Int, disposed: Int, borneOut: Int, lastReportAt: String? }
+    var id: String, name: String, kind: String, reliability: String, notes: String
+    var gradedBy: String?, gradedAt: String?, record: Record
+}
+/// The head of a staff product: the IPB, the estimate, or Annex B, approved by the analyst or released by the BC.
+struct StaffProductHead: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, title: String, subjectName: String, operationId: String?, status: String, draftedBy: String, draftedAt: String, decidedBy: String?
+}

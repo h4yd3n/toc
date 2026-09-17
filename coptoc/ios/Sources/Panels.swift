@@ -101,6 +101,56 @@ struct IntelScreen: View {
                 if store.openReports.isEmpty { Text("Nothing filed and waiting. File a SPOTREP from the field.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
             }.listRowBackground(Theme.panel)
             TaskingsSection(section: "S2")
+            DecisionsSection()
+            // §5.10b Phase 3 — what the other side may do, in ICD 203 words. Written on the wall, read here.
+            if !store.coas.filter({ $0.status != "rejected" }).isEmpty {
+                Section(header: SectionLabel(text: "WHAT THE OTHER SIDE MAY DO · \(store.coas.filter { $0.status != "rejected" }.count)")) {
+                    ForEach(store.coas.filter { $0.status != "rejected" }) { c in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(spacing: 6) {
+                                if c.mostLikely { Chip(text: "ML", color: Theme.amber, filled: true) }
+                                if c.mostDangerous { Chip(text: "MD", color: Theme.red, filled: true) }
+                                Text(c.title).font(.system(size: 12, weight: .semibold)).lineLimit(2); Spacer()
+                                Chip(text: c.status.uppercased(), color: c.status == "assessed" ? Theme.green : Theme.dim)
+                            }
+                            HStack(spacing: 4) {
+                                Text(c.likelihood).font(.system(size: 11, weight: .bold)).foregroundStyle(c.likelihood == "unassessed" ? Theme.amber : .primary)
+                                if c.likelihood != "unassessed" { Text("· \(c.confidence) confidence").font(.system(size: 11)).foregroundStyle(Theme.dim) }
+                                if let a = c.actorName { Text("· \(a)").font(.system(size: 11)).foregroundStyle(Theme.dim).lineLimit(1) }
+                            }
+                            if !c.narrative.isEmpty { Text(c.narrative).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3) }
+                            if !c.indicators.isEmpty { Text("Indicators: \(c.indicators.joined(separator: "; "))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).lineLimit(2) }
+                        }
+                    }
+                }.listRowBackground(Theme.panel)
+            }
+            // §5.10b Phase 4 (LOE 5) — who else reports to us, and what the analyst has graded them
+            if !store.liaisonSources.isEmpty {
+                Section(header: SectionLabel(text: "WHO ELSE REPORTS TO US · \(store.liaisonSources.count)")) {
+                    ForEach(store.liaisonSources) { l in
+                        HStack(spacing: 6) {
+                            Chip(text: l.reliability, color: l.reliability == "F" ? Theme.dim : l.reliability <= "B" ? Theme.green : Theme.amber, filled: true)
+                            Text(l.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                            Text(l.kind.replacingOccurrences(of: "_", with: " ")).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                            Spacer()
+                            Text("\(l.record.reports) rpt · \(l.record.borneOut) borne out").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                        }
+                    }
+                }.listRowBackground(Theme.panel)
+            }
+            // §5.10b Phase 3 — the staff products: drafted by rule from the wall, approved or released by a human
+            if !store.staffProducts.isEmpty {
+                Section(header: SectionLabel(text: "STAFF PRODUCTS · \(store.staffProducts.filter { $0.status == "approved" || $0.status == "released" }.count) APPROVED")) {
+                    ForEach(store.staffProducts.prefix(6)) { p in
+                        HStack(spacing: 6) {
+                            Chip(text: p.kind.uppercased(), color: Theme.blue)
+                            Text(p.title).font(.system(size: 12)).lineLimit(2); Spacer()
+                            Chip(text: p.status.uppercased(), color: p.status == "approved" || p.status == "released" ? Theme.green : Theme.dim)
+                            Text(ISO.rel(p.draftedAt, now: store.now)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim)
+                        }
+                    }
+                }.listRowBackground(Theme.panel)
+            }
             Section(header: SectionLabel(text: "WARNINGS · \(store.pendingWarnings.count) AWAITING RELEASE")) {
                 if store.pendingWarnings.isEmpty {
                     HStack { Text("Nothing suggested. Confirm a link on an elevated threat, or collect a critical one.").font(.system(size: 11)).foregroundStyle(Theme.dim)
@@ -245,6 +295,7 @@ struct OpsScreen: View {
                     Color.clear.frame(height: 0).background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .named("agenda")).minY) })
                     EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }).padding(.horizontal, 14)
                     TaskingsSection(section: "S3", plain: true)
+                    DecisionsSection(plain: true)
                     ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
                         if idx > 0, let gap = cal.dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
                             Text("— nothing for \(gap - 1) day\(gap - 1 == 1 ? "" : "s") —").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity).padding(.vertical, 10).id("g:\(Int(d.day.timeIntervalSince1970))")
@@ -603,6 +654,58 @@ struct TaskOrgSection: View {
 
 
 // MARK: - §5.10 taskings on the phone: what a section owes and what it is waiting on
+
+/// §5.10b Phase 3 — the decision support matrix, where the watch is. The wall writes decision points and joins them to
+/// their PIR, NAIs and COAs; the phone shows the decision, what would trigger it, what happens, and the time it has to
+/// be made by. It sits on S3 as well as S2 because the watch that plans the movement is the watch that has to see the
+/// deadline. Amber while open, red once the no-later-than has passed, purple once triggered.
+struct DecisionsSection: View {
+    @Environment(COPStore.self) private var store
+    var plain = false   // true inside the S3 agenda's ScrollView; false inside the S2 List
+    @State private var triggering: SnapDecisionPoint? = nil
+    @State private var note = ""
+    var rowsData: [SnapDecisionPoint] { store.decisionPoints }
+    var overdue: Int { rowsData.filter { $0.overdue }.count }
+    var decider: Bool { ["battle_captain", "analyst", "ea"].contains(store.client.role) }
+    var body: some View {
+        Group {
+            if rowsData.isEmpty { EmptyView() }
+            else if plain { VStack(alignment: .leading, spacing: 8) { header; rows }.padding(.horizontal, 14).padding(.top, 10) }
+            else { Section(header: header) { rows }.listRowBackground(Theme.panel) }
+        }
+        .alert("Triggered — what was seen?", isPresented: Binding(get: { triggering != nil }, set: { if !$0 { triggering = nil } })) {
+            TextField("What was seen", text: $note)
+            Button("Trigger") { if let d = triggering, !note.trimmingCharacters(in: .whitespaces).isEmpty { let n = note; store.act("triggering the decision point") { try await store.client.decideDecisionPoint(id: d.id, status: "triggered", note: n) } }; triggering = nil; note = "" }
+            Button("Cancel", role: .cancel) { triggering = nil; note = "" }
+        }
+    }
+    var header: some View {
+        SectionLabel(text: "WHAT WE DECIDE, AND WHEN · \(rowsData.count)\(overdue > 0 ? " · \(overdue) OVERDUE" : "")")
+    }
+    @ViewBuilder var rows: some View {
+        ForEach(rowsData) { d in
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("◆").font(.system(size: 11, weight: .heavy, design: .monospaced)).foregroundStyle(d.overdue ? Theme.red : d.status == "triggered" ? Theme.blue : Theme.amber)
+                    Text(d.title).font(.system(size: 12, weight: .semibold)).lineLimit(2)
+                    Spacer()
+                    Chip(text: d.ownerSection, color: Theme.dim)
+                    if let t = d.latestTime { Text("NLT \(ISO.short(t))").font(.system(size: 10, design: .monospaced)).foregroundStyle(d.overdue ? Theme.red : Theme.dim) }
+                    else { Text("no clock").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim) }
+                }
+                if !d.decision.isEmpty { Text(d.decision).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2) }
+                if !d.trigger.isEmpty { Text("Trigger: \(d.trigger)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).lineLimit(2) }
+                if d.status == "triggered" { Text("TRIGGERED\(d.note.isEmpty ? "" : " · \(d.note)")").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(Theme.blue).lineLimit(2) }
+                if decider && d.status == "open" {
+                    HStack(spacing: 6) {
+                        Button("TRIGGERED") { triggering = d; note = "" }.tint(Theme.amber)
+                        Button("PASSED") { store.act("passing the decision point") { try await store.client.decideDecisionPoint(id: d.id, status: "passed", note: "") } }
+                    }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
+                }
+            }
+        }
+    }
+}
 
 struct TaskingsSection: View {
     @Environment(COPStore.self) private var store
