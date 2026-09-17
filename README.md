@@ -151,12 +151,27 @@ Every one of those actions is on the battle log, hash-chained, with who did it a
 
 ## Before you deploy
 
-This is a public prototype built to be read and run locally, not a production security product. It has **no authentication**:
-the role and the actor come from
-two request headers (`X-TOC-Role`, `X-TOC-Actor`), which is what lets one screen switch identities for a demo. The
-API allows any CORS origin. Cleartext HTTP is allowed only for the dev hosts the phones use. The check-in and roll-call
-links are HMAC tokens signed with `TOC_SECRET`, which defaults to a dev value. Twilio, Slack, ACLED, CLSTR, and the
-S2 drafter's model are all off until their keys are set — in the environment, or from the wall's **SETTINGS** panel
-(Battle Captain), where they are stored encrypted with `TOC_SECRET` and never shown again — and everything they would
-have done is recorded as *simulated*, never as sent. Change `TOC_SECRET` before entering any real key. Put an identity layer, TLS, and a real database in front of it before any
-of this touches real people.
+This is a public prototype built to be read and run locally, not a production security product. **By default it has no
+authentication**: the role and the actor come from two request headers (`X-TOC-Role`, `X-TOC-Actor`), which is what
+lets one screen switch identities for a demo, and any CORS origin may call it. Cleartext HTTP is allowed only for the
+dev hosts the phones use. The check-in and roll-call links are HMAC tokens signed with `TOC_SECRET`, which defaults to
+a dev value. Twilio, Slack, ACLED, CLSTR, and the S2 drafter's model are all off until their keys are set — in the
+environment, or from the wall's **SETTINGS** panel (Battle Captain), where they are stored encrypted with `TOC_SECRET`
+and never shown again — and everything they would have done is recorded as *simulated*, never as sent. Change
+`TOC_SECRET` before entering any real key.
+
+**Closing the door.** There is now a sign-in layer in front of the profile picker, off unless you turn it on:
+
+| variable | what it does |
+| :--- | :--- |
+| `TOC_AUTH=on` | a bearer token is the only identity. `X-TOC-User` and `X-TOC-Role` stop being one, and every request without a valid token gets 401 — except `/v1/health`, `/v1/auth/status`, `/v1/auth/login`, the console's static files and the signed check-in links |
+| `TOC_SECRET` | signs the tokens as well as the check-in links, and encrypts stored keys. With `TOC_AUTH=on` the API **refuses to start** on the dev default |
+| `TOC_ALLOWED_ORIGINS` | the origins that may call the API, comma-separated. With `TOC_AUTH=on` the API refuses to start while it is unset |
+
+Set a password with `POST /v1/auth/password` (an admin sets anyone's; a holder sets their own by giving the current
+one), exchange it at `POST /v1/auth/login` for a token that expires in 12 hours, and send it as
+`Authorization: Bearer …`. Passwords are hashed with scrypt and never returned; changing one invalidates every token
+issued before it. What this is **not**: an identity provider. No SSO, no refresh, no device binding, no lockout, and
+one shared secret signs every token. Put a real identity provider, TLS, and a real database in front of this before any
+of it touches real people — and note that the SQLite column migrations in `shared/database.py` are SQLite-only, so a
+Postgres deployment needs real migrations.

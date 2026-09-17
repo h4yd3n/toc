@@ -48,6 +48,8 @@ class UserRow(Base):
     battle_captain: Mapped[bool] = mapped_column(Boolean, default=False)
     admin: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # scrypt; see auth.py. Never returned
+    password_set_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[str] = mapped_column(String, default="seed")
     created_at: Mapped[datetime] = mapped_column(DateTime)
 
@@ -80,6 +82,8 @@ _cache: Dict[str, Dict[str, Any]] = {}
 def _out(u: UserRow) -> Dict[str, Any]:
     return {"id": u.id, "name": u.name, "title": u.title, "team_id": u.team_id, "preset": u.preset, "perms": json.loads(u.perms_json or "{}"),
             "battle_captain": u.battle_captain, "admin": u.admin, "active": u.active, "created_by": u.created_by,
+            # whether a password exists, and when it was set — never the hash, and the timestamp only as a token epoch
+            "has_password": bool(u.password_hash), "password_set_at_ts": int(u.password_set_at.timestamp() * 1000) if u.password_set_at else 0,
             "created_at": u.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if u.created_at else None}
 
 
@@ -144,14 +148,25 @@ async def remove(session: AsyncSession, user_id: str) -> bool:
     return True
 
 
+OPEN_PATHS = ("/v1/health", "/v1/auth/login", "/v1/auth/status", "/console", "/assets", "/docs", "/openapi.json", "/checkin", "/v1/checkin")
+
+
 class Identity:
-    """ASGI middleware: `X-TOC-User` → the user's role and name in the headers the routes already read, and the actor in a contextvar."""
+    """ASGI middleware: a bearer token or `X-TOC-User` → the user's role and name in the headers the routes already
+    read, and the actor in a contextvar. With `TOC_AUTH=on` a request without a valid token gets 401 before it reaches
+    a route — the profile header alone stops being an identity (README, "Before you deploy")."""
     def __init__(self, app): self.app = app
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
+            from .auth import auth_required, user_for_token
             hdrs = {k: v for k, v in scope.get("headers", [])}
+            bearer = hdrs.get(b"authorization", b"").decode()
+            token_user = user_for_token(bearer[7:].strip()) if bearer[:7].lower() == "bearer " else None
             uid = hdrs.get(b"x-toc-user", b"").decode()
-            user = lookup(uid) if uid else None
+            user = token_user or (lookup(uid) if uid else None)
+            if auth_required() and not token_user and not any(scope.get("path", "").startswith(p) for p in OPEN_PATHS):
+                await _unauthorized(scope, send)
+                return
             if user:
                 actor = Actor(user=user)
                 others = [(k, v) for k, v in scope["headers"] if k not in (b"x-toc-role", b"x-toc-actor")]
@@ -165,6 +180,13 @@ class Identity:
                 current_actor.reset(token)
         else:
             await self.app(scope, receive, send)
+
+
+async def _unauthorized(scope, send):
+    body = b'{"detail":"Sign in: POST /v1/auth/login, then send Authorization: Bearer <token>"}'
+    await send({"type": "http.response.start", "status": 401,
+                "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode()), (b"www-authenticate", b"Bearer")]})
+    await send({"type": "http.response.body", "body": body})
 
 
 def seed_users(dataset: str) -> List[Dict[str, Any]]:

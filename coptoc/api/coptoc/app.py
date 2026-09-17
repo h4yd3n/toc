@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sigtoc.api import router as s2_router
 from sigtoc.work import router as work_router, worker_loop
 from .routes import router as cop_router, startup as cop_startup
+from .auth import router as auth_router, allowed_origins, startup_guard
 from .ingestion import router as intake_router
 from . import intake_monitor  # register administrative checks on the intake router
 
@@ -38,6 +39,7 @@ async def _escalation_clock() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    startup_guard()   # a closed deployment refuses to run on the dev secret or an open CORS policy
     await cop_startup()
     from shared import settings as _settings
     from .routes import _sessions as _S
@@ -63,7 +65,10 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Coptoc — Common Operating Picture API", version="0.3.0",
               description="S1 personnel, S3 operations, S6 accountability; S2 via sigtoc. Contract: COP_API_CONTRACT.md",
               lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# TOC_ALLOWED_ORIGINS names the origins that may call this API; unset means any, which startup_guard refuses once
+# TOC_AUTH is on. Credentials are never allowed with a wildcard, so the bearer token is the only way in.
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(), allow_methods=["*"], allow_headers=["*"],
+                   allow_credentials=allowed_origins() != ["*"])
 
 
 class MethodOverride:
@@ -80,6 +85,7 @@ class MethodOverride:
 app.add_middleware(MethodOverride)
 from .users import Identity  # noqa: E402
 app.add_middleware(Identity)  # X-TOC-User → role + actor; outermost so every route sees the resolved identity
+app.include_router(auth_router)
 app.include_router(work_router)
 app.include_router(intake_router)
 app.include_router(cop_router)

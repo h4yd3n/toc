@@ -43,6 +43,8 @@ ADDED_COLUMNS = [
     ("toc_ai_assignments", "subject_type", "VARCHAR"),   # §5.12 an assignment scoped to an operation or a requirement
     ("toc_ai_assignments", "subject_id", "VARCHAR"),
     ("cop_intake_submissions", "kind", "VARCHAR DEFAULT 'shipment'"),   # §5.13 intake beyond S4
+    ("toc_users", "password_hash", "VARCHAR"),          # the sign-in layer in front of the profile picker
+    ("toc_users", "password_set_at", "DATETIME"),
 ]
 
 
