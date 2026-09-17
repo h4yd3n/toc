@@ -441,6 +441,43 @@ async def list_reports(case_id: Optional[str] = None, limit: int = Query(100, ge
     return [C.report_dict(r) for r in rows]
 
 
+@router.get("/reports/{report_id}/case-matches")
+async def report_case_matches(report_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """§5.12 — which open case this report probably belongs to, and *why*. Three reasons, each one a fact anybody can
+    check: the case names something the report names, the case's subject is near where the report was filed, or the
+    same reporter has already filed into it. No score and no ranking beyond how many reasons matched: attaching is
+    still the analyst's act, through the attach endpoint, and a report already in a case is left alone."""
+    from coptoc.service import haversine_km
+    from coptoc.db_models import LocationRow
+    if (x_toc_role or "").lower() not in CASE_OPENERS:
+        raise HTTPException(403, "Matching reporting to cases is the analyst's or the Battle Captain's")
+    r = await session.get(ReportRow, report_id)
+    if not r: raise HTTPException(404, "report not found")
+    text = (r.text or "").lower()
+    out = []
+    for c in (await session.execute(select(CaseRow).where(CaseRow.status == "open"))).scalars():
+        if c.id == r.case_id or (x_toc_role or "").lower() not in c.access_roles.split(","):
+            continue
+        reasons = []
+        names = [e.name for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == c.id, EntityRow.merged_into.is_(None)))).scalars()
+                 if len(e.name) >= 4 and e.name.lower() in text]
+        if names:
+            reasons.append({"kind": "names", "detail": "the report names " + ", ".join(sorted(set(names))[:4])})
+        if r.lat is not None and r.lon is not None and c.subject_type == "location" and c.subject_id:
+            site = await session.get(LocationRow, c.subject_id)
+            if site:
+                km = haversine_km(r.lat, r.lon, site.lat, site.lon)
+                if km <= 5:
+                    reasons.append({"kind": "place", "detail": f"filed {km:.1f} km from {site.name}"})
+        same = [x for x in (await session.execute(select(ReportRow).where(ReportRow.case_id == c.id))).scalars() if x.reported_by == r.reported_by and x.id != r.id]
+        if same:
+            reasons.append({"kind": "reporter", "detail": f"{r.reported_by} has filed {len(same)} report{'' if len(same) == 1 else 's'} into this case"})
+        if reasons:
+            out.append({"case_id": c.id, "title": c.title, "kind": c.kind, "opened_at": R.iso(c.opened_at), "reasons": reasons})
+    out.sort(key=lambda x: (-len(x["reasons"]), x["opened_at"] or ""), reverse=False)
+    return {"report_id": r.id, "attached_to": r.case_id, "matches": out}
+
+
 class AttachReport(BaseModel):
     case_id: str
 

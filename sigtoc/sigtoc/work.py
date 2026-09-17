@@ -43,6 +43,8 @@ class AssignmentRow(Base):
     section: Mapped[str] = mapped_column(String)
     case_id: Mapped[str | None] = mapped_column(String, nullable=True)
     location_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    subject_type: Mapped[str | None] = mapped_column(String, nullable=True)   # operation | requirement — the scope the run reads
+    subject_id: Mapped[str | None] = mapped_column(String, nullable=True)
     instruction: Mapped[str] = mapped_column(Text)
     owner_json: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String, default="active")
@@ -106,18 +108,34 @@ class Finding(StrictModel):
     uncertainty: str
 
 
+class GraphProposal(StrictModel):
+    """§5.11 — a typed proposal about the case graph. It names the finding that supports it, so it inherits that
+    finding's citation: nothing reaches the graph without a quote behind it, and nothing is applied without a human
+    (Decision P). Unused fields are empty strings, not nulls, so the provider schema stays flat and strict."""
+    finding_index: int = Field(ge=0)
+    kind: Literal["entity", "relationship", "event"]
+    entity_type: str = ""       # entity: person | organization | account | phone | email | vehicle | place | device
+    name: str = ""              # entity: its name. event: what happened, in one line
+    from_name: str = ""         # relationship: the two ends, by the names already in the case
+    to_name: str = ""
+    link_type: str = ""         # relationship: associate | member_of | contacted | funded | located_at | owns | targets | same_as
+
+
 class Analysis(StrictModel):
     title: str
     summary: str
     findings: list[Finding]
     gaps: list[str]
     proposed_tasks: list[str]
+    proposed_graph: list[GraphProposal] = []
 
 
 class CreateAssignment(BaseModel):
     section: SECTIONS
     case_id: str | None = None
     location_id: str | None = None
+    subject_type: Literal["operation", "requirement"] | None = None
+    subject_id: str | None = None
     instruction: str = Field(min_length=10, max_length=4000)
     cadence_minutes: int = Field(default=0, ge=0, le=10080)
 
@@ -199,7 +217,7 @@ async def event(subject, kind, actor, reason, actor_type="human"):
 
 
 def assignment_out(a):
-    return {k: getattr(a, k) for k in ("id", "section", "case_id", "location_id", "instruction", "status", "cadence_minutes", "next_at", "last_success_at", "created_at")} | {"owner": json.loads(a.owner_json)["name"]}
+    return {k: getattr(a, k) for k in ("id", "section", "case_id", "location_id", "subject_type", "subject_id", "instruction", "status", "cadence_minutes", "next_at", "last_success_at", "created_at")} | {"owner": json.loads(a.owner_json)["name"]}
 
 
 def run_out(r):
@@ -271,7 +289,20 @@ async def create_assignment(body: CreateAssignment, session=Depends(session_dep)
         location = await session.get(LocationRow, body.location_id)
         if not location or location.sensitivity == "restricted":
             raise HTTPException(403, "Site is not available for this assignment")
+    if bool(body.subject_type) != bool(body.subject_id):
+        raise HTTPException(422, "A scoped assignment needs both a subject type and a subject id")
+    if body.subject_type == "operation":
+        from coptoc.operations import OperationRow
+        if not await session.get(OperationRow, body.subject_id):
+            raise HTTPException(404, "Operation not found")
+    if body.subject_type == "requirement":
+        from .requirements import RequirementRow
+        if body.section != "S2":
+            raise HTTPException(422, "A requirement scopes S2's own work")
+        if not await session.get(RequirementRow, body.subject_id):
+            raise HTTPException(404, "Requirement not found")
     a = AssignmentRow(id=ident("work_"), section=body.section, case_id=body.case_id, location_id=body.location_id,
+                      subject_type=body.subject_type, subject_id=body.subject_id,
                       instruction=body.instruction.strip(), cadence_minutes=body.cadence_minutes,
                       owner_json=json.dumps({"user_id": actor.user["id"] if actor.user else None, "role": actor.role, "name": actor.name}), next_at=now())
     session.add(a)
@@ -406,6 +437,112 @@ async def create_proposed_task(rid: str, body: ProposedTask, session=Depends(ses
     return {"id": row.id, "status": row.status}
 
 
+class ApplyProposal(BaseModel):
+    index: int = Field(ge=0)
+
+
+@router.post("/runs/{rid}/graph", status_code=201)
+async def apply_graph_proposal(rid: str, body: ApplyProposal, session=Depends(session_dep), actor=Depends(request_actor)):
+    """§5.11 — apply one typed proposal into the case graph, as `suggested`. The analysis proposes; a human applies;
+    the analyst still confirms or rejects it in the review queue. The row cites the finding's own quote and the source
+    it came from, so the line traces back the same way an extracted one does — nothing enters the graph uncited."""
+    from .cases import CaseEventRow, EntityRow, ENTITY_TYPES, RelationshipRow, RELATIONSHIP_TYPES
+    r = await session.get(RunRow, rid)
+    if not r: raise HTTPException(404, "Result not found")
+    a = await session.get(AssignmentRow, r.assignment_id)
+    await scope_ok(session, actor, a.section, a.case_id, True)
+    await evidence_scope_ok(session, actor, json.loads(r.evidence_json), a.section)
+    if not a.case_id:
+        raise HTTPException(409, "Graph proposals apply to a case; this assignment is not scoped to one")
+    if r.status != "completed" or r.review_status not in ("review", "released"):
+        raise HTTPException(409, "Review the analysis before applying anything it proposes")
+    result = Analysis.model_validate_json(r.result_json)
+    if body.index >= len(result.proposed_graph): raise HTTPException(422, "Proposal not found")
+    p = result.proposed_graph[body.index]
+    if p.finding_index >= len(result.findings): raise HTTPException(422, "The proposal cites no finding in this result")
+    finding = result.findings[p.finding_index]
+    if not finding.citations: raise HTTPException(422, "The finding behind this proposal has no citation")
+    cite = finding.citations[0]
+    ev = await _proposal_evidence(session, cite, rid)
+    existing = {(e.type, e.name.lower()): e for e in (await session.execute(select(EntityRow).where(EntityRow.case_id == a.case_id, EntityRow.merged_into.is_(None)))).scalars()}
+    made = {"kind": p.kind}
+    if p.kind == "entity":
+        if p.entity_type not in ENTITY_TYPES or not p.name.strip(): raise HTTPException(422, f"An entity proposal needs a name and one of {list(ENTITY_TYPES)}")
+        hit = existing.get((p.entity_type, p.name.strip().lower()))
+        if hit:
+            evs = json.loads(hit.evidence_json); evs.append(ev); hit.evidence_json = json.dumps(evs)
+            made |= {"id": hit.id, "status": hit.status, "existing": True}
+        else:
+            row = EntityRow(id=ident("ent_"), case_id=a.case_id, type=p.entity_type, name=p.name.strip(), evidence_json=json.dumps([ev]))
+            session.add(row); made |= {"id": row.id, "status": "suggested", "existing": False}
+    elif p.kind == "relationship":
+        if p.link_type not in RELATIONSHIP_TYPES: raise HTTPException(422, f"A link proposal needs one of {list(RELATIONSHIP_TYPES)}")
+        ends = []
+        for name in (p.from_name, p.to_name):
+            hit = next((e for (t, n), e in existing.items() if n == name.strip().lower()), None)
+            if not hit: raise HTTPException(422, f"'{name}' is not in this case yet — propose the entity first")
+            ends.append(hit)
+        if ends[0].id == ends[1].id: raise HTTPException(422, "A link needs two different ends")
+        dup = (await session.execute(select(RelationshipRow).where(RelationshipRow.case_id == a.case_id, RelationshipRow.from_id == ends[0].id, RelationshipRow.to_id == ends[1].id, RelationshipRow.type == p.link_type))).scalar_one_or_none()
+        if dup:
+            evs = json.loads(dup.evidence_json); evs.append(ev); dup.evidence_json = json.dumps(evs)
+            made |= {"id": dup.id, "status": dup.status, "existing": True}
+        else:
+            row = RelationshipRow(id=ident("rel_"), case_id=a.case_id, from_id=ends[0].id, to_id=ends[1].id, type=p.link_type, evidence_json=json.dumps([ev]))
+            session.add(row); made |= {"id": row.id, "status": "suggested", "existing": False}
+    else:
+        if not p.name.strip(): raise HTTPException(422, "An event proposal needs one line saying what happened")
+        src = await session.get(ReportRow, cite.source_id)
+        if not src: raise HTTPException(422, "An event proposal must cite a report, so the event is dated and placed by it")
+        row = CaseEventRow(id=ident("cev_"), case_id=a.case_id, at=src.at, lat=src.lat, lon=src.lon, place=src.place,
+                           type="analysis", summary=p.name.strip(), evidence_json=json.dumps([ev]))
+        session.add(row); made |= {"id": row.id, "status": "suggested", "existing": False}
+    await session.commit()
+    await event(a.case_id, "graph_proposal_applied", actor.name, f"{p.kind} from {rid} finding {p.finding_index + 1}: {p.name or p.from_name + ' → ' + p.to_name}")
+    return made
+
+
+async def _proposal_evidence(session, cite, rid):
+    """The citation a proposed row carries: the finding's exact quote, and the grade of what it was quoted from. A
+    proposal quoting a report inherits that report's grade; anything else is F6 — the machine's word is not a source."""
+    src = await session.get(ReportRow, cite.source_id)
+    if src:
+        return {"report_id": src.id, "quote": cite.quote[:240], "source": f"analysis:{rid}", "reliability": src.reliability, "credibility": src.credibility, "at": src.at.isoformat() + "Z"}
+    return {"report_id": cite.source_id, "quote": cite.quote[:240], "source": f"analysis:{rid}", "reliability": "F", "credibility": 6, "at": now().isoformat() + "Z"}
+
+
+def claim_fingerprint(claim: str) -> str:
+    return hashlib.sha256(" ".join("".join(ch for ch in claim.lower() if ch.isalnum() or ch.isspace()).split()).encode()).hexdigest()[:16]
+
+
+async def repeat_findings(session, a, result):
+    """Repeat suppression across assignments (§5.12): a finding another assignment in the same section has already
+    made — the same claim once normalised, or the same quote from the same source — is marked as a repeat rather than
+    read as a second, independent report. Exact matching, not semantic: matching meaning needs embeddings, which this
+    does not have, and a near-miss silently dropped would be worse than a repeat shown."""
+    seen = {}
+    others = list((await session.execute(select(RunRow).where(RunRow.assignment_id != a.id, RunRow.status == "completed").order_by(RunRow.created_at.desc()).limit(40))).scalars())
+    for prior in others:
+        pa = await session.get(AssignmentRow, prior.assignment_id)
+        if not pa or pa.section != a.section:
+            continue
+        try:
+            prior_result = Analysis.model_validate_json(prior.result_json)
+        except ValidationError:
+            continue
+        for f in prior_result.findings:
+            seen.setdefault(claim_fingerprint(f.claim), (prior.id, prior.assignment_id))
+            for c in f.citations:
+                seen.setdefault("q:" + claim_fingerprint(c.source_id + c.quote), (prior.id, prior.assignment_id))
+    out = []
+    for i, f in enumerate(result.findings):
+        keys = [claim_fingerprint(f.claim)] + ["q:" + claim_fingerprint(c.source_id + c.quote) for c in f.citations]
+        hit = next((seen[k] for k in keys if k in seen), None)
+        if hit:
+            out.append({"finding_index": i, "run_id": hit[0], "assignment_id": hit[1], "basis": "same claim or same quoted source"})
+    return out
+
+
 def provider_config(public=False):
     provider = settings.get("TOC_AI_PROVIDER", "off")
     model = settings.get("TOC_AI_MODEL", "")
@@ -421,17 +558,37 @@ async def model_analysis(instruction, evidence):
               "an exact quote and its source_id. Separate observations from hypotheses in uncertainty. Explain "
               "contradictions, repeated sourcing, gaps, and operational relevance only where supported. Do not infer "
               "independent corroboration from duplicate reports. Do not invent confidence percentages or execute "
-              "actions. Proposed tasks are suggestions.")
+              "actions. Proposed tasks are suggestions. proposed_graph may propose entities, links, and events for "
+              "the case graph; each names the finding that supports it, and a human applies it or does not. Propose "
+              "nothing the cited quote does not state.")
     result, meta = await model_structured(Analysis, system, {"assignment": instruction, "sources": evidence})
     validate_citations(result, evidence)
     return result, meta
+
+
+def strict_schema(model):
+    """OpenAI's strict JSON schema mode requires every property to be listed as required, even one with a default.
+    The model still validates the response, so a field the provider omits is caught there, not here."""
+    schema = model.model_json_schema()
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "object" and "properties" in node:
+                node["required"] = list(node["properties"])
+                node.setdefault("additionalProperties", False)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(schema)
+    return schema
 
 
 async def model_structured(response_type, system, payload):
     cfg = provider_config()
     if not cfg["configured"]:
         raise ValueError("AI is not configured. Set provider, model, and its API key in Settings")
-    schema = response_type.model_json_schema()
+    schema = strict_schema(response_type)
     system += " Return JSON matching this schema: " + json.dumps(schema)
     payload = json.dumps(payload)
     started = time.monotonic()
@@ -469,9 +626,47 @@ async def owner_actor(session, assignment):
     return Actor(role=owner["role"], name=owner["name"])
 
 
+async def subject_scope(session, a):
+    """An assignment scoped to an operation or a requirement reads only what that subject holds (§5.12). An operation
+    brings its own tasks and resources and the record it is about; a requirement (an NAI) brings the reporting inside
+    its radius and the sightings in it. Returns (evidence, record_ids) — the ids the snapshot pass is narrowed to."""
+    if not a.subject_type:
+        return [], None
+    if a.subject_type == "operation":
+        from coptoc.operations import load_all
+        op = next((o for o in await load_all(session) if o["id"] == a.subject_id), None)
+        if not op:
+            raise ValueError("The operation this assignment is scoped to is gone")
+        text = json.dumps({k: op[k] for k in ("title", "status", "subject_type", "subject_id", "subject_name", "notes", "tasks", "resources") if k in op}, sort_keys=True, default=str)
+        return ([{"id": "operation:" + op["id"], "section": a.section, "label": op["title"], "text": text}], {op.get("subject_id")})
+    from .requirements import RequirementRow
+    from coptoc.service import haversine_km
+    req = await session.get(RequirementRow, a.subject_id)
+    if not req:
+        raise ValueError("The requirement this assignment is scoped to is gone")
+    ev = [{"id": "requirement:" + req.id, "section": "S2", "label": req.subject_name or req.id,
+           "text": json.dumps({"question": req.question, "purpose": req.purpose, "priority": req.priority, "place": req.subject_name,
+                               "radius_km": req.radius_km, "window_from": str(req.window_from), "window_to": str(req.window_to)}, sort_keys=True)}]
+    reports = [r for r in (await session.execute(select(ReportRow).order_by(ReportRow.at.desc()).limit(200))).scalars()
+               if r.lat is not None and r.lon is not None and haversine_km(r.lat, r.lon, req.lat, req.lon) <= req.radius_km]
+    for r in reports[:60]:
+        ev.append({"id": r.id, "section": "S2", "case_id": r.case_id, "label": f"{r.reported_by} · {r.place or 'location unspecified'} · {r.at.isoformat()} · {r.reliability}{r.credibility}", "text": r.text})
+    from .picture import S2SightingRow
+    for sg in [x for x in (await session.execute(select(S2SightingRow).order_by(S2SightingRow.at.desc()).limit(200))).scalars()
+               if haversine_km(sg.lat, sg.lon, req.lat, req.lon) <= req.radius_km][:40]:
+        ev.append({"id": "sighting:" + sg.id, "section": "S2", "label": f"{sg.place or 'sighting'} · {sg.at.isoformat()} · {sg.grade if hasattr(sg, 'grade') else sg.reliability}", "text": sg.what or "sighting with no description"})
+    return ev, None
+
+
 async def evidence_for(session, a, actor):
     await scope_ok(session, actor, a.section, a.case_id, True)
     evidence = []
+    scoped, _ = await subject_scope(session, a)
+    if scoped:
+        # a scoped assignment is exactly its subject: the wall-wide pass below would widen it again
+        if sum(len(e["text"]) for e in scoped) > 180000:
+            raise ValueError("Evidence exceeds the run budget. Narrow the assignment")
+        return scoped
     if a.section == "S2":
         accessible = [c.id for c in (await session.execute(select(CaseRow))).scalars() if actor.role in c.access_roles.split(",")]
         q = select(ReportRow).order_by(ReportRow.at.desc())
@@ -582,6 +777,7 @@ async def worker_tick():
                     await session.execute(update(RunRow).where(RunRow.id == r.id, RunRow.status == "running").values(evidence_json=json.dumps(evidence), instruction=a.instruction))
                     await session.commit()
                     result, meta = await model_analysis(instruction, evidence)
+                    meta["metrics"] = dict(meta["metrics"]) | {"repeats": await repeat_findings(session, a, result)}
                     # Recheck access and cancellation after the provider returns.
                     await session.refresh(a)
                     actor = await owner_actor(session, a)

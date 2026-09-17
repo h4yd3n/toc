@@ -40,6 +40,8 @@ ADDED_COLUMNS = [
     ("cop_taskings", "created_id", "VARCHAR"),
     ("cop_taskings", "created_parent", "VARCHAR"),
     ("cop_taskings", "created_name", "VARCHAR DEFAULT ''"),
+    ("toc_ai_assignments", "subject_type", "VARCHAR"),   # §5.12 an assignment scoped to an operation or a requirement
+    ("toc_ai_assignments", "subject_id", "VARCHAR"),
 ]
 
 
