@@ -1,12 +1,12 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.48
-**Date:** 2026-09-02
-**Status:** Prototype running — web wall + native iOS against one API
+**Version:** v3.49
+**Date:** 2026-09-17
+**Status:** Prototype running — the web wall, native iOS and native Android against one API; the sign-in layer built and off by default (§9)
 
 > [!NOTE]
-> **Scope tags:** **[TONIGHT]** is in the prototype being built now. **[NEXT]** is the following iteration. **[LATER]** is roadmap.
+> **Scope tags:** **[TONIGHT]** was the prototype of 2 September. **[NEXT]** is the following iteration. **[LATER]** is roadmap. As of 17 September everything tagged [TONIGHT] is built; the tag survives only in §10, which stands as the record of that first night's scope.
 
 **Workspace implementation update (2026-09-07):** [Staff workspaces and AI](docs/IMPLEMENTATION_PLAN-ai-workspaces.md) tracks the COP simplification, section workspaces, AI execution service, delivery phases, and development model assignments. The core web workflow is implemented; [the current contract](docs/WORKSPACE_API.md) identifies verified behavior and remaining limits. Live-provider evaluation and advanced automation are not yet complete.
 
@@ -209,7 +209,7 @@ Built with other tools in the author's hands; recorded here from the code so the
 - **Posture in words on a corporate desk.** The corporate profile does not say DEFCON. It reads the same five levels as words — Normal, Guarded, Elevated, High, Critical — with corporate meanings (`POSTURE_MEANING_CORPORATE`); the military profile keeps DEFCON 5–1. Decision AC.
 - **The phones (iOS and Android).** A graduated tactical edge ruler flush under the header and a vertical scale on the right edge, the (0,0) corner aligned; miles or kilometres, persisted per device; the watch and counters as a floating status card; a stacked-paper LAYERS button with a multi-stage overlay menu on every tab, a master layer switch, and a CONTROL MEASURES toggle for the drawn graphics; tabs cycle on three taps — switch, expand the sheet, minimise it; the API origin resolves on a physical device and an error banner offers retry; a WORKSPACE button in each section sheet header opens the in-app console (§5.12).
 
-## 4. S1 — Personnel: Blue Force Tracker **[TONIGHT]**
+## 4. S1 — Personnel: Blue Force Tracker **[BUILT]**
 
 **[BUILT] — names and ranks (2026-09-05).** A person carries last name, first name, middle initial, a rank abbreviation ("SSG", "CW3", "CPT"), and a pay grade — E1–E9, W1–W5, O1–O10, plus CIV and CTR — because the grade is the cross-service constant and services spell the same grade differently. Display follows the profile, the author's call: a military desk reads **LAST, First M. · SSG** — last name first so a roster sorts the way a roster does, the rank after the name; a corporate desk reads First Last. Both sort by last name. Map labels read "SSG Reyes" on a military desk and "Jordan" on a corporate one. Uploads accept a rank or a grade (E-6, e6, SSG all land as SSG / E6) and other services' abbreviations map to the same grade.
 
@@ -270,7 +270,7 @@ A requirement is the unit of work. Nothing is collected and nothing is assessed 
 
 **Directed requirements are a form.** Place, window, purpose, priority. That is the whole input for the Lisbon question.
 
-### 5.3 The collection plan — sources recommend themselves **[BUILT]** (six keyless live sources, two more with keys; the plan shows the gaps)
+### 5.3 The collection plan — sources recommend themselves **[BUILT]** (eight keyless live sources — GDACS, USGS, NWS, WHO DON, State Dept, FCDO, GDELT, frontier-lab CTI — and two more behind keys; the plan shows the gaps)
 
 The requirement determines the sources, not the other way around. Each requirement is decomposed into **indicators** — observable facts that would answer it — and each indicator maps to the sources that can observe it. That mapping is the synchronization matrix, and it is generated, not hand-built.
 
@@ -278,10 +278,12 @@ The requirement determines the sources, not the other way around. Each requireme
 Requirement:  "Threats to the CEO's Riyadh visit, 1–4 Oct"
   ├── Indicator: hazardous weather / natural events in the window      → GDACS, NOAA        ✓ covered
   ├── Indicator: advisory level and change                             → State Dept RSS     ✓ covered
-  ├── Indicator: civil unrest or political violence within 50 km       → ACLED, GDELT       ✗ no source connected
+  ├── Indicator: civil unrest or political violence within 50 km       → ACLED, GDELT       ~ press reporting only
   ├── Indicator: health notices for the country                        → WHO DON            ✓ covered
   └── Indicator: targeted threat reporting against Western business    → commercial feed    ✗ not subscribed
-Coverage: 3 of 5 indicators. Gaps are visible before anyone asks for an assessment.
+Coverage: 3 of 5 indicators observed, 1 carried by press reporting alone (GDELT, country-scoped,
+grade C — articles, not observed events; ACLED would observe it but needs a key), 1 not collected.
+Gaps are visible before anyone asks for an assessment.
 ```
 
 Rules:
@@ -290,7 +292,7 @@ Rules:
 3. **Cadence is per source and adjustable by whoever runs the system** — the analyst or an admin — from the source's settings, with every option available (manual, hourly, every few hours, daily, weekly). Each connector ships with a default that is a starting point, not a rule; the operator changes it as they learn the source. (Decision K.)
 4. **Relevance is filtered against blue force and against directed subjects.** The world's events are collected; only those touching a requirement's subject reach the wall.
 
-### 5.4 Collection and processing **[BUILT for GDACS; pattern for all]**
+### 5.4 Collection and processing **[BUILT — ten collectors on one pattern]** (`sigtoc/collectors/registry.py`)
 
 Connector → normalize → deduplicate (`origin_key`, so one wire story republished forty times is one source) → grade → store with provenance (`source`, `observed_at`, `url`). A broken source fails loudly. Absence of evidence is not evidence of safety.
 
@@ -489,7 +491,7 @@ All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a
 
 ## 6. S3 — Operations: Travel & Events
 
-**[TONIGHT] — travel.** A trip has a traveler, an origin, a destination (a location or a raw coordinate), departure and return times, a purpose, and a status (planned / active / complete). An active trip moves the traveler's pin. The S3 timeline shows active and upcoming travel.
+**[BUILT] — travel.** A trip has a traveler, an origin, a destination (a location or a raw coordinate), departure and return times, a purpose, and a status (planned / active / complete). An active trip moves the traveler's pin. The S3 timeline shows active and upcoming travel.
 
 **[BUILT] — events.** A corporate event has a venue, a time window, and attendees. Two months out it's on the calendar so S2 can assess threats against it and S1 can plan security coverage. Attending VIPs each get a trip generated.
 
@@ -566,6 +568,8 @@ The audience is security. The data entry is everyone who plans an executive's mo
 
 **Not tonight:** auth, roles, real-time updates, events, S4, S6, real intelligence, mobile apps.
 
+*This section is the record of 2 September and is not maintained. Everything on the "not tonight" list is built since: roles and permissions (§9, v3.24), the sign-in layer (§9, v3.46), events and operations (§6), S4 (§7), S6 (§8), live collection (§5.3), and both phones (§11). Real-time updates are still polling.*
+
 ---
 
 ## 11. Platform Plan
@@ -574,8 +578,8 @@ Matches the Washi pattern — a web app and two native apps against one backend.
 
 | Platform | Stack | When |
 | :--- | :--- | :--- |
-| **Web** | React 19, Vite, TypeScript, MapLibre GL | **[TONIGHT]** |
-| **Backend** | FastAPI, SQLAlchemy, SQLite → Postgres | **[TONIGHT]** |
+| **Web** | React 19, Vite, TypeScript, MapLibre GL | **[BUILT]** — `coptoc/web`, the wall and the workspaces |
+| **Backend** | FastAPI, SQLAlchemy, SQLite | **[BUILT]** — `coptoc/api`; Postgres **[LATER]**, SQLite is what runs today |
 | **iOS** | SwiftUI, MapKit, XcodeGen | **[BUILT]** — `coptoc/ios`, the wall with watch chip, estimates, roll call, the S2 panels through the staff products (§5.10b) |
 | **Android** | Kotlin, Jetpack Compose, MapLibre Native | **[BUILT]** — `coptoc/android`, the wall with S1/S2/S3/S6 panels, detail sheets, and every role-gated action; built and run on the Pixel 7 emulator |
 
@@ -721,6 +725,34 @@ COP never writes back to a source system.
 
 None outstanding. Everything raised so far is logged in §14; new questions go here as they come up.
 
+### 15.1 What is not built, and why (17 Sep 2026)
+
+Two lists, kept apart on purpose: what is blocked for want of an account, a key or an approval, and what is
+open because nobody has chosen to build it yet. Neither list is a decision waiting to be taken — §15 is empty.
+
+**Blocked on an account, a key or an approval** — the code path exists or is specified; nothing can be verified live without credentials:
+
+| Thing | What it waits on |
+| :--- | :--- |
+| Live-provider quality and cost evaluation, and the runtime model choice for AI analysis | a funded provider account (`docs/WORKSPACE_API.md`) |
+| ACLED, CLSTR | free keys; the connectors are built and run when the keys are set |
+| OSAC | a login |
+| Flashpoint, Recorded Future, Dataminr | commercial subscriptions (§13) |
+| Everbridge | a mass-notification account (§13) |
+| Concur / Navan, Google / Outlook calendar | OAuth applications; CSV and ICS imports carry the same data today (§13) |
+| ReliefWeb | an approved `appname`; v1 is decommissioned and v2 refuses unregistered ones (§5.8) |
+
+**Open by choice** — no blocker, just unbuilt:
+
+- Semantic duplicate suppression in the workspaces. Exact matching ships; matching meaning needs embeddings, and a near-miss silently dropped is worse than a repeat shown (`docs/WORKSPACE_API.md`).
+- Shared saved filters across the views, and consolidated extraction / drafting adapters.
+- Native workspace parity — the phones open the built console in-app rather than drawing the workspace natively (§5.12).
+- Broader intake input: OCR and scanned PDFs, images, voice. Text and text-layer PDFs only today (§5.13).
+- Further intake kinds beyond `shipment` and `system` — S1 rosters and S3 schedules would come through the spreadsheet upload instead (§13).
+- Offline capture on the phones, and the remaining mobile acceptance tests (interrupted network, native back-navigation edges).
+- Real-time updates. The wall polls; a push channel is not built.
+- Postgres. SQLite is what runs, with a startup column migration (`shared/shared/database.py`, `ADDED_COLUMNS`) standing in for real migrations.
+
 ## Appendix — Version History
 
 - **v1** — corporate travel-risk platform with a scoring model. Archived as `docs/archive/PRD-v1-travel-risk.md`. The scoring mathematics was invented and is not carried forward.
@@ -729,6 +761,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.49** — 17 Sep: a currency pass, no new product. The header, the scope tags and the platform table say what is actually running (web, iOS and Android; SQLite, not Postgres); §5.3 counts the eight keyless collectors and the worked example stops calling GDELT unconnected; §5.4 is built for ten collectors on one pattern; §10 is marked as the record of 2 September; new §15.1 lists what is not built, split into what waits on an account or key and what is open by choice. Verified the same day: 250 tests pass, web typecheck clean, iOS and Android build.
 - **v3.48** — 17 Sep: what a military deployment adds first (§4, §7): unit positions from a tracker with a staleness setting, equipment readiness by bumper number with the OR rate as its definition, and days of supply from the rate S4 enters.
 - **v3.47** — 17 Sep: the GDELT DOC 2.0 collector (§5.3, §13), keyless and country-scoped, carrying press reporting as press reporting at grade C.
 - **v3.46** — 17 Sep: the sign-in layer (§9, README): scrypt passwords, bearer tokens signed with `TOC_SECRET`, `TOC_AUTH=on` refusing header identity, and startup guards against the dev secret and an open CORS policy.

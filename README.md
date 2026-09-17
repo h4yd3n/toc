@@ -10,11 +10,13 @@ A corporate-security **Tactical Operations Center**, built the way a military st
 - **Coptoc** — the Common Operating Picture: one wall with S1 personnel (blue force tracker, check-ins), S3 operations
   (travel, events, operations with tasks and S4 asks), S6 accountability (roll calls, check-in requests over SMS and
   chat, inbound replies, the 15-minute escalation rule), the watch (shifts, running estimates, the shift-change brief),
-  and a hash-chained battle log. Web, iOS, and Android against one API.
+  S4 logistics (supply, shipments, equipment readiness by bumper number, days of supply) and unit positions from a
+  tracker, and a hash-chained battle log. Web, iOS, and Android against one API.
 - **Sigtoc** — the S2: requirements that write themselves from the wall, a collection plan that recommends its own
-  sources, live collectors (GDACS, USGS, NWS, WHO, State Dept, FCDO; ACLED and CLSTR with keys), organic reports and
-  cases with a suggest-then-confirm graph, the Area Assessment (candidates side by side, no score), and the daily INTSUM
-  drafted at a fixed hour and released by the Battle Captain. Every product is disseminated and acknowledged on the record.
+  sources, live collectors (GDACS, USGS, NWS, WHO, State Dept, FCDO, GDELT, frontier-lab CTI — all keyless; ACLED and
+  CLSTR with keys), organic reports and cases with a suggest-then-confirm graph, the Area Assessment (candidates side
+  by side, no score), the IPB with threat COAs and decision points, and the daily INTSUM drafted at a fixed hour and
+  released by the Battle Captain. Every product is disseminated and acknowledged on the record.
 - **Modtoc** — a separate content-moderation engine that shares the ledger. Frozen; [ROOST](https://github.com/roostorg) covers most of it.
 
 Everything is synthetic: people, sites, phone numbers, reports. Live feeds are real. Nothing needs a key to run.
