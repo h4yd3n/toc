@@ -5,28 +5,38 @@ import type { Snapshot } from './types'
 import type { IntakeProposal, IntakeSubmission } from './api'
 
 type Act = (label:string,fn:()=>Promise<unknown>)=>void
-const labels:Record<string,string>={description:'Description',ref:'Reference',quantity:'Quantity (include units)',eta:'ETA (with timezone)',status:'Shipment status',carrier:'Carrier',note:'Note'}
+const labels:Record<string,string>={description:'Description',ref:'Reference',quantity:'Quantity (include units)',eta:'ETA (with timezone)',status:'Status',carrier:'Carrier',note:'Note',
+  name:'System name',category:'Category',pace:'PACE role'}
+// §5.13 — one panel, one document kind at a time: S4 reads delivery updates into shipments, S6 reads maintenance and
+// outage notices into systems. The review machinery is the same; only the record and its fields differ.
+const KIND:Record<string,{noun:string;title:string;blurb:string;placeholder:string;fields:string[]}>={
+  shipment:{noun:'shipment',title:'Let the source do the typing',blurb:'Paste a delivery update or attach a manifest. Review the proposed shipment changes before they reach the COP.',
+    placeholder:'Paste the original update, including shipment references, quantities, dates and timezones…',fields:['description','ref','quantity','eta','status','carrier','note']},
+  system:{noun:'system',title:'Read a comms notice into the board',blurb:'Paste a maintenance or outage notice, or attach one. Review the proposed system changes before they reach the COP.',
+    placeholder:'Paste the notice, naming the system, its status, and its PACE role if it is stated…',fields:['name','category','pace','status','note']},
+}
 const date=(s:string)=>new Date(s.endsWith('Z')?s:s+'Z').toLocaleString()
-export function IntakePanel({snap,canEdit,act,busy,reload,selected,onSelect}:{snap:Snapshot;canEdit:boolean;act:Act;busy:string|null;reload:number;selected:string|null;onSelect:(id:string|null)=>void}) {
+export function IntakePanel({snap,canEdit,act,busy,reload,selected,onSelect,kind='shipment'}:{snap:Snapshot;canEdit:boolean;act:Act;busy:string|null;reload:number;selected:string|null;onSelect:(id:string|null)=>void;kind?:'shipment'|'system'}) {
+  const k=KIND[kind]
   const [items,setItems]=useState<IntakeSubmission[]>([]),[detail,setDetail]=useState<IntakeSubmission|null>(null)
   const [error,setError]=useState(''),[configured,setConfigured]=useState(false),[text,setText]=useState(''),[file,setFile]=useState<File|null>(null)
   const [location,setLocation]=useState(''),[history,setHistory]=useState(false),[mine,setMine]=useState(false)
   const [refresh,setRefresh]=useState(0)
   useEffect(()=>{
     let alive=true
-    const load=async()=>{try {const board=await api.listIntake();const next=selected?await api.getIntake(selected):null;if(alive){setItems(board.items);setConfigured(board.provider.configured);setDetail(next);setError('')}}catch(e){if(alive){setDetail(null);setError(String(e))}}}
+    const load=async()=>{try {const board=await api.listIntake(kind);const next=selected?await api.getIntake(selected):null;if(alive){setItems(board.items);setConfigured(board.provider.configured);setDetail(next);setError('')}}catch(e){if(alive){setDetail(null);setError(String(e))}}}
     void load();const timer=window.setInterval(load,10000);return()=>{alive=false;window.clearInterval(timer)}
-  },[reload,selected,refresh])
+  },[reload,selected,refresh,kind])
   const run=(name:string,fn:()=>Promise<unknown>)=>act(name,async()=>{await fn();setRefresh(x=>x+1)})
   const destinations=snap.locations.filter(l=>l.sensitivity!=='restricted')
   const visible=items.filter(i=>(!mine||i.owner===snap.me?.name)&&(history||i.pending>0||['queued','processing','failed'].includes(i.status)))
   return <section className="intake-panel">
     {!selected&&<>
-      <section className="ws-card intake-capture"><p className="ws-kicker">Provide an update</p><h2>Let the source do the typing</h2><p>Paste a delivery update or attach a manifest. Review the proposed shipment changes before they reach the COP.</p>
+      <section className="ws-card intake-capture"><p className="ws-kicker">Provide an update</p><h2>{k.title}</h2><p>{k.blurb}</p>
         {!configured&&<p className="ws-notice">AI is not configured. You can save a source now; extraction will show a setup error until a provider, model and key are configured in Settings.</p>}
-        {canEdit&&<form className="ws-form" onSubmit={e=>{e.preventDefault();run('saving source',async()=>{const saved=file?await api.submitIntakeFile(file,location):await api.submitIntakeText(text,location);setText('');setFile(null);onSelect(saved.id)})}}>
+        {canEdit&&<form className="ws-form" onSubmit={e=>{e.preventDefault();run('saving source',async()=>{const saved=file?await api.submitIntakeFile(file,location,kind):await api.submitIntakeText(text,location,kind);setText('');setFile(null);onSelect(saved.id)})}}>
           <label>Destination for this submission<select required value={location} onChange={e=>setLocation(e.target.value)}><option value="">Select a destination…</option>{destinations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
-          <label>Delivery update<textarea rows={4} maxLength={60000} disabled={!!file} value={text} onChange={e=>setText(e.target.value)} placeholder="Paste the original update, including shipment references, quantities, dates and timezones…" /></label>
+          <label>{kind==='system'?'Maintenance or outage notice':'Delivery update'}<textarea rows={4} maxLength={60000} disabled={!!file} value={text} onChange={e=>setText(e.target.value)} placeholder={k.placeholder} /></label>
           <label>Or attach a text-based PDF<input type="file" accept="application/pdf,.pdf" onChange={e=>{const f=e.target.files?.[0]??null;if(f&&f.size>2*1024*1024){setError('Maximum PDF size is 2 MB');e.target.value='';return}setFile(f);setError('')}}/></label>
           <p className="dim">One destination per submission · PDF up to 2 MB / 20 pages · Selectable text required. Scans, images and voice are not supported yet.</p>
           <button className="ws-primary" disabled={!!busy||!location||(!file&&text.trim().length<10)}>Prepare changes</button>
@@ -39,26 +49,29 @@ export function IntakePanel({snap,canEdit,act,busy,reload,selected,onSelect}:{sn
     </>}
     {error&&<p className="ws-error" role="alert">{error}</p>}
     {selected&&<><button className="ws-link" onClick={()=>onSelect(null)}>← All updates</button>{!detail&&!error&&<p>Loading source…</p>}</>}
-    {detail&&<><div className="ws-toolbar"><div><p className="ws-kicker">{detail.status} · {detail.attempts} processing attempts</p><h2>{detail.filename}</h2><p className="dim">{detail.owner} · {date(detail.created_at)}{detail.meta.provider&&` · ${detail.meta.provider} / ${detail.meta.model}`}</p></div><button onClick={()=>run('downloading source',()=>api.downloadIntakeSource(detail.id))}>Download original</button></div>
+    {detail&&<><div className="ws-toolbar"><div><p className="ws-kicker">{detail.status} · {detail.attempts} processing attempts</p><h2>{detail.filename}</h2><p className="dim">{detail.owner} · {date(detail.created_at)}{detail.meta.provider&&` · ${detail.meta.provider} / ${detail.meta.model}`}</p></div>{detail.source_available===false?<span className="dim" title={`Purged under the ${detail.retention_days}-day retention rule`}>Original purged{detail.purged_at?` · ${date(detail.purged_at)}`:''}</span>:<button onClick={()=>run('downloading source',()=>api.downloadIntakeSource(detail.id))}>Download original</button>}</div>
       {detail.error&&<p className="ws-error" role="alert">{detail.error}</p>}
       {detail.status==='failed'&&canEdit&&<button disabled={!!busy} onClick={()=>run('retrying extraction',()=>api.retryIntake(detail.id))}>Retry extraction</button>}
       {['queued','processing'].includes(detail.status)&&<p className="ws-notice">Your source is saved. Processing continues in the background; you can leave this screen.</p>}
       {detail.meta.gaps?.map((g,i)=><p className="ws-notice" key={i}>{g}</p>)}
       <div className="intake-review"><aside className="ws-card intake-source"><h3>Original source</h3>{detail.pages?.map(p=><section key={p.page}><p className="ws-kicker">Page {p.page}</p><p className="ws-source">{p.text}</p></section>)}</aside>
-        <div>{detail.status==='review'&&!detail.proposals?.length&&<p className="ws-empty">No supported shipment changes were extracted. Review the gaps or provide a clearer source.</p>}{detail.proposals?.map(p=><Proposal key={p.id+':'+p.revision} proposal={p} detail={detail} snap={snap} canEdit={canEdit} busy={busy} run={run}/>)}</div>
+        <div>{detail.status==='review'&&!detail.proposals?.length&&<p className="ws-empty">No supported {k.noun} changes were extracted. Review the gaps or provide a clearer source.</p>}{detail.proposals?.map(p=><Proposal key={p.id+':'+p.revision} proposal={p} detail={detail} snap={snap} canEdit={canEdit} busy={busy} run={run} kind={kind}/>)}</div>
       </div>
     </>}
   </section>
 }
-function Proposal({proposal:p,detail,snap,canEdit,busy,run}:{proposal:IntakeProposal;detail:IntakeSubmission;snap:Snapshot;canEdit:boolean;busy:string|null;run:Act}) {
+function Proposal({proposal:p,detail,snap,canEdit,busy,run,kind}:{proposal:IntakeProposal;detail:IntakeSubmission;snap:Snapshot;canEdit:boolean;busy:string|null;run:Act;kind:'shipment'|'system'}) {
   const [editing,setEditing]=useState(false),[values,setValues]=useState(p.values),[target,setTarget]=useState(p.target_id??''),[note,setNote]=useState('')
   const editable=!['applied','rejected','unchanged'].includes(p.status)&&canEdit
-  const shipments=snap.s4.shipments.filter(s=>s.to_location_id===detail.location_id)
-  const fields=editing?Object.keys(labels):Object.keys(p.values)
-  return <article className="ws-card intake-proposal"><p className="ws-kicker">{p.status.replaceAll('_',' ')} · Revision {p.revision}</p><h3>{p.values.description||p.values.ref||'Shipment update'}</h3>
-    <p className="dim">{p.target_id?`Shipment: ${p.target_id}`:p.current._create?'New shipment confirmed':'Select a shipment or confirm creation'}</p>
+  const k=KIND[kind]
+  const targets=kind==='system'
+    ? snap.s6.systems.filter(s=>s.location_id===detail.location_id).map(s=>({id:s.id,label:`${s.name} · ${s.status}`}))
+    : snap.s4.shipments.filter(s=>s.to_location_id===detail.location_id).map(s=>({id:s.id,label:`${s.description} · ${s.ref||s.id}`}))
+  const fields=editing?k.fields:Object.keys(p.values)
+  return <article className="ws-card intake-proposal"><p className="ws-kicker">{p.status.replaceAll('_',' ')} · Revision {p.revision}</p><h3>{p.values.description||p.values.name||p.values.ref||`${k.noun} update`}</h3>
+    <p className="dim">{p.target_id?`${k.noun}: ${p.target_id}`:p.current._create?`New ${k.noun} confirmed`:`Select a ${k.noun} or confirm creation`}</p>
     {p.questions.map((q,i)=><p className="ws-notice" key={i}>{q}</p>)}
-    {editing&&<label className="intake-label">Target shipment<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">Choose a target…</option><option value="__new">Create a new shipment</option>{shipments.map(s=><option key={s.id} value={s.id}>{s.description} · {s.ref||s.id}</option>)}</select></label>}
+    {editing&&<label className="intake-label">Target {k.noun}<select value={target} onChange={e=>setTarget(e.target.value)}><option value="">Choose a target…</option><option value="__new">Create a new {k.noun}</option>{targets.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select></label>}
     <div className="intake-comparison"><table><thead><tr><th>Field</th><th>{p.status==='applied'?'Before':'Current'}</th><th>{p.status==='applied'?'Applied':'Proposed'}</th></tr></thead><tbody>{fields.map(k=><tr key={k}><th>{labels[k]||k}</th><td>{p.current[k]||'—'}</td><td>{editing?<input aria-label={`Proposed ${labels[k]}`} value={values[k]??''} onChange={e=>setValues({...values,[k]:e.target.value})}/>:p.values[k]||'—'}</td></tr>)}</tbody></table></div>
     <details><summary>Supporting evidence</summary>{p.evidence.map(e=><blockquote key={e.field}><p className="ws-kicker">{labels[e.field]} · Page {e.page}</p>{e.quote}</blockquote>)}<p className="dim">A matching quotation provides traceability. Review whether it supports the proposed value.</p></details>
     {editable&&<><label className="intake-label">Review note<textarea rows={2} value={note} onChange={e=>setNote(e.target.value)} placeholder="Explain corrections, resolved questions, or rejection…"/></label><div className="ws-actions">

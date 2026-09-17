@@ -88,7 +88,9 @@ export default function Workspaces({ destination:d, navigate, snap, role, enable
     <div className="workspace-body">
         {tab==='overview' && <>
           {section==='S4' && <IntakePanel snap={snap} canEdit={can('S4','edit')} act={act} busy={busy} reload={reload} selected={d.record} onSelect={id=>open('overview',id??undefined)}/>}
-          {!(section==='S4'&&d.record)&&<><details className="ws-card"><summary>Section picture & staff estimate</summary><SectionSummary section={section} snap={snap} onOpen={open} onSelect={onSelect}/><EstimateLine e={snap.estimates.find(e=>e.section===section) ?? {section,assessment:'',recommendation:'',updated_by:null,updated_at:null}} canEditOverride={can(section,'edit')} role={role} busy={busy} act={act}/></details><WorkPanel locations={snap.locations} section={section} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} onOpenCase={id=>open('cases',id)}/></>}
+          {/* §5.13 beyond S4 — S6 reads maintenance and outage notices into its systems through the same review */}
+          {section==='S6' && <IntakePanel kind="system" snap={snap} canEdit={can('S6','edit')} act={act} busy={busy} reload={reload} selected={d.record} onSelect={id=>open('overview',id??undefined)}/>}
+          {!((section==='S4'||section==='S6')&&d.record)&&<><details className="ws-card"><summary>Section picture & staff estimate</summary><SectionSummary section={section} snap={snap} onOpen={open} onSelect={onSelect}/><EstimateLine e={snap.estimates.find(e=>e.section===section) ?? {section,assessment:'',recommendation:'',updated_by:null,updated_at:null}} canEditOverride={can(section,'edit')} role={role} busy={busy} act={act}/></details><WorkPanel locations={snap.locations} section={section} role={role} canEdit={s=>can(s,'edit')} reload={reload} busy={busy} act={act} onOpenCase={id=>open('cases',id)}/></>}
         </>}
         {tab==='activity' && <ActivityPanel reload={reload}/>}
         {tab==='tasks' && <section className="ws-card">{tasks}</section>}

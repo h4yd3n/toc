@@ -190,19 +190,21 @@ export type IntakeProposal = {
   questions: string[]; evidence: {field:string;value:string;page:number;quote:string}[];
   history: {at?:string;actor?:string;action:string;note?:string;status?:string;values?:Record<string,string>}[];
 }
+export type IntakeKind = { id:string; section:string; noun:string; fields:string[]; statuses:string[] }
 export type IntakeSubmission = {
-  id:string; location_id:string; filename:string; status:string; revision:number; created_at:string;
+  id:string; kind:string; location_id:string; filename:string; status:string; revision:number; created_at:string;
   owner:string; attempts:number; error:string; pending:number; applied:number;
+  source_available?:boolean; purged_at?:string|null; retention_days?:number;
   meta: {provider?:string;model?:string;gaps?:string[]};
   pages?: {page:number;text:string}[]; proposals?:IntakeProposal[];
 }
-export const listIntake = () => req<{items:IntakeSubmission[];provider:{configured:boolean;provider:string;model:string}}>('GET','/v1/intake')
+export const listIntake = (kind?:string) => req<{items:IntakeSubmission[];kinds:IntakeKind[];provider:{configured:boolean;provider:string;model:string}}>('GET',kind?`/v1/intake?kind=${kind}`:'/v1/intake')
 export const getIntake = (id:string) => req<IntakeSubmission>('GET',`/v1/intake/${id}`)
-export const submitIntakeText = (text:string,location_id:string) => req<IntakeSubmission>('POST','/v1/intake/text',{text,location_id})
+export const submitIntakeText = (text:string,location_id:string,kind='shipment') => req<IntakeSubmission>('POST','/v1/intake/text',{text,location_id,kind})
 export const retryIntake = (id:string) => req<IntakeSubmission>('POST',`/v1/intake/${id}/retry`)
 export const reviewIntake = (sid:string,pid:string,body:{revision:number;action:'save'|'apply'|'reject';values?:Record<string,string>;target_id?:string;create_new?:boolean;note?:string}) => req<IntakeProposal>('PATCH',`/v1/intake/${sid}/proposals/${pid}`,body)
-export async function submitIntakeFile(file:File,locationId:string):Promise<IntakeSubmission> {
-  const body=new FormData(); body.append('file',file); body.append('location_id',locationId)
+export async function submitIntakeFile(file:File,locationId:string,kind='shipment'):Promise<IntakeSubmission> {
+  const body=new FormData(); body.append('file',file); body.append('location_id',locationId); body.append('kind',kind)
   const response=await fetch('/v1/intake/file',{method:'POST',body,headers:{'X-TOC-Role':session.role,'X-TOC-Actor':actor(),...(session.userId?{'X-TOC-User':session.userId}:{})}})
   if(!response.ok) throw new Error((await response.text()).slice(0,300))
   return response.json()

@@ -66,4 +66,19 @@ Web navigation now has COP and Workspaces. Old `#/work/{section}/overview?record
 - Browser checks exercised source submission, visible provider-off failure, explicit creation clarification, comparison save, approval and persistence, and the embedded logistics profile at 390 × 844. Review used a clearly labeled synthetic fixture in `/tmp/toc-workspaces-preview.db`; no live provider was called.
 - `scripts/evaluate_intake.py` validates a five-case synthetic starter corpus without a provider. `--live` explicitly runs it against the configured provider and writes extraction metrics. The corpus is a starting harness, not sufficient proof of production quality, matching accuracy, or human time savings.
 
-Production sign-in provider selection, live-model evaluation, automatic source retention, broader input types and administrative workflows, budget controls, offline capture, and the remaining mobile acceptance tests are still open. No production deployment or physical-device rollout is claimed.
+## Beyond S4 (17 Sep)
+
+Intake is no longer S4-only. A submission carries a **kind**, and the kind says which section owns the document, which record it proposes changes to, how a proposal is matched to an existing record, and what a new record needs before anyone may create one. The review machinery is identical for every kind: quotes are checked against the page they claim, corrections are saved and re-compared before anything is applied, each proposal is one atomic revision, and a conflict rolls back rather than overwriting.
+
+| kind | section | document | record | matched on | a new one needs |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `shipment` | S4 | a delivery update or manifest | `cop_shipments` | `ref` | description, reference, timezone-aware ETA, status |
+| `system` | S6 | a maintenance or outage notice | `cop_systems` | `name` | name, status |
+
+`POST /v1/intake/text` and `/file` take `kind` (default `shipment`); `GET /v1/intake` returns only the kinds the caller's sections may view, with each kind's fields and statuses, and hides submissions belonging to a section they cannot see. A system's category defaults to comms and its status clock (`since`) is reset by the apply, never read out of the document. PACE is accepted only as primary, alternate, contingency or emergency, and only when the notice states it.
+
+## Retention (17 Sep)
+
+`TOC_INTAKE_RETENTION_DAYS` (default 90, `0` turns it off) is the rule. The background worker purges the **original document and its extracted page text** once a submission is older than the window and is no longer queued or processing; the proposals, the quotations that were reviewed, the decisions and the history stay. What a human decided is the record — the source was the evidence for that decision, and keeping it forever is a liability nobody asked for. A purged submission reports `source_available: false` with `purged_at`, and its download returns 410 naming the rule.
+
+Production sign-in provider selection, live-model evaluation, broader input types (OCR and scanned PDFs, images, voice), further kinds (S1 rosters, S3 schedules), administrative workflows, budget controls, offline capture, and the remaining mobile acceptance tests are still open. No production deployment or physical-device rollout is claimed.
