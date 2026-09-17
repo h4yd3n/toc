@@ -11,6 +11,7 @@ from .routes import router as cop_router, startup as cop_startup
 from .auth import router as auth_router, allowed_origins, startup_guard
 from .ingestion import router as intake_router
 from . import intake_monitor  # register administrative checks on the intake router
+from . import readiness  # noqa: F401 — registers cop_unit_positions and cop_equipment before create_all (§4, §7)
 
 
 async def _intsum_clock() -> None:

@@ -16,7 +16,7 @@ from .taskings import TaskingRow, summarize as taskings_summary
 from .areas import AreaRatingRow, compact as area_compact, out as area_out, same_place
 from . import overlays
 from .graphics import GraphicRow, out as graphic_out
-from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config
+from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config, worst as worst_status
 from .db_models import (TripLegRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripRow)
 from sigtoc.cases import ReportRow, report_dict as s2_report_out
@@ -305,6 +305,16 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     loc_name = {l.id: l.name for l in locations}
     s4 = s4_summary([x for x in supplies if not x.location_id or x.location_id in loc_by_id], [x for x in shipments if not x.to_location_id or x.to_location_id in loc_by_id], loc_name, now)
     s6 = s6_summary([x for x in systems if not x.location_id or x.location_id in loc_by_id], loc_name, now)
+    # §4 and §7 — what a military deployment adds first: where the units are, and what the equipment can do
+    from . import readiness as rdy
+    team_name = {t.id: t.name for t in teams}
+    unit_positions = await rdy.latest_positions(session, team_name, now, {t.id: (t.short or t.name) for t in teams})
+    equipment_rows = [rdy.equipment_out(e, team_name, loc_name, now) for e in (await session.execute(select(rdy.EquipmentRow))).scalars()]
+    s4["equipment"] = equipment_rows
+    s4["readiness"] = rdy.readiness(equipment_rows)
+    if s4["readiness"]["exceptions"]:
+        s4["exceptions"] = s4["exceptions"] + s4["readiness"]["exceptions"]
+        s4["status"] = worst_status([s4["status"]] + [g["status"] for g in s4["readiness"]["by_model"]])
     from .sections import STATUS_RANK, worst
     def site_health(lid: str) -> Dict[str, Any]:
         lines = [x for x in s4["supplies"] if x["location_id"] == lid]
@@ -548,7 +558,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
         "graphics": graphics_out, "s2_actors": s2_actors_out, "s2_sightings": s2_sightings_out, "s2_reports": s2_reports_out, "movement_risks": movement_risks_out,
-        "decision_points": decision_points_out,
+        "decision_points": decision_points_out, "unit_positions": unit_positions,
     }
 
 

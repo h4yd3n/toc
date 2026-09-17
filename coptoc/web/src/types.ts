@@ -106,10 +106,19 @@ export interface Brief {
 }
 export type Health = 'green' | 'amber' | 'red'
 export interface SectionCfg { code: 'S1' | 'S2' | 'S3' | 'S4' | 'S6'; title: string; hint: string; enabled: boolean; label: string; show_code: boolean }
-export interface SupplyLine { id: string; location_id: string | null; location_name: string; category: string; item: string; on_hand: number; required: number; unit: string; pct: number; status: Health; note: string; updated_by: string; updated_at: string | null; source: string }
+export interface SupplyLine { daily_use?: number | null; days_of_supply?: number | null; id: string; location_id: string | null; location_name: string; category: string; item: string; on_hand: number; required: number; unit: string; pct: number; status: Health; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface Shipment { id: string; description: string; category: string; quantity: string; from_name: string; to_location_id: string | null; to_name: string; eta: string; hours_to_eta: number
   status: 'planned' | 'in_transit' | 'delayed' | 'arrived' | 'cancelled'; priority: 'routine' | 'priority' | 'urgent'; carrier: string; ref: string | null; health: Health; note: string; updated_by: string; updated_at: string | null }
-export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Shipment[]; exceptions: string[]; counts: { red: number; amber: number; inbound: number; late: number } }
+/** §7 — one piece of equipment by bumper number, and the readiness those rows add up to. */
+export interface EquipmentLine { id: string; bumper_number: string; model: string; category: string; team_id: string | null; team_name: string; location_id: string | null; location_name: string
+  status: 'fmc' | 'pmc' | 'nmc'; fault: string; since: string | null; hours_down: number; updated_by: string; updated_at: string | null; source: string }
+export interface ReadinessGroup { model?: string; unit?: string; assigned: number; fmc: number; pmc: number; nmc: number; or_pct: number | null; status: Health }
+export interface Readiness { bands?: { green_at: number; amber_at: number }; assigned: number; fmc: number; pmc: number; nmc: number; or_pct: number | null; by_model: ReadinessGroup[]; by_unit: ReadinessGroup[]; down: EquipmentLine[]; exceptions: string[] }
+export interface S4Board { status: Health; supplies: SupplyLine[]; shipments: Shipment[]; exceptions: string[]; counts: { red: number; amber: number; inbound: number; late: number }
+  equipment?: EquipmentLine[]; readiness?: Readiness }
+/** §4 — where a unit last reported from, and whether that report is still current. */
+export interface UnitPosition { team_id: string; team_name: string; team_short: string; lat: number; lon: number; at: string; age_min: number; stale: boolean; stale_after_min: number
+  source: string; speed_kph: number | null; heading: number | null; note: string; reported_by: string }
 export interface SystemLine { id: string; name: string; category: string; location_id: string | null; location_name: string; pace: 'primary' | 'alternate' | 'contingency' | 'emergency' | null
   status: 'up' | 'degraded' | 'down'; health: Health; since: string | null; hours: number; note: string; updated_by: string; updated_at: string | null; source: string }
 export interface S6Board { status: Health; systems: SystemLine[]; pace: Record<string, { location_name: string; nets: Partial<Record<'primary' | 'alternate' | 'contingency' | 'emergency', 'up' | 'degraded' | 'down'>>; in_use: string | null }>; exceptions: string[]; counts: { down: number; degraded: number; total: number } }
@@ -169,7 +178,7 @@ export interface WeatherInfo {
   awc_url: string
 }
 
-export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
+export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; unit_positions?: UnitPosition[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
   s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]

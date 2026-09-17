@@ -217,14 +217,53 @@ def _assessments(now):
                           gaps_json='["No operator location", "No recovered airframe"]', author="S2", status="review", created_at=now - timedelta(hours=6))]
 
 
+def _readiness(now):
+    """§4 and §7 — the airframes and vehicles by bumper number, and where the moving units last reported from. The
+    statuses and faults below are the sample's, like every other seeded number; the OR rate on the board is computed
+    from these rows, not typed in."""
+    from .readiness import EquipmentRow, UnitPositionRow
+    h = lambda x: now + timedelta(hours=x)
+    rows = []
+    n = 0
+    def eq(bumper, model, cat, team, loc, status, fault="", since_h=-6):
+        nonlocal n
+        n += 1
+        return EquipmentRow(id=f"eq_{n:03d}", bumper_number=bumper, model=model, category=cat, team_id=team, location_id=loc,
+                            status=status, fault=fault, since=h(since_h) if status != "fmc" else h(-700), updated_by="seed", updated_at=h(-2), source="manual:s4")
+    fleets = [
+        ("1 ATK", "t_1atk", "loc_1atk", "AH-64E", "A", 24, {5: ("nmc", "Tail rotor gearbox chip light; part on order"), 11: ("nmc", "Main rotor blade strike — awaiting blade set"),
+                                                              14: ("pmc", "Radar altimeter intermittent"), 19: ("nmc", "Phase maintenance, 120 h")}),
+        ("2 ATK", "t_2atk", "loc_2atk", "AH-64E", "B", 24, {3: ("pmc", "TADS BUCS degraded"), 21: ("nmc", "Engine oil leak — T700 change in progress")}),
+        ("3 AHB", "t_3ahb", "loc_3ahb", "UH-60M", "C", 30, {2: ("nmc", "Phase maintenance"), 7: ("nmc", "Phase maintenance"), 13: ("pmc", "One radio inoperative"),
+                                                               22: ("nmc", "Hydraulic pump replacement"), 28: ("nmc", "Phase maintenance")}),
+        ("4 GSAB", "t_4gsab", "loc_4gsab", "CH-47F", "D", 12, {1: ("nmc", "Rotor blade inspection grounding"), 4: ("nmc", "Rotor blade inspection grounding"),
+                                                                  9: ("nmc", "Rotor blade inspection grounding"), 6: ("pmc", "Cargo hook inoperative")}),
+        ("5 ASB", "t_5asb", "loc_5asb", "M978 HEMTT", "E", 12, {8: ("nmc", "Transfer case — parts on order")}),
+    ]
+    for _, team, loc, model, letter, count, faults in fleets:
+        cat = "vehicle" if model.startswith("M") else "airframe"
+        for i in range(1, count + 1):
+            status, fault = faults.get(i, ("fmc", ""))
+            rows.append(eq(f"{letter}{i:02d}", model, cat, team, loc, status, fault, -6 - i))
+    # where the units that are out last reported from: a tracker report, not an inference
+    pos = lambda i, team, lat, lon, mins, src, note="", speed=None: UnitPositionRow(
+        id=f"pos_{i:03d}", team_id=team, lat=lat, lon=lon, at=now - timedelta(minutes=mins), source=src, speed_kph=speed, note=note, reported_by="seed")
+    rows += [
+        pos(1, "t_5asb", 31.142, -93.333, 6, "jbc-p", "A/5 tanker convoy on MSR TIGER", 48.0),
+        pos(2, "t_4gsab", 31.149, -93.347, 14, "jbc-p", "FARP Eagle advance party", 0.0),
+        pos(3, "t_1atk", 31.091, -93.239, 95, "radio", "Last reported at ACP 4; report is stale", 0.0),
+    ]
+    return rows
+
+
 def _sections(now):
     """§7 and §8 the way a brigade S4 and S6 keep them. Classes of supply by site, aircraft readiness by battalion, comms by PACE per command post."""
     h = lambda x: now + timedelta(hours=x)
-    sup = lambda i, loc, cat, item, on, req, unit, note="": SupplyRow(id=f"sup_{i:03d}", location_id=loc, category=cat, item=item, on_hand=on, required=req, unit=unit, note=note, updated_at=h(-4), source="manual:s4")
+    sup = lambda i, loc, cat, item, on, req, unit, note="", daily=None: SupplyRow(id=f"sup_{i:03d}", location_id=loc, category=cat, item=item, on_hand=on, required=req, unit=unit, note=note, daily_use=daily, updated_at=h(-4), source="manual:s4")
     supplies = [
         # Class III — fuel
-        sup(1, "loc_5asb", "fuel", "JP-8 (Class III) — brigade stock", 180000, 200000, "gal"),
-        sup(2, "loc_farp", "fuel", "JP-8 (Class III) — FARP Eagle", 8000, 20000, "gal", "Tanker convoy inbound"),
+        sup(1, "loc_5asb", "fuel", "JP-8 (Class III) — brigade stock", 180000, 200000, "gal", "", 22000),
+        sup(2, "loc_farp", "fuel", "JP-8 (Class III) — FARP Eagle", 8000, 20000, "gal", "Tanker convoy inbound", 6400),
         # Class V — ammunition
         sup(3, "loc_5asb", "ammunition", "AGM-114 Hellfire", 96, 120, "ea"),
         sup(4, "loc_5asb", "ammunition", "30 mm M789 HEDP", 40000, 60000, "rds", "Draw for Table VI approved"),
@@ -238,13 +277,8 @@ def _sections(now):
         sup(10, "loc_caaf", "parts", "T700 engines (spare)", 3, 6, "ea", "Two at depot for overhaul"),
         sup(11, "loc_caaf", "parts", "AH-64 main rotor blades", 4, 8, "ea"),
         sup(12, "loc_caaf", "parts", "APU (spare)", 5, 6, "ea"),
-        # Equipment readiness — mission-capable airframes by battalion
-        sup(13, "loc_1atk", "equipment", "AH-64E mission capable — 1 ATK", 19, 24, "acft", "5 NMC: 3 supply, 2 maintenance"),
-        sup(14, "loc_2atk", "equipment", "AH-64E mission capable — 2 ATK", 21, 24, "acft"),
-        sup(15, "loc_3ahb", "equipment", "UH-60M mission capable — 3 AHB", 24, 30, "acft", "Phase maintenance ×4"),
-        sup(16, "loc_4gsab", "equipment", "CH-47F mission capable — 4 GSAB", 7, 12, "acft", "Rotor blade inspection grounding ×3"),
-        sup(17, "loc_4gsab", "equipment", "HH-60M mission capable — 4 GSAB", 10, 12, "acft"),
-        sup(18, "loc_5asb", "equipment", "M978 fuel tankers (FMC)", 11, 12, "ea"),
+        # Readiness itself is no longer a supply line: §7's equipment board holds it, by bumper number
+        sup(18, "loc_5asb", "parts", "M978 tanker repair parts (Class IX)", 11, 12, "ea"),
     ]
     shp = lambda i, desc, cat, qty, frm, loc, eta, status, pri, carrier="", ref=None, note="": ShipmentRow(id=f"shp_{i:03d}", description=desc, category=cat, quantity=qty, from_name=frm, to_location_id=loc, eta=eta, status=status, priority=pri, carrier=carrier, ref=ref, note=note, updated_at=h(-1), source="manual:s4")
     shipments = [
@@ -274,7 +308,7 @@ def _sections(now):
     ):
         n += 1
         systems.append(sy(n, name, cat, loc, None, status, since, note))
-    return supplies + shipments + systems
+    return supplies + shipments + systems + _readiness(now)
 
 
 async def populate(session, now) -> None:

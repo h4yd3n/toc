@@ -56,11 +56,28 @@ export function S4Panel({ board, role, busy, act, site, onClearSite, onMap, togg
         <li key={x.id} className={`row supply ${x.status}`} role={canEdit?'button':undefined} tabIndex={canEdit?0:undefined} onKeyDown={e=>{if(canEdit&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setOnHand(x)}}} onClick={() => canEdit && setOnHand(x)} title={x.note || `${x.category} · updated by ${x.updated_by}`}>
           <span className={`sev ${x.status === 'green' ? 'ok' : x.status === 'amber' ? 'low' : 'critical'}`}>{x.status === 'green' ? 'OK' : x.status.slice(0, 3).toUpperCase()}</span>
           <span className="name">{x.item}<span className="dim"> · {x.location_name}</span></span>
-          <span className="qty mono">{x.on_hand.toLocaleString()}<span className="dim">/{x.required.toLocaleString()} {x.unit}</span></span>
+          <span className="qty mono">{x.on_hand.toLocaleString()}<span className="dim">/{x.required.toLocaleString()} {x.unit}</span>{x.days_of_supply != null && <span className={`chip small ${x.days_of_supply < 2 ? 'red' : x.days_of_supply < 5 ? 'amber' : ''}`} title={`at ${x.daily_use?.toLocaleString()} ${x.unit}/day, the rate S4 entered`}>{x.days_of_supply} DOS</span>}</span>
           <span className="bar small"><span style={{ width: `${Math.min(100, x.pct)}%` }} className={x.status === 'green' ? 'ok' : x.status} /></span>
         </li>))}
     </ul>
-    </>}{view !== 'supplies' && <><Question q="What is on its way" count={inbound.length} />
+    </>}
+    {/* §7 — readiness by bumper number. The OR rate is FMC over assigned, and there is no rate where nothing is recorded. */}
+    {view !== 'shipments' && board.readiness && board.readiness.assigned > 0 && <>
+      <Question q="What can fly, and what cannot" count={`${board.readiness.or_pct}% OR · ${board.readiness.fmc}/${board.readiness.assigned} FMC`} />
+      <ul className="list">
+        {board.readiness.by_model.map(g => <li key={g.model} className={`row supply ${g.status}`} title={`${g.fmc} FMC · ${g.pmc} PMC · ${g.nmc} NMC — the OR rate is FMC over assigned, nothing else`}>
+          <span className={`sev ${g.status === 'green' ? 'ok' : g.status === 'amber' ? 'low' : 'critical'}`}>{g.or_pct}%</span>
+          <span className="name">{g.model}<span className="dim"> · {g.fmc}/{g.assigned} FMC{g.pmc ? ` · ${g.pmc} PMC` : ''}{g.nmc ? ` · ${g.nmc} NMC` : ''}</span></span>
+          <span className="bar small"><span style={{ width: `${g.or_pct ?? 0}%` }} className={g.status === 'green' ? 'ok' : g.status} /></span>
+        </li>)}
+        {board.readiness.down.slice(0, 6).map(e => <li key={e.id} className="row dim small" title={`${e.model} · ${e.team_name} · since ${e.since?.slice(0, 16).replace('T', ' ')}Z`}>
+          <span className={`sev ${e.status === 'nmc' ? 'critical' : 'low'}`}>{e.status.toUpperCase()}</span>
+          <span className="name">{e.bumper_number}<span className="dim"> · {e.fault || 'no fault recorded'}</span></span>
+          <span className="qty mono">{e.hours_down}h</span>
+        </li>)}
+      </ul>
+    </>}
+    {view !== 'supplies' && <><Question q="What is on its way" count={inbound.length} />
 
     <ul className="list">
       {inbound.length === 0 && <li className="row dim small">Nothing inbound.</li>}

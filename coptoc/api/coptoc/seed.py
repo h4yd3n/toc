@@ -371,7 +371,8 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await _seed_case(session, now_utc())
         await _seed_directed(session, now_utc())
         await _seed_operation(session, now_utc())
-    for model in (S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    from .readiness import EquipmentRow, UnitPositionRow
+    for model in (UnitPositionRow, EquipmentRow, S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()

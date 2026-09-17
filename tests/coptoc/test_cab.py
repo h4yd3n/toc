@@ -60,8 +60,12 @@ def test_s4_and_s6_the_brigade_way(client):
     assert s4["status"] == "red"  # FARP fuel and spare engines
     farp_fuel = next(x for x in s4["supplies"] if x["item"].startswith("JP-8") and x["location_id"] == "loc_farp")
     assert farp_fuel["status"] == "red" and farp_fuel["unit"] == "gal"
-    readiness = [x for x in s4["supplies"] if x["category"] == "equipment" and x["unit"] == "acft"]
-    assert len(readiness) == 5 and next(x for x in readiness if "CH-47F" in x["item"])["status"] == "amber"
+    # §7 readiness moved off the supply board onto the equipment board, by bumper number (17 Sep)
+    readiness = s4["readiness"]
+    assert readiness["assigned"] == 102 and readiness["or_pct"] == round(100 * readiness["fmc"] / readiness["assigned"])
+    ch47 = next(g for g in readiness["by_model"] if g["model"] == "CH-47F")
+    assert ch47["assigned"] == 12 and ch47["status"] == "red" and ch47["or_pct"] == round(100 * ch47["fmc"] / 12)
+    assert all(x["fault"] for x in readiness["down"])
     convoy = next(x for x in s4["shipments"] if x["ref"] == "CONV-0912")
     assert convoy["to_name"] == "FARP Eagle" and convoy["priority"] == "urgent" and convoy["health"] == "green"
     assert s6["status"] == "amber"  # an alternate net down, a network down, a generator degraded: nothing primary or power is out, so AMBER not RED

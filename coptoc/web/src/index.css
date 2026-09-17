@@ -1012,6 +1012,12 @@ code { font-family: var(--mono); font-size: 11px; color: var(--dim); }
 .tl-log { position: relative; height: 12px; margin-top: 2px; background: rgba(148,163,184,.06); border-right: 2px solid var(--red); }
 .tl-ev { position: absolute; top: 2px; width: 3px; height: 8px; border-radius: 1px; transform: translateX(-1px); } .tl-ev.jump { cursor: pointer; } .tl-ev:hover { height: 12px; top: 0; }
 .tl-quiet { position: absolute; left: 6px; top: 0; font: 8.5px var(--mono); letter-spacing: .08em; }
+/* §4 — a unit where a tracker last reported it. Solid while the report is current; hollow and timestamped once it
+   has aged past the staleness setting, because a stale position is not a position. */
+.mk-unit { display: flex; align-items: center; gap: 4px; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,.18); border: 1px solid rgba(34,197,94,.65); color: #bbf7d0; white-space: nowrap; cursor: default; }
+.mk-unit .glyph { font: 800 10px var(--mono); }
+.mk-unit .label { font: 700 9.5px var(--mono); letter-spacing: .06em; }
+.mk-unit.stale { background: transparent; border-style: dashed; border-color: rgba(148,163,184,.7); color: var(--dim); }
 /* §5.10b Phase 3 — a COA drawn as one named overlay: the button wears the COA's name, the menu marks the one that is up. */
 .ov.coa { white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 .ov.coa.sel { border-color: var(--amber); color: var(--amber); }

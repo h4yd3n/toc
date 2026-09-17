@@ -23,6 +23,7 @@ from .comms import Dispatcher, public_url
 from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, DeliveryRow, EventAttendeeRow, EventRow, IncidentRow, LocationRow, PersonRow, PIRRow,
                         TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
+from .readiness import EquipmentRow, UnitPositionRow  # noqa: F401 — §4/§7, registered before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
 from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
 from . import areas as toc_areas
@@ -633,6 +634,94 @@ async def delete_supply(supply_id: str, session: AsyncSession = Depends(get_sess
     await session.delete(row); await session.commit()
     await get_ledger().append_event(content_id=supply_id, event_type="cop.s4.supply", actor_type="human", actor_id=actor_from(x_toc_actor), new_state="removed", reason=f"{row.item} removed from the board")
     return {"id": supply_id, "status": "removed"}
+
+
+# §4 and §7 — where the units are, and what the equipment can do
+UNIT_TRACKERS = {"battle_captain", "security", "ea"}   # S1 owns the force, S3 moves it; a tracker feed signs in as one of them
+EQUIPMENT_OWNERS = S4_OWNERS
+
+
+class PositionReport(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    at: Optional[datetime] = None
+    source: str = "tracker"           # jbc-p | tracker | radio | manual
+    speed_kph: Optional[float] = Field(default=None, ge=0, le=2000)
+    heading: Optional[float] = Field(default=None, ge=0, lt=360)
+    note: str = ""
+
+
+class EquipmentIn(BaseModel):
+    bumper_number: str = Field(min_length=1, max_length=32)
+    model: str = ""
+    category: str = "vehicle"
+    team_id: Optional[str] = None
+    location_id: Optional[str] = None
+    status: str = "fmc"               # fmc | pmc | nmc
+    fault: str = ""
+
+
+class EquipmentUpdate(BaseModel):
+    status: Optional[str] = None
+    fault: Optional[str] = None
+    team_id: Optional[str] = None
+    location_id: Optional[str] = None
+
+
+@router.post("/units/{team_id}/position", status_code=201)
+async def report_unit_position(team_id: str, body: PositionReport, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """§4 — a tracker report puts a unit on the map. JBC-P, a vehicle tracker, or a radio call written down: the source
+    is recorded, the report is timestamped, and a report that ages past the staleness setting says so on the wall
+    rather than pretending the unit is still there."""
+    require_role(x_toc_role, UNIT_TRACKERS, "Reporting a unit position", section="S1")
+    team = await one_or_404(session, TeamRow, team_id, "unit")
+    from . import readiness as rdy
+    row = await rdy.report_position(session, team.id, lat=body.lat, lon=body.lon, at=naive(body.at), source=body.source,
+                                    speed_kph=body.speed_kph, heading=body.heading, note=body.note, reported_by=actor_from(x_toc_actor))
+    await get_ledger().append_event(content_id=team.id, event_type="cop.unit.position", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    reason=f"{team.name} at {row.lat:.4f}, {row.lon:.4f} ({row.source})", metadata={"source": row.source})
+    return {"id": row.id, "team_id": team.id, "at": rdy.iso(row.at), "source": row.source}
+
+
+@router.get("/equipment")
+async def list_equipment(session: AsyncSession = Depends(get_session)):
+    """The equipment board by bumper number, with the readiness it adds up to. The OR rate is FMC over assigned."""
+    from . import readiness as rdy
+    rows = (await session.execute(select(rdy.EquipmentRow).order_by(rdy.EquipmentRow.bumper_number))).scalars().all()
+    teams = {t.id: t.name for t in (await session.execute(select(TeamRow))).scalars()}
+    locs = {l.id: l.name for l in (await session.execute(select(LocationRow))).scalars()}
+    now = now_utc()
+    out = [rdy.equipment_out(e, teams, locs, now) for e in rows]
+    return {"equipment": out, "readiness": rdy.readiness(out), "statuses": list(rdy.STATUSES), "categories": list(rdy.CATEGORIES)}
+
+
+@router.post("/equipment", status_code=201)
+async def upsert_equipment(body: EquipmentIn, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """By bumper number: the same airframe reported twice is the same row, and a status that changes starts its clock."""
+    require_role(x_toc_role, EQUIPMENT_OWNERS, "Recording equipment", section="S4")
+    from . import readiness as rdy
+    try:
+        row = await rdy.upsert_equipment(session, body.model_dump(), actor_from(x_toc_actor))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s4.equipment", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=row.status,
+                                    reason=f"{row.bumper_number} ({row.model or row.category}): {row.status.upper()}" + (f" — {row.fault}" if row.fault else ""))
+    return {"id": row.id, "bumper_number": row.bumper_number, "status": row.status}
+
+
+@router.patch("/equipment/{equipment_id}")
+async def update_equipment(equipment_id: str, body: EquipmentUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, EQUIPMENT_OWNERS, "Updating equipment", section="S4")
+    from . import readiness as rdy
+    row = await one_or_404(session, rdy.EquipmentRow, equipment_id, "equipment")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        row = await rdy.upsert_equipment(session, {"bumper_number": row.bumper_number, **data}, actor_from(x_toc_actor))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=row.id, event_type="cop.s4.equipment", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=row.status,
+                                    reason=f"{row.bumper_number}: {row.status.upper()}" + (f" — {row.fault}" if row.fault else ""))
+    return {"id": row.id, "bumper_number": row.bumper_number, "status": row.status, "since": rdy.iso(row.since)}
 
 
 @router.post("/shipments", status_code=201)

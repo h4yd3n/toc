@@ -367,6 +367,17 @@ export default function MapView({ snapshot, selection, layers, onSelect, overlay
         add(div, mv.head_lon!, mv.head_lat, 'top', [0, 12])
       }
     }
+    // §4 — units where a tracker last reported them. Nothing is inferred: a team with no report has no marker, and a
+    // report past the staleness setting is drawn hollow and says how old it is.
+    if (layers.locations) for (const u of snapshot.unit_positions ?? []) {
+      const div = document.createElement('div')
+      const dim = overlay === 'S2' || overlay === 'S6' || coaGfx != null
+      div.className = `mk mk-unit ${u.stale ? 'stale' : ''}${dim ? ' dim' : ''}`
+      div.innerHTML = `<span class="glyph">▣</span><span class="label">${u.team_short || u.team_name}${u.stale ? ` · ${u.age_min}m` : ''}</span>`
+      div.title = `${u.team_name}\n${u.source.toUpperCase()} report ${u.age_min} min ago${u.stale ? ` — older than the ${u.stale_after_min} min staleness setting` : ''}` +
+        `${u.speed_kph ? `\n${u.speed_kph} km/h` : ''}${u.note ? `\n${u.note}` : ''}`
+      add(div, u.lon, u.lat, 'center')
+    }
     // §3.4 point graphics and the labels of lines and polygons: the glyph and the name, in the section's color
     for (const g of snapshot.graphics ?? []) {
       const w = coaGfx ? coaGfx.has(g.id) : cop || overlay === g.section

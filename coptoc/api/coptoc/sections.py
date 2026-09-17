@@ -63,6 +63,7 @@ class SupplyRow(Base):
     on_hand: Mapped[float] = mapped_column(Float)
     required: Mapped[float] = mapped_column(Float)  # the minimum to hold; below it is AMBER, below half of it RED
     unit: Mapped[str] = mapped_column(String, default="ea")
+    daily_use: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # §7 what this line consumes per day, entered by S4 — days of supply is derived from it, never guessed
     note: Mapped[str] = mapped_column(Text, default="")
     updated_by: Mapped[str] = mapped_column(String, default="seed")
     updated_at: Mapped[datetime] = mapped_column(DateTime)
@@ -142,8 +143,10 @@ def s4_summary(supplies: List[SupplyRow], shipments: List[ShipmentRow], loc_name
     sup_out = []
     for s in sorted(supplies, key=lambda x: (STATUS_RANK[supply_status(x.on_hand, x.required)] * -1, x.location_id or "", x.category, x.item)):
         st = supply_status(s.on_hand, s.required)
+        from .readiness import days_of_supply
         sup_out.append({"id": s.id, "location_id": s.location_id, "location_name": loc_name.get(s.location_id or "", "Force-wide"), "category": s.category, "item": s.item,
                         "on_hand": s.on_hand, "required": s.required, "unit": s.unit, "pct": round(100 * s.on_hand / s.required) if s.required > 0 else 100,
+                        "daily_use": s.daily_use, "days_of_supply": days_of_supply(s.on_hand, s.daily_use),
                         "status": st, "note": s.note, "updated_by": s.updated_by, "updated_at": _iso(s.updated_at), "source": s.source})
     ship_out = []
     for s in sorted(shipments, key=lambda x: x.eta):

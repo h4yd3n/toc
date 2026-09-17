@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.47
+**Version:** v3.48
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -217,7 +217,7 @@ Built with other tools in the author's hands; recorded here from the code so the
 
 **The sample force is a Combat Aviation Brigade.** The author's decision (2026-09-04): one dataset, organized the way a heavy CAB is, not a corporate/military fork — a commercial deployment hides the sections it does not run (§11.2). HHC and five battalions, each with a headquarters company and four line companies: two attack reconnaissance battalions (AH-64E), an assault helicopter battalion (UH-60M), a general support aviation battalion (CH-47F heavy lift, command aviation, air ambulance), and an aviation support battalion (distribution, aviation intermediate maintenance, network support, ground maintenance). Roughly 2,400 people; the ASB together with every battalion's D company (aviation unit maintenance) is well over half of them — the author's experience of where a CAB's headcount sits. Headcounts and tail counts are approximate to a generic table of organization, not any real unit's; every name is invented. Home station is Campbell Army Airfield; the deployed sites are an exercise area (FOB Warrior, FARP Eagle, a range complex). Site types gained `airfield`, `cp`, `fob`, `farp`, `range`. The original executive-protection sample is kept as `dataset=corporate` for the test suite and as a second shape of the same model.
 
-**[LATER]** unit positions from GPS telemetry (JBC-P / vehicle trackers) so companies move on the map the way travelers do; equipment readiness by bumper number.
+**[BUILT 17 Sep] — unit positions.** A tracker report puts a unit on the map the way a check-in puts a person there: `POST /v1/cop/units/{team}/position` takes a position, a time and a source (JBC-P, a vehicle tracker, a radio call written down), the snapshot carries the latest per unit, and the wall draws it. Nothing is inferred — a unit nobody has reported has no marker, and a report older than `TOC_UNIT_STALE_MIN` (30 by default, a setting) is drawn hollow with its age rather than pretending to be current.
 
 **Locations.** HQ, offices, data centers, executive residences, event venues. Each has a position, a type, a posture (five levels, read as DEFCON 5 → 1; see §3), and a sensitivity tier. Residences are restricted-tier: they exist because the security team needs them, and they are never shown to a general audience.
 
@@ -507,7 +507,7 @@ Reinstated 2026-09-04 with §8 as the *background sections*, built for a generic
 
 **What S4 tracks.** *Supply lines*: a category (fuel, water, rations, medical, ammunition, parts, equipment, other), an item, what is on hand against what is required, at a site or force-wide. Below required is AMBER, below half of it RED. *Shipments*: what is inbound, from where, to which site, with an ETA, a status (planned / in transit / delayed / arrived / cancelled), and a priority; late or delayed is AMBER, an urgent one RED. Arrivals leave the board after a day. Owners: `battle_captain` and `logistics`. Everything is on the ledger (`cop.s4.*`), and S4 keeps a running estimate like every other section.
 
-**[LATER]** vehicle and equipment readiness by bumper number (FMC / PMC / NMC), fuel consumption against days of supply, and unit tracking from GPS telemetry on the COP (§4) — the pieces a military or police deployment adds first.
+**[BUILT 17 Sep] — readiness by bumper number.** One row per airframe, vehicle or generator (`cop_equipment`): bumper number, model, unit, site, FMC / PMC / NMC, the fault, and the clock since it went down. `GET/POST /v1/cop/equipment` and a PATCH for a status change, which starts that clock. The board rolls up by model and by unit, worst first, and the **OR rate is its definition — FMC over assigned — and nothing else**: no weighting, no score, and no rate at all where nothing is recorded. Where green stops and amber stops are `TOC_OR_GREEN` / `TOC_OR_AMBER`, settings rather than a number this code decided. The brigade sample now carries its 102 airframes and tankers individually, so the wall's readiness is computed from rows an S4 would recognise rather than typed in as a count. **Days of supply** is on hand over the daily use rate S4 entered (`daily_use` on a supply line) and is **blank without one** — the honest answer to "how long will the fuel last" with no consumption figure is that we do not know.
 
 ---
 
@@ -729,6 +729,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.48** — 17 Sep: what a military deployment adds first (§4, §7): unit positions from a tracker with a staleness setting, equipment readiness by bumper number with the OR rate as its definition, and days of supply from the rate S4 enters.
 - **v3.47** — 17 Sep: the GDELT DOC 2.0 collector (§5.3, §13), keyless and country-scoped, carrying press reporting as press reporting at grade C.
 - **v3.46** — 17 Sep: the sign-in layer (§9, README): scrypt passwords, bearer tokens signed with `TOC_SECRET`, `TOC_AUTH=on` refusing header identity, and startup guards against the dev secret and an open CORS policy.
 - **v3.45** — 17 Sep: intake beyond S4 (§5.13): document kinds, S6 maintenance notices into the comms board, and the retention rule that purges an original while keeping the decision.
