@@ -164,6 +164,25 @@ async def _baseline_facts(req: R.RequirementRow, cat: List[Dict[str, Any]]) -> D
     return {"baseline": {"source": src["name"], "items": items, "basis": basis, "note": None, "place": place}}
 
 
+async def red_inside(session: AsyncSession, req: R.RequirementRow, now: datetime) -> Dict[str, Any]:
+    """Phase 4: the actors last seen inside the place and the threat graphics drawn in it — the live picture the rated
+    assessment links to. Listed, not scored: a candidate with an actor in it is not marked down, it is shown."""
+    from coptoc.graphics import GraphicRow, THREAT_GRAPHIC_TYPES, centroid
+    from .picture import S2ActorRow, S2SightingRow
+    actors = []
+    for a in (await session.execute(select(S2ActorRow).where(S2ActorRow.status == "active"))).scalars():
+        if a.lat is None or haversine_km(req.lat, req.lon, a.lat, a.lon) > req.radius_km: continue
+        n = len((await session.execute(select(S2SightingRow.id).where(S2SightingRow.actor_id == a.id, S2SightingRow.at >= now - timedelta(days=LOOKBACK_DAYS)))).scalars().all())
+        actors.append({"id": a.id, "name": a.name, "kind": a.kind, "strength": a.strength, "place": a.place, "last_seen_at": R.iso(a.last_seen_at), "sightings_lookback": n, "assessed_intent": a.assessed_intent})
+    graphics = []
+    for g in (await session.execute(select(GraphicRow).where(GraphicRow.status == "active"))).scalars():
+        if g.type not in THREAT_GRAPHIC_TYPES: continue
+        c = centroid(g.kind, json.loads(g.geometry_json))
+        if haversine_km(req.lat, req.lon, c[1], c[0]) > req.radius_km: continue
+        graphics.append({"id": g.id, "type": g.type, "name": g.name, "kind": g.kind, "confidence": g.confidence, "basis": g.basis})
+    return {"actors": actors, "threat_graphics": graphics}
+
+
 async def build_product(session: AsyncSession, reqs: List[R.RequirementRow], purpose: str, now: datetime) -> Dict[str, Any]:
     cat = await R.catalog(session)
     candidates = []
@@ -172,6 +191,7 @@ async def build_product(session: AsyncSession, reqs: List[R.RequirementRow], pur
         threats = await _threats_near(session, req, now)
         c = assess_candidate(req, plan, threats, now, await _baseline_facts(req, cat))
         c.update(await draft_bluf(c, purpose))
+        c.update(await red_inside(session, req, now))
         candidates.append(c)
     indicators = []
     for c in candidates:

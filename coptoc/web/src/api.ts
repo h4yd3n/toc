@@ -1,4 +1,4 @@
-import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead } from './types'
+import type { Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -54,7 +54,7 @@ export const getQueue = (id: string) => req<Queue>('GET', `/v1/s2/cases/${id}/qu
 export const decide = (caseId: string, kind: 'entity' | 'relationship' | 'event', id: string, decision: 'confirm' | 'reject', note?: string) => req<{ status: string }>('POST', `/v1/s2/cases/${caseId}/decide`, { kind, id, decision, note })
 export const mergeEntity = (caseId: string, id: string, into: string) => req<CaseEntity>('POST', `/v1/s2/cases/${caseId}/entities/${id}/merge`, { into })
 export const closeCase = (id: string) => req<Case>('PATCH', `/v1/s2/cases/${id}/close`)
-export const fileReport = (body: { text: string; kind: string; reported_by: string; reporter_role?: string; place?: string; case_id?: string; lat?: number; lon?: number }) => req<Report & { extracted: { entities: number; relationships: number; events: number } | null }>('POST', '/v1/s2/reports', body)
+export const fileReport = (body: { text: string; kind: string; reported_by: string; reporter_role?: string; place?: string; case_id?: string; lat?: number; lon?: number; liaison_source?: string; liaison_kind?: string }) => req<Report & { extracted: { entities: number; relationships: number; events: number } | null }>('POST', '/v1/s2/reports', body)
 export const listReports = (caseId?: string) => req<Report[]>('GET', caseId ? `/v1/s2/reports?case_id=${caseId}` : '/v1/s2/reports')
 export const listAreas = () => req<AreaAssessment[]>('GET', '/v1/s2/area-assessments')
 export const getArea = (id: string) => req<AreaAssessment>('GET', `/v1/s2/area-assessments/${id}`)
@@ -93,6 +93,9 @@ export const latestAnnex = (operation_id: string) => req<StaffProduct>('GET', `/
 export const listStaffProducts = (kind?: string) => req<StaffProductHead[]>('GET', kind ? `/v1/s2/staff-products?kind=${kind}` : '/v1/s2/staff-products')
 export const getStaffProduct = (id: string) => req<StaffProduct>('GET', `/v1/s2/staff-products/${id}`)
 export const setStaffProductStatus = (id: string, status: 'draft' | 'review' | 'approved' | 'released', notes?: string) => req<StaffProduct>('PATCH', `/v1/s2/staff-products/${id}`, { status, notes })
+export const listLiaisonSources = () => req<LiaisonSource[]>('GET', '/v1/s2/liaison-sources')
+export const createLiaisonSource = (body: { name: string; kind?: string; reliability?: string; notes?: string }) => req<LiaisonSource>('POST', '/v1/s2/liaison-sources', body)
+export const gradeLiaisonSource = (id: string, body: { reliability?: string; kind?: string; notes?: string; note?: string }) => req<LiaisonSource>('PATCH', `/v1/s2/liaison-sources/${id}`, body)
 export const listWarnings = (status?: string) => req<Warning[]>('GET', status ? `/v1/s2/warnings?status=${status}` : '/v1/s2/warnings')
 export const draftWarning = (body: { subject_type: string; subject_id: string; title: string; text?: string; severity?: string; threat_id?: string }) => req<Warning>('POST', '/v1/s2/warnings', body)
 export const suggestWarnings = () => req<{ suggested: Warning[] }>('POST', '/v1/s2/warnings/suggest')

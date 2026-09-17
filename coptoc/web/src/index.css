@@ -1477,3 +1477,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .dform.product .section-label { padding: 8px 0 3px; } .dform.product ul { margin: 0; padding-left: 14px; } .dform.product li { margin: 2px 0; }
 .dform.product .chip.btn { margin-left: 4px; cursor: pointer; }
 .labels-lean .card.coa .card-foot { display: flex !important; }
+
+/* §5.10b Phase 4 — the graphic INTSUM and liaison sources */
+.redmap { height: 220px; margin: 4px 0 6px; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden; }
+.row.liaison .grade { font: 10px var(--mono); background: var(--panel); color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; margin-left: 6px; }
+.sev.grade-A, .sev.grade-B { color: var(--green); } .sev.grade-C { color: var(--amber); } .sev.grade-D, .sev.grade-E { color: var(--red); } .sev.grade-F { color: var(--dim); }

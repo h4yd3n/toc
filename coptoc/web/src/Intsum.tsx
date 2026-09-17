@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as api from './api'
+import { RedMap } from './RedMap'
 import type { Intsum, IntsumHead, LogEv, Role } from './types'
 
 type Act = (l: string, f: () => Promise<unknown>) => void
@@ -50,6 +51,17 @@ export function IntsumPanel({ role, busy, act, onClose, reload }: { role: Role; 
         <ul>{d.collection.sources.map(s => <li key={s.id}>{s.name} <span className="dim">· {s.last_collected_at ? `last ${hhmm(s.last_collected_at)}` : 'not yet run'}{s.last_result ? ` · ${s.last_result}` : ''}</span></li>)}
           {d.collection.runs.map(e => <Ev key={e.id} e={e} />)}
           {d.collection.gaps.slice(0, 5).map(g => <li key={g.indicator}><span className="gap-n">{g.requirements_affected}</span> <span className="dim">{g.label}</span></li>)}</ul>
+
+        {d.red_picture && <>
+          <div className="section-label">7 · THE RED PICTURE <span className="dim">{d.red_picture.summary}</span></div>
+          <RedMap red={d.red_picture} />
+          <ul>{d.red_picture.moves.map(m => <li key={m.actor_id}><b>{m.actor_name}</b>{m.from ? <> moved {m.distance_km} km, {m.from.place ?? 'last position'} → {m.to.place ?? 'new position'}</> : <> first seen at {m.to.place ?? `${m.to.lat.toFixed(3)}, ${m.to.lon.toFixed(3)}`}</>} <span className="dim">· {m.sightings} sighting{m.sightings === 1 ? '' : 's'}{m.seed ? ' · seed' : ''}</span></li>)}
+            {d.red_picture.new_actors.map(a => <li key={a.id}><span className="chip small red">NEW</span> {a.name} <span className="dim">· {a.kind}{a.assessed_intent ? ` · ${a.assessed_intent}` : ''}</span></li>)}
+            {d.red_picture.graphics.map(g => <li key={g.id}><span className="dim">{g.new ? 'drawn' : 'changed'}</span> {g.name} <span className="dim">· {g.type.replace(/_/g, ' ')} · {g.confidence}</span></li>)}
+            {d.red_picture.coas.map(c => <li key={c.id}><span className="dim">COA</span> {c.title} <span className="dim">· {c.likelihood}{c.most_likely ? ' · ML' : ''}{c.most_dangerous ? ' · MD' : ''}</span></li>)}
+            {d.red_picture.decisions.map(x => <li key={x.id}><span className="dim">DP {x.status}</span> {x.title}{x.note ? <span className="dim"> · {x.note}</span> : null}</li>)}
+            {d.red_picture.sightings.length + d.red_picture.new_actors.length + d.red_picture.graphics.length + d.red_picture.coas.length + d.red_picture.decisions.length === 0 && <li className="dim">Nothing moved on the other side.</li>}</ul>
+        </>}
 
         {d.status === 'released' ? <div className="dim small" style={{ marginTop: 8 }}>Released by {d.released_by} at {d.released_at && hhmm(d.released_at)}{d.notes ? ` — ${d.notes}` : ''}</div>
           : isBC ? <div className="row-btns" style={{ marginTop: 10 }}><input placeholder="Release note (optional)" value={notes} onChange={e => setNotes(e.target.value)} style={{ flex: 1 }} />

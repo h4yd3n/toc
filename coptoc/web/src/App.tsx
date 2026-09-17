@@ -16,6 +16,7 @@ import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
 import { TaskingBox } from './Taskings'
 import { IsrPanel } from './IsrSync'
+import { LiaisonPanel } from './Liaison'
 import { IpbPanel } from './Ipb'
 import { Headline, MiniBar, Question, SevBlocks, Tiles, toneFor } from './Headline'
 import { ContextRow, RollCallStrip } from './Strips'
@@ -749,6 +750,7 @@ export default function App() {
               <span className="meta dim">{rel(r.at, now)}</span>
             </li>))}
         </ul>
+        <LiaisonPanel reload={briefReload} busy={busy} act={act} role={role} />
         <IsrPanel reload={briefReload} busy={busy} onTask={taskCollection} onSelect={setSel} />
         <Question q="Movement risk" count={snap?.movement_risks?.length ?? 0} />
         <ul className="list">

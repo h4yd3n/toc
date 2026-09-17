@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.39
+**Version:** v3.40
 **Date:** 2026-09-02
 **Status:** Prototype running — web wall + native iOS against one API
 
@@ -372,7 +372,7 @@ at once, which is what a fusion cell is.
 
 The object that carries a request from one staff section to another: S2 asks S3 for a collection asset over an area (a drone over the FARP during the rotation); S3 asks S6 to confirm PACE for an operation; S3 asks S4 for fuel at a site; S3 asks S1 for gate security at a ceremony. A tasking has who asked and who owes, what it is for (an operation, event, requirement, site, or trip), the asset or capability wanted, a window, a priority, and a status — requested → accepted → scheduled → complete, or declined with a reason. Raising one needs edit on the section it comes from; answering needs edit on the section it goes to; the Battle Captain can do either. A tasking whose window has opened and is not complete is late, and reads red. Every step is on the ledger; the handover brief carries what is open per section. Each section's panel on the wall, and each section's tab on the phones, shows what that section owes (with ACCEPT / SCHEDULE / COMPLETE / DECLINE), what it is waiting on, and a RAISE form. **Taskings create things when accepted (v3.29, Decision Y).** The tasking is the ask; the thing the owing section makes to answer it lives on that section's board. Accepting a *collection* tasking on a site, event, or trip opens an S3 operation with a collection skeleton (assign the asset, confirm the window and airspace, brief the requirement, fly and report to S2). Accepting a *supply* tasking books a planned shipment on the S4 board, categorised from the ask, due at the window. Accepting a *comms* or *coverage* (or movement / other) tasking whose subject already has an operation adds a task to it, owned by the answering section; with no operation it stays a plain ask. Each is linked both ways: completing the tasking closes what it made; the shipment arriving, the task done, or the operation closed completes the tasking with the result on it. Both objects log the link. The tasking card shows what it made as a chip that opens it.
 
-### 5.10b Sigtoc as a working section — the live S2 picture **[BUILT, phases 1–3]** (6 and 16 Sep 2026; plan in `docs/sigtoc-plan.md`)
+### 5.10b Sigtoc as a working section — the live S2 picture **[BUILT, phases 1–4]** (6–17 Sep 2026; plan in `docs/sigtoc-plan.md`)
 
 The plan of 5 September set out the other side of the picture — the red force, the threat overlay, field reporting, pattern analysis, thresholds, IPB products, the decision support matrix — in four phases. Phase 1 landed on 6 September under a boundary the author set the night before (Decision AA): **Sigtoc owns the intelligence objects; Cop Talk displays the live slice and can file reports back in.** Nothing Cop Talk does creates intelligence; a Sigtoc disposition decides what a report becomes.
 
@@ -400,6 +400,14 @@ The plan of 5 September set out the other side of the picture — the red force,
 - **The intelligence estimate** (`POST /v1/s2/intel-estimates/draft`): mission, area, threat situation (with what is new since the last INTSUM), the assessed COAs, effects on our operations (movement risks, warnings, open RFIs), collection (PIRs, NAIs, the sync view's gaps), and conclusions that are counts of what the wall holds.
 - **Annex B (Intelligence) to an operation** (`POST /v1/s2/operations/{id}/annex`): the approved IPB and estimate, the COAs, the DSM for the operation, the collection plan, and the warnings on the subject. It is *released*, not approved, by the Battle Captain only, and only with an approved IPB and estimate behind it; a draft says what it is missing. Approved and released products disseminate through §5.10 #4 like any other (`ipb`, `estimate`, `annex`).
 - **Products** move draft → review → approved (IPB, estimate) or released (annex) by the analyst or Battle Captain (`/v1/s2/staff-products`); an approved product is not reopened, a new one is drafted. Open: decision points on the S3 timeline, and COA graphic sets drawn as one named overlay.
+
+**Phase 4 — widening: the graphic INTSUM and sources beyond the feeds** (17 Sep):
+
+- **The graphic INTSUM.** The daily diff (§5.6) gains a seventh section, *the red picture*: what moved on the other side in the period, with positions — every sighting, each actor's move from its last known position to its latest (distance in km), actors first seen, threat graphics drawn or changed, reports disposed by kind, COAs assessed, decision points decided. On the product as a small map (sightings as red points, hollow when they are the seed's; a move as a line; threat graphics in outline) and a list. Seed sightings are shown but never make an INTSUM significant: they are exercises.
+- **The rated area assessment links to the live picture.** Each candidate place lists the active actors last seen inside it (with sightings in the lookback) and the threat graphics drawn in it. Listed, not scored: a place with an actor in it is shown, not marked down (Decision I holds).
+- **Liaison sources, graded over time** (LOE 5; `sigtoc/liaison.py`, table `s2_liaison_sources`, `/v1/s2/liaison-sources`). A report of kind `liaison` names its source — host-nation police, a venue's security desk, a partner guard force, an installation's police — and an unknown name becomes a source at **F** (cannot be judged). The report carries the source's reliability *at filing*; earlier reports keep the grade they were filed at. The analyst grades the source (A–F, with a note on the history) informed by its **track record**, derived from what became of its reports: corroborated, linked, or promoted count as borne out; dismissed counts against; awaiting disposition is neither. The record never sets the grade. On the wall as *Who else reports to us*; the wall's report form and the iOS SPOTREP form file LIAISON.
+
+**Still open from the plan:** the workbench's actors and sightings as link-chart node types; decision points on the S3 timeline; COA graphic sets as one named overlay; Android's SPOTREP form has no kind selector yet, so it files SPOTREPs only.
 
 ### 5.12 Staff workspaces and AI analysis **[BUILT]** (6–8 Sep 2026; contract in `docs/WORKSPACE_API.md`)
 
@@ -712,6 +720,7 @@ None outstanding. Everything raised so far is logged in §14; new questions go h
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.40** — 17 Sep: Sigtoc plan phase 4 (§5.10b): the graphic INTSUM's red picture with a map, the area assessment's link to actors and threat graphics, liaison sources graded by the analyst over time (LOE 5).
 - **v3.39** — 16 Sep: Sigtoc plan phase 3 (§5.10b): threat COAs in ICD 203 words, decision points and the DSM, the IPB, the intelligence estimate, Annex B to an operation, all rule-drafted and human-released.
 - **v3.38** — 16 Sep: Sigtoc plan phase 1 on the phones and phase 2 on the wall (§5.10b): RFI tasking kind, collection tasked from an NAI moving PIRs to COLLECTING, the ISR synchronisation view, pattern of life, threshold rules as settings.
 - **v3.37** — 11–15 Sep: the landing site and the open-source boundary (§11.4); the frontier AI CTI collector, the STIX mapper, the fusion graph, and the policy-overlay bridge (§5.8); no DEFCON on the corporate profile (Decision AC).

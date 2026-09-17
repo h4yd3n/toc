@@ -32,7 +32,7 @@ struct SpotrepForm: View {
         NavigationStack {
             Form {
                 Section("What you saw") {
-                    Picker("Kind", selection: $kind) { Text("SPOTREP").tag("spot"); Text("SITREP").tag("sitrep"); Text("NOTE").tag("note") }.pickerStyle(.segmented)
+                    Picker("Kind", selection: $kind) { Text("SPOTREP").tag("spot"); Text("SITREP").tag("sitrep"); Text("NOTE").tag("note"); Text("LIAISON").tag("liaison") }.pickerStyle(.segmented)
                     TextField("Size — how many, of what", text: $size)
                     TextField("Activity — what they were doing", text: $activity)
                     TextField("Unit / description — who", text: $unit)

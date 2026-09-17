@@ -94,7 +94,7 @@ function CaseView({ id, busy, act, role, reload, onChanged }: { id: string; busy
 }
 
 export function ReportForm({ busy, act, cases, role, defaultCase, onDone }: { busy: string | null; act: Act; cases: Case[]; role: Role; defaultCase: string | null; onDone: () => void }) {
-  const [f, setF] = useState({ text: '', kind: 'spot', reported_by: '', reporter_role: role === 'security' ? 'site security' : role === 'ep' ? 'EP detail' : '', place: '', case_id: defaultCase ?? '' })
+  const [f, setF] = useState({ text: '', kind: 'spot', liaison_source: '', reported_by: '', reporter_role: role === 'security' ? 'site security' : role === 'ep' ? 'EP detail' : '', place: '', case_id: defaultCase ?? '' })
   const [draftMessage,setDraftMessage]=useState('')
   const [draftLoaded,setDraftLoaded]=useState(false)
   const draftKey = 'report-' + (defaultCase ?? 'inbox')
@@ -108,8 +108,9 @@ export function ReportForm({ busy, act, cases, role, defaultCase, onDone }: { bu
       <div className="two"><input placeholder="Reported by" value={f.reported_by} onChange={e => setF({ ...f, reported_by: e.target.value })} /><input placeholder="Role (e.g. site security)" value={f.reporter_role} onChange={e => setF({ ...f, reporter_role: e.target.value })} /></div>
       <div className="two"><input placeholder="Place" value={f.place} onChange={e => setF({ ...f, place: e.target.value })} />
         <select value={f.case_id} onChange={e => setF({ ...f, case_id: e.target.value })}><option value="">no case (log only)</option>{cases.filter(c => c.status === 'open').map(c => <option key={c.id} value={c.id}>{c.title}</option>)}</select></div>
-      <div className="row-btns"><select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })}><option value="spot">SPOTREP</option><option value="sitrep">SITREP</option><option value="note">NOTE</option></select>
-        <button className="mini ok" disabled={!!busy || !ok} onClick={() => { act('filing report', async () => { await api.fileReport({ text: f.text, kind: f.kind, reported_by: f.reported_by, reporter_role: f.reporter_role || undefined, place: f.place || undefined, case_id: f.case_id || undefined }); await api.saveDraft('S2',draftKey,{}).catch(()=>{}); onDone() }) }}>FILE</button>
+      <div className="row-btns"><select value={f.kind} onChange={e => setF({ ...f, kind: e.target.value })}><option value="spot">SPOTREP</option><option value="sitrep">SITREP</option><option value="note">NOTE</option><option value="liaison">LIAISON</option></select>
+        {f.kind === 'liaison' && <input placeholder="Liaison source (SFPD Southern Station)" title="an unknown name becomes a source at F until the analyst grades it" value={f.liaison_source ?? ''} onChange={e => setF({ ...f, liaison_source: e.target.value })} style={{ flex: 1 }} />}
+        <button className="mini ok" disabled={!!busy || !ok} onClick={() => { act('filing report', async () => { await api.fileReport({ text: f.text, kind: f.kind, reported_by: f.reported_by, reporter_role: f.reporter_role || undefined, liaison_source: f.kind === 'liaison' ? (f.liaison_source || undefined) : undefined, place: f.place || undefined, case_id: f.case_id || undefined }); await api.saveDraft('S2',draftKey,{}).catch(()=>{}); onDone() }) }}>FILE</button>
         {['analyst','battle_captain'].includes(role)&&<button className="mini" disabled={!!busy||!draftLoaded} onClick={()=>act('saving report draft',async()=>{await api.saveDraft('S2',draftKey,f);setDraftMessage('Draft saved. You can return to it later.')})}>SAVE DRAFT</button>}
         <button className="mini" onClick={onDone}>CANCEL</button></div>
     </div>)

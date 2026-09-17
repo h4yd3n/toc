@@ -91,7 +91,10 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
         for g in R.plan_for(r, cat)["gaps"]: gaps[g] = gaps.get(g, 0) + 1
     gaps_ranked = [{"indicator": k, "label": R.INDICATORS[k]["label"], "requirements_affected": n} for k, n in sorted(gaps.items(), key=lambda kv: -kv[1])]
 
-    significant = len(warnings) + len(new_threats) + len(wall["links"]) + len(wall["posture"]) + len(wall["roll_calls"]) + len(reports) + len(cases["opened"]) + len(products["assessments"]) + len(products["area_assessments"])
+    # 7. The red picture — what moved on the other side since the last INTSUM (Phase 4, graphic INTSUM)
+    red = await red_picture(session, period_from, period_to)
+    significant = len(warnings) + len(new_threats) + len(wall["links"]) + len(wall["posture"]) + len(wall["roll_calls"]) + len(reports) + len(cases["opened"]) + len(products["assessments"]) + len(products["area_assessments"]) \
+        + red["significant"]
     nstr = significant == 0
     headline = ("NSTR — nothing significant to report across %d active requirements." % len(active)) if nstr else \
         (f"{len(new_threats)} new threat(s)" + (f", worst {new_threats[0]['severity']}" if new_threats else "") + f"; {len(wall['links'])} link change(s); {len(wall['posture'])} posture change(s); "
@@ -101,8 +104,53 @@ async def build(session: AsyncSession, period_from: datetime, period_to: datetim
             "new_threats": new_threats, "wall": wall, "reports": reports, "cases": {**cases, "open": len(open_cases)},
             "products": {**products, "pending_area_assessments": pending_area, "warnings": warnings, "disseminated": T("s2.product.disseminated"), "acknowledged": T("s2.product.acknowledged"),
                          "unacknowledged": [{"product": u["product_title"], "recipient": u["recipient"], "outstanding_min": u["latency"]["outstanding_min"]} for u in unread]},
-            "collection": {**collection, "gaps": gaps_ranked, "coverage": cov},
-            "event_count": len(ev), "structure": ["headline", "requirements", "new_threats", "wall", "reports_and_cases", "products", "collection"]}
+            "collection": {**collection, "gaps": gaps_ranked, "coverage": cov}, "red_picture": red,
+            "event_count": len(ev), "structure": ["headline", "requirements", "new_threats", "wall", "reports_and_cases", "products", "collection", "red_picture"]}
+
+
+async def red_picture(session: AsyncSession, period_from: datetime, period_to: datetime) -> Dict[str, Any]:
+    """What moved on the other side in the period, with positions so the INTSUM can draw it: new actors, sightings,
+    each actor's move from its last known position, threat graphics drawn or promoted, reports disposed, COAs assessed,
+    decision points triggered. Seed sightings are shown but do not count as significant: they are exercises."""
+    from coptoc.graphics import GraphicRow, THREAT_GRAPHIC_TYPES, centroid
+    from .picture import S2ActorRow, S2SightingRow
+    from .ipb import ThreatCoaRow, DecisionPointRow
+    actors = {a.id: a for a in (await session.execute(select(S2ActorRow))).scalars()}
+    sightings = (await session.execute(select(S2SightingRow).order_by(S2SightingRow.at))).scalars().all()
+    in_period = [x for x in sightings if period_from < x.at <= period_to]
+    before = {}
+    for x in sightings:
+        if x.at <= period_from: before[x.actor_id] = x   # ordered by time: the last one before the period wins
+    moves = []
+    for aid in {x.actor_id for x in in_period}:
+        last = max((x for x in in_period if x.actor_id == aid), key=lambda x: x.at)
+        prev = before.get(aid)
+        a = actors.get(aid)
+        d = round(haversine_km(prev.lat, prev.lon, last.lat, last.lon), 1) if prev else None
+        moves.append({"actor_id": aid, "actor_name": a.name if a else aid, "kind": a.kind if a else None, "from": {"lat": prev.lat, "lon": prev.lon, "at": R.iso(prev.at), "place": prev.place} if prev else None,
+                      "to": {"lat": last.lat, "lon": last.lon, "at": R.iso(last.at), "place": last.place}, "distance_km": d, "sightings": sum(1 for x in in_period if x.actor_id == aid),
+                      "seed": all(x.source_type == "seed" for x in in_period if x.actor_id == aid)})
+    moves.sort(key=lambda m: (-(m["distance_km"] or 0), m["actor_name"]))
+    new_actors = [{"id": a.id, "name": a.name, "kind": a.kind, "lat": a.lat, "lon": a.lon, "place": a.place, "assessed_intent": a.assessed_intent} for a in actors.values() if period_from < a.created_at <= period_to]
+    graphics = [{"id": g.id, "type": g.type, "name": g.name, "kind": g.kind, "confidence": g.confidence, "basis": g.basis, "center": centroid(g.kind, json.loads(g.geometry_json)), "geometry": json.loads(g.geometry_json),
+                 "new": period_from < g.created_at <= period_to}
+                for g in (await session.execute(select(GraphicRow))).scalars() if g.type in THREAT_GRAPHIC_TYPES and g.status == "active" and period_from < g.updated_at <= period_to]
+    disposed = (await session.execute(select(ReportRow).where(ReportRow.disposed_at > period_from, ReportRow.disposed_at <= period_to))).scalars().all()
+    dispositions = {k: sum(1 for r in disposed if r.disposition == k) for k in ("corroborate", "link", "promote", "dismiss")}
+    coas = [{"id": c.id, "title": c.title, "likelihood": c.likelihood, "status": c.status, "most_likely": bool(c.most_likely), "most_dangerous": bool(c.most_dangerous), "subject_name": c.subject_name}
+            for c in (await session.execute(select(ThreatCoaRow).where(ThreatCoaRow.updated_at > period_from, ThreatCoaRow.updated_at <= period_to))).scalars()]
+    triggered = [{"id": d.id, "title": d.title, "status": d.status, "note": d.note, "decided_by": d.decided_by, "decided_at": R.iso(d.decided_at)}
+                 for d in (await session.execute(select(DecisionPointRow).where(DecisionPointRow.decided_at > period_from, DecisionPointRow.decided_at <= period_to))).scalars()]
+    pts = [(x.lat, x.lon) for x in in_period] + [(m["from"]["lat"], m["from"]["lon"]) for m in moves if m["from"]] + [(g["center"][1], g["center"][0]) for g in graphics] + [(a["lat"], a["lon"]) for a in new_actors if a["lat"] is not None]
+    bounds = {"south": min(p[0] for p in pts), "west": min(p[1] for p in pts), "north": max(p[0] for p in pts), "east": max(p[1] for p in pts)} if pts else None
+    real = [x for x in in_period if x.source_type != "seed"]
+    return {"sightings": [{"id": x.id, "actor_id": x.actor_id, "actor_name": actors[x.actor_id].name if x.actor_id in actors else x.actor_id, "at": R.iso(x.at), "lat": x.lat, "lon": x.lon, "place": x.place,
+                          "nai_id": x.nai_id, "confidence": x.confidence, "grade": f"{x.reliability}{x.credibility}", "what": x.what[:160], "seed": x.source_type == "seed"} for x in in_period],
+            "moves": moves, "new_actors": new_actors, "graphics": graphics, "dispositions": dispositions, "coas": coas, "decisions": triggered, "bounds": bounds,
+            "significant": len(real) + len(new_actors) + sum(1 for g in graphics if g["new"]) + len(triggered),
+            "summary": f"{len(in_period)} sighting{'s' if len(in_period) != 1 else ''} of {len({x.actor_id for x in in_period})} actor{'s' if len({x.actor_id for x in in_period}) != 1 else ''}"
+                       f"{', ' + str(len(new_actors)) + ' new' if new_actors else ''}; {sum(1 for g in graphics if g['new'])} threat graphic{'s' if sum(1 for g in graphics if g['new']) != 1 else ''} drawn; "
+                       f"{sum(dispositions.values())} report{'s' if sum(dispositions.values()) != 1 else ''} disposed; {len(triggered)} decision point{'s' if len(triggered) != 1 else ''} decided."}
 
 
 async def draft(session: AsyncSession, now: datetime, period_from: Optional[datetime] = None) -> IntsumRow:

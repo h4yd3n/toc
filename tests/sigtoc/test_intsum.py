@@ -40,7 +40,7 @@ def test_intsum_is_a_diff_in_fixed_order(client):
     client.post("/v1/s2/reports", json={"text": "Crowd of ~40 forming at the SF lobby entrance, signs, no police yet.", "reported_by": "guard_07", "place": "SF HQ lobby"}, headers=SEC)
     d = client.post("/v1/s2/intsum/draft", headers=AN).json()
     assert d["status"] == "draft" and d["nstr"] is False and d["period"]["hours"] == 24.0
-    assert d["structure"] == ["headline", "requirements", "new_threats", "wall", "reports_and_cases", "products", "collection"]
+    assert d["structure"] == ["headline", "requirements", "new_threats", "wall", "reports_and_cases", "products", "collection", "red_picture"]
     assert d["requirements"]["active"] >= 20 and d["requirements"]["directed"] == 2
     # seeded threats observed inside the last 24 h are "new", each attributed to the requirements it falls inside, P1 first
     ids = {t["id"] for t in d["new_threats"]}

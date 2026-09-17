@@ -155,7 +155,7 @@ LOG_BUCKETS = {
     "cop.tasking.raised": "operations", "cop.tasking.accepted": "operations", "cop.tasking.scheduled": "operations", "cop.tasking.complete": "operations", "cop.tasking.declined": "operations", "cop.tasking.amended": "operations",
     "s2.requirement.created": "intel", "s2.requirement.updated": "intel", "s2.source.updated": "collection", "s2.requirements.synced": "estimates",
     "s2.actor.created": "intel", "s2.actor.updated": "intel", "s2.sighting.created": "intel", "s2.report.filed": "intel", "s2.report.disposed": "intel", "s2.graphic.promoted": "intel",
-    "s2.coa.created": "intel", "s2.coa.updated": "intel", "s2.dp.created": "intel", "s2.dp.updated": "intel", "s2.product.drafted": "intel", "s2.product.status": "intel",
+    "s2.coa.created": "intel", "s2.coa.updated": "intel", "s2.dp.created": "intel", "s2.dp.updated": "intel", "s2.product.drafted": "intel", "s2.product.status": "intel", "s2.liaison.graded": "collection",
 }
 
 

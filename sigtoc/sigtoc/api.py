@@ -28,6 +28,7 @@ from .dissemination import DistributionRow
 from . import warning as W
 from .warning import WarningRow
 from . import ipb as B
+from . import liaison as L
 from .ipb import DecisionPointRow, S2ProductRow, ThreatCoaRow
 from .work import router as work_router
 
@@ -211,8 +212,10 @@ REPORT_FILERS = {"battle_captain", "security", "analyst", "ea", "ep"}
 
 class ReportCreate(BaseModel):
     text: str
-    kind: Literal["spot", "sitrep", "note"] = "spot"
+    kind: Literal["spot", "sitrep", "note", "liaison"] = "spot"
     reported_by: str
+    liaison_source: Optional[str] = None   # kind=liaison: the source's name (defaults to reported_by); an unknown name becomes a new source at F
+    liaison_kind: Optional[str] = None
     reporter_role: str = ""
     at: Optional[datetime] = None
     lat: Optional[float] = None
@@ -325,6 +328,13 @@ async def file_report(body: ReportCreate, session: AsyncSession = Depends(get_se
     now = R.now_utc()
     r = ReportRow(id=f"rpt_{uuid.uuid4().hex[:8]}", kind=body.kind, reported_by=body.reported_by, reporter_role=body.reporter_role, at=naive(body.at) or now,
                   lat=body.lat, lon=body.lon, place=body.place, text=body.text.strip(), case_id=body.case_id, credibility=body.credibility, filed_at=now)
+    liaison = None
+    if body.kind == "liaison":
+        # LOE 5: a liaison report carries its source's grade at filing; the analyst grades the source over time
+        liaison = await L.find_or_create(session, body.liaison_source or body.reported_by, body.liaison_kind or "other", x_toc_actor or x_toc_role or "", now)
+        r.reliability = liaison.reliability
+        r.source = L.source_tag(liaison)
+        r.reporter_role = body.reporter_role or liaison.kind
     session.add(r); await session.commit()
     extracted = None
     if body.case_id:
@@ -340,7 +350,76 @@ async def file_report(body: ReportCreate, session: AsyncSession = Depends(get_se
     await session.execute(update(AssignmentRow).where(AssignmentRow.section == "S2", AssignmentRow.status == "active", AssignmentRow.cadence_minutes > 0,
         AssignmentRow.case_id.is_(None) | (AssignmentRow.case_id == body.case_id)).values(next_at=R.now_utc()))
     await session.commit()
-    return {**C.report_dict(r), "extracted": extracted}
+    return {**C.report_dict(r), "extracted": extracted, **({"liaison_source": L.to_dict(liaison)} if liaison else {})}
+
+
+# ---------------------------------------------------------------- §5.10b Phase 4 (LOE 5): liaison sources, graded by the analyst
+
+class LiaisonCreate(BaseModel):
+    name: str
+    kind: str = "other"
+    reliability: str = "F"
+    notes: str = ""
+
+class LiaisonGrade(BaseModel):
+    reliability: Optional[str] = None
+    kind: Optional[str] = None
+    notes: Optional[str] = None
+    note: str = ""   # why this grade, on the history
+
+
+@router.get("/liaison-sources")
+async def list_liaison_sources(session: AsyncSession = Depends(get_session)):
+    rows = (await session.execute(select(L.LiaisonSourceRow).order_by(L.LiaisonSourceRow.name))).scalars().all()
+    return [L.to_dict(r, await L.reports_of(session, r)) for r in rows]
+
+
+@router.post("/liaison-sources", status_code=201)
+async def create_liaison_source(body: LiaisonCreate, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    _picture_role(x_toc_role, "Registering a liaison source")
+    if not body.name.strip(): raise HTTPException(422, "a source needs a name")
+    if body.reliability not in L.RELIABILITY: raise HTTPException(422, f"reliability is one of {list(L.RELIABILITY)}")
+    if body.kind not in L.KINDS: raise HTTPException(422, f"kind is one of {list(L.KINDS)}")
+    now = R.now_utc()
+    rows = (await session.execute(select(L.LiaisonSourceRow))).scalars().all()
+    if any(r.name.lower() == " ".join(body.name.split()).lower() for r in rows): raise HTTPException(409, "a source by that name exists")
+    row = await L.find_or_create(session, body.name, body.kind, x_toc_actor or x_toc_role or "", now)
+    row.notes = body.notes
+    if body.reliability != "F": L.grade(row, body.reliability, x_toc_actor or x_toc_role or "", now, "registered")
+    await session.commit()
+    await ledger().append_event(content_id=row.id, event_type="s2.liaison.graded", actor_type="human", actor_id=x_toc_actor or x_toc_role, new_state=row.reliability, reason=f"{row.name} ({row.kind}) registered at {row.reliability}")
+    return L.to_dict(row)
+
+
+@router.get("/liaison-sources/{sid}")
+async def get_liaison_source(sid: str, session: AsyncSession = Depends(get_session)):
+    row = await session.get(L.LiaisonSourceRow, sid)
+    if not row: raise HTTPException(404, "liaison source not found")
+    reports = await L.reports_of(session, row)
+    return {**L.to_dict(row, reports), "reports": [C.report_dict(r) for r in reports]}
+
+
+@router.patch("/liaison-sources/{sid}")
+async def grade_liaison_source(sid: str, body: LiaisonGrade, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None), x_toc_actor: Optional[str] = Header(None)):
+    """The analyst grades the source. Reports already filed keep the grade they were filed at; the record shows why."""
+    _picture_role(x_toc_role, "Grading a liaison source")
+    row = await session.get(L.LiaisonSourceRow, sid)
+    if not row: raise HTTPException(404, "liaison source not found")
+    old = row.reliability; changes: Dict[str, Any] = {}
+    if body.kind is not None:
+        if body.kind not in L.KINDS: raise HTTPException(422, f"kind is one of {list(L.KINDS)}")
+        row.kind = body.kind; changes["kind"] = body.kind
+    if body.notes is not None: row.notes = body.notes; changes["notes"] = body.notes
+    if body.reliability is not None and body.reliability != row.reliability:
+        if body.reliability not in L.RELIABILITY: raise HTTPException(422, f"reliability is one of {list(L.RELIABILITY)}")
+        L.grade(row, body.reliability, x_toc_actor or x_toc_role or "", R.now_utc(), body.note); changes["reliability"] = body.reliability
+    await session.commit()
+    reports = await L.reports_of(session, row)
+    rec = L.track_record(reports)
+    await ledger().append_event(content_id=row.id, event_type="s2.liaison.graded", actor_type="human", actor_id=x_toc_actor or x_toc_role, old_state=old, new_state=row.reliability,
+                                reason=f"{row.name}: " + (", ".join(f"{k}={v}" for k, v in changes.items()) or "no-op") + f" — record {rec['borne_out']}/{rec['disposed']} borne out of {rec['reports']} reports" + (f" — {body.note}" if body.note else ""),
+                                metadata={**changes, "record": rec})
+    return L.to_dict(row, reports)
 
 
 @router.get("/reports")

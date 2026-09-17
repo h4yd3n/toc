@@ -212,7 +212,9 @@ export interface AreaCell { indicator: string; label: string; state: 'reported' 
   confidence_basis: string[]; evidence: { threat_id: string; title: string; source: string; severity: string; distance_km: number; observed_at: string; synthetic: boolean }[]; sources: string[]; recommended?: string[]; worst?: string; severity?: string }
 export interface AreaCandidate { requirement_id: string; place: string; lat: number; lon: number; window_from: string | null; window_to: string | null; cells: AreaCell[]
   counts: { reported: number; quiet: number; gap: number; facts?: number }; worst: { indicator: string; label: string; likelihood: string; band: string; confidence: string; title: string } | null; known: boolean; bluf: string; author: string
-  unclassified: { threat_id: string; title: string }[] }
+  unclassified: { threat_id: string; title: string }[]
+  actors?: { id: string; name: string; kind: string; strength: string; place: string | null; last_seen_at: string | null; sightings_lookback: number; assessed_intent: string }[]
+  threat_graphics?: { id: string; type: string; name: string; kind: string; confidence: string; basis: string }[] }
 export interface AreaAssessment { id: string; title: string; purpose: string; requirement_ids: string[]; status: 'draft' | 'review' | 'approved'; author: string; created_at: string; decided_by: string | null
   indicators: { id: string; label: string }[]; candidates: AreaCandidate[]; gaps: string[]; approvable: boolean; refusal: string | null; note: string; places?: string[] }
 
@@ -226,7 +228,16 @@ export interface Intsum { id: string; status: 'draft' | 'released'; drafted_by: 
   reports: { id: string; kind: string; by: string; place: string | null; grade: string; text: string; case_id: string | null }[]
   cases: { opened: LogEv[]; closed: LogEv[]; decisions: number; open: number }
   products: { assessments: LogEv[]; area_assessments: LogEv[]; pending_area_assessments: { id: string; title: string; status: string }[] }
-  collection: { runs: LogEv[]; source_changes: LogEv[]; sources: { id: string; name: string; last_collected_at: string | null; last_result: string | null }[]; gaps: { indicator: string; label: string; requirements_affected: number }[] } }
+  collection: { runs: LogEv[]; source_changes: LogEv[]; sources: { id: string; name: string; last_collected_at: string | null; last_result: string | null }[]; gaps: { indicator: string; label: string; requirements_affected: number }[] }
+  red_picture?: RedPicture }
+/** Phase 4 — the graphic INTSUM: what moved on the other side in the period, with positions. */
+export interface RedPicture { sightings: { id: string; actor_id: string; actor_name: string; at: string; lat: number; lon: number; place: string | null; nai_id: string | null; confidence: string; grade: string; what: string; seed: boolean }[]
+  moves: { actor_id: string; actor_name: string; kind: string | null; from: { lat: number; lon: number; at: string; place: string | null } | null; to: { lat: number; lon: number; at: string; place: string | null }; distance_km: number | null; sightings: number; seed: boolean }[]
+  new_actors: { id: string; name: string; kind: string; lat: number | null; lon: number | null; place: string | null; assessed_intent: string }[]
+  graphics: { id: string; type: string; name: string; kind: string; confidence: string; basis: string; center: number[]; geometry: number[][]; new: boolean }[]
+  dispositions: { corroborate: number; link: number; promote: number; dismiss: number }; coas: { id: string; title: string; likelihood: string; status: string; most_likely: boolean; most_dangerous: boolean; subject_name: string }[]
+  decisions: { id: string; title: string; status: string; note: string; decided_by: string | null; decided_at: string | null }[]
+  bounds: { south: number; west: number; north: number; east: number } | null; significant: number; summary: string }
 export interface IntsumHead { id: string; status: 'draft' | 'released'; period: { from: string; to: string; hours: number }; headline: string; nstr: boolean; released_by: string | null }
 
 // §5.10 #3 operations, #4 dissemination
@@ -289,3 +300,8 @@ export interface DsmRow extends DecisionPoint { pir: { id: string; question: str
 export interface Dsm { generated_at: string; operation_id: string | null; subject_type: string | null; subject_id: string | null; rows: DsmRow[]; open: number; overdue: number; triggered: number }
 export interface StaffProductHead { id: string; kind: 'ipb' | 'estimate' | 'annex'; title: string; subject_type: string; subject_id: string; subject_name: string; operation_id: string | null; status: 'draft' | 'review' | 'approved' | 'released'; drafted_by: string; drafted_at: string; decided_by: string | null; decided_at: string | null; notes: string }
 export interface StaffProduct extends StaffProductHead { product: Record<string, unknown>; blockers?: string[]; new_candidates?: ThreatCoa[] }
+
+/** Phase 4 (LOE 5) — a liaison source, graded by the analyst; the record is derived from what became of its reports. */
+export interface LiaisonSource { id: string; name: string; kind: string; reliability: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; notes: string; history: { at: string; by: string; from: string; reliability: string; note: string }[]
+  created_by: string; created_at: string; graded_by: string | null; graded_at: string | null
+  record: { reports: number; filed: number; corroborated: number; linked: number; promoted: number; dismissed: number; disposed: number; borne_out: number; last_report_at: string | null } }

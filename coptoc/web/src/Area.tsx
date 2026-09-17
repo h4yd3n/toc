@@ -50,7 +50,9 @@ export function AreaPanel({ id, role, busy, act, onClose, reload }: { id: string
         {sel.state === 'gap' && <div className="bluf">Nobody is collecting this. Recommended: {(sel.recommended ?? []).join(', ') || 'none in the catalog'}. Connect a source and re-draft.</div>}
       </div>}
       <div className="section-label">BLUF PER CANDIDATE</div>
-      {a.candidates.map(c => <div key={c.requirement_id} className="bluf">{c.bluf}</div>)}
+      {a.candidates.map(c => <div key={c.requirement_id}><div className="bluf">{c.bluf}</div>
+        {((c.actors?.length ?? 0) + (c.threat_graphics?.length ?? 0)) > 0 && <div className="dim small" style={{ marginTop: 2 }}>In {c.place}: {(c.actors ?? []).map(x => `${x.name} (${x.sightings_lookback} sighting${x.sightings_lookback === 1 ? '' : 's'}${x.last_seen_at ? `, last ${x.last_seen_at.slice(0, 10)}` : ''})`).join('; ')}{(c.actors?.length ?? 0) > 0 && (c.threat_graphics?.length ?? 0) > 0 ? ' · ' : ''}{(c.threat_graphics ?? []).map(g => `${g.name} [${g.confidence}]`).join('; ')}</div>}
+      </div>)}
       {a.gaps.length > 0 && <div className="dim small" style={{ marginTop: 6 }}>Not collected for any candidate: {a.gaps.join('; ')}.</div>}
       <div className="dim small" style={{ marginTop: 6 }}>{a.note}</div>
       {can && <div className="row-btns" style={{ marginTop: 10 }}>
