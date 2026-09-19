@@ -166,6 +166,7 @@ fun ColumnScope.S1Panel(st: WallState, store: Store) {
     val s1State = androidx.compose.foundation.lazy.rememberLazyListState(); s1State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s1State, contentPadding = PaddingValues(bottom = 96.dp)) {  // room for the floating tab bar
         taskingsSection(st, store, "S1", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        ccirSection(st, "S1")
         if (roots.isNotEmpty()) {  // §4 the task organization: brigade → battalions → companies
             item { Label("TASK ORGANIZATION", "present/assigned · ↗ away") }
             fun unit(t: Team, depth: Int) {
@@ -233,6 +234,7 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
             Chip("${r.kind.uppercase()} ${r.grade}", Palette.amber); Text(r.text, color = Palette.text, fontSize = 10.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text(r.at.take(16).replace('T', ' '), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace) } }
         if (openReports.isEmpty()) item { Text("Nothing filed and waiting. File a SPOTREP from the field.", Modifier.padding(horizontal = 10.dp), color = Palette.dim, fontSize = 10.sp) }
         taskingsSection(st, store, "S2", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        ccirSection(st, "S2")
         decisionsSection(st, store) { triggering = it }
         s2ProductsSections(st)
         val pending = snap.warnings.filter { it.status == "suggested" || it.status == "draft" }
@@ -666,6 +668,7 @@ fun ColumnScope.S3Phone(st: WallState, store: Store) {
         onPick = { d -> scrubbed = d; val idx = rows.indexOfFirst { r -> r is AgendaRow.Day && !r.day.isBefore(d) }; if (idx >= 0) { expanded = false; scope.launch { listState.animateScrollToItem(idx + 1) } } })
     LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S3", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        ccirSection(st, "S3")
         decisionsSection(st, store) { s3Triggering = it }
         item { EstimateLine(snap.estimates.firstOrNull { it.section == "S3" }) }
         items(rows.size, key = { i -> when (val r = rows[i]) { is AgendaRow.Day -> "d${r.day}"; is AgendaRow.Gap -> "g$i"; is AgendaRow.Ev -> r.e.id; is AgendaRow.Tr -> r.t.id } }) { i ->
@@ -769,6 +772,7 @@ fun ColumnScope.S4Phone(st: WallState, store: Store) {
     val s4State = androidx.compose.foundation.lazy.rememberLazyListState(); s4State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s4State, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S4", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        ccirSection(st, "S4")
         item { EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S4" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S4 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
@@ -813,6 +817,7 @@ fun ColumnScope.S6Phone(st: WallState, store: Store) {
     val s6State = androidx.compose.foundation.lazy.rememberLazyListState(); s6State.driveDock()
     LazyColumn(Modifier.weight(1f), state = s6State, contentPadding = PaddingValues(bottom = 96.dp)) {
         taskingsSection(st, store, "S6", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
+        ccirSection(st, "S6")
         item { EstimateLine(st.snap?.estimates?.firstOrNull { it.section == "S6" })
             if (b != null) Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("S6 ${b.status.uppercase()}", healthColor(b.status), filled = b.status != "green")
@@ -1046,6 +1051,26 @@ fun androidx.compose.foundation.lazy.LazyListScope.s2ProductsSections(st: WallSt
                 Text(p.title, color = Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Chip(p.status.uppercase(), if (p.status == "approved" || p.status == "released") Palette.green else Palette.dim) } }
     }
+}
+
+/** §3.6 — the commander's list on the phone: the lines this section owns, plus anything tripped anywhere, because a
+ *  tripped CCIR is the commander's business wherever the reader is standing. Read-only; the wall writes the list. */
+fun androidx.compose.foundation.lazy.LazyListScope.ccirSection(st: WallState, section: String) {
+    val rows = (st.snap?.ccir?.lines ?: emptyList()).filter { it.status == "active" && (it.ownerSection == section || it.tripped) }
+    if (rows.isEmpty()) return
+    val tripped = rows.count { it.tripped }
+    item { Label("CCIR · WHAT HAS TO WAKE THE COMMANDER", if (tripped > 0) "$tripped tripped" else "${rows.size} watched") }
+    items(rows, key = { "ccir_" + it.id }) { l ->
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 7.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Chip(l.kind.uppercase(), if (l.tripped) Palette.red else if (l.state == "unmeasured") Palette.amber else Palette.dim, filled = l.tripped)
+                Text(l.text, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (l.ownerSection != section) Chip(l.ownerSection)
+                Text(if (l.tripped) "TRIPPED" + (l.trippedMin?.let { " · ${it}m" } ?: "") else if (l.state == "unmeasured") "NO READING" else if (l.state == "narrative") "STANDING" else "GREEN",
+                     color = if (l.tripped) Palette.red else if (l.state == "unmeasured") Palette.amber else Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) }
+            Text("PRI ${l.priority} · ${l.condition}" + (l.value?.let { v -> " · now " + (if (v == v.toLong().toDouble()) v.toLong().toString() else String.format("%.1f", v)) + (if (l.unit == "%") "%" else " " + l.unit) } ?: ""),
+                 color = Palette.dim, fontSize = 9.5.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            HorizontalDivider(thickness = 0.5.dp, color = Palette.line) } }
 }
 
 fun androidx.compose.foundation.lazy.LazyListScope.taskingsSection(st: WallState, store: Store, section: String, raising: Boolean, onRaise: () -> Unit, onDecline: (Tasking) -> Unit) {

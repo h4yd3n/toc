@@ -84,6 +84,22 @@ struct Snapshot: Decodable {
     var graphics: [Graphic]?                    // §3.4 the control measures a section drew
     var s2Actors: [S2Actor]?, s2Sightings: [S2Sighting]?, s2Reports: [S2Report]?, movementRisks: [MovementRisk]?   // §5.10b the live S2 picture
     var decisionPoints: [SnapDecisionPoint]?   // §5.10b Phase 3, on the strip and in the S2 panel: what we decide, and when
+    var ccir: CcirBoard?                        // §3.6 the commander's list: what has to wake him
+}
+
+/// §3.6 — one line of the commander's critical information requirements. Written on the wall, read here: the phone
+/// shows what is tripped and what each section owns, and never edits the commander's list.
+struct CcirLine: Decodable, Identifiable, Hashable {
+    var id: String, kind: String, text: String, ownerSection: String, priority: Int, status: String
+    var metric: String?, unit: String, condition: String, state: String
+    var value: Double?, trips: Int, trippedMin: Int?
+    var tripped: Bool { state == "tripped" }
+}
+
+struct CcirBoard: Decodable, Hashable {
+    struct Counts: Decodable, Hashable { var tripped: Int, unmeasured: Int, active: Int, total: Int }
+    var lines: [CcirLine]
+    var counts: Counts
 }
 
 /// §5.10b Phase 3 — a decision the commander owes, with the time it has to be made by. The matrix lives on the wall;

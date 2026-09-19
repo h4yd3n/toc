@@ -101,7 +101,17 @@ import kotlinx.serialization.json.double
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList(),
-                                  val decisionPoints: List<SnapDecisionPoint> = emptyList())
+                                  val decisionPoints: List<SnapDecisionPoint> = emptyList(), val ccir: CcirBoard? = null)
+
+/** §3.6 — the commander's critical information requirements. Written on the wall, read here; the phone never
+ *  edits the commander's list. An EEFI never trips: nothing in the data measures our own signature. */
+@Serializable data class CcirLine(val id: String, val kind: String = "ffir", val text: String = "", val ownerSection: String = "S3", val priority: Int = 2,
+                                  val status: String = "active", val metric: String? = null, val unit: String = "", val condition: String = "",
+                                  val state: String = "green", val value: Double? = null, val trips: Int = 0, val trippedMin: Int? = null) {
+    val tripped: Boolean get() = state == "tripped"
+}
+@Serializable data class CcirCounts(val tripped: Int = 0, val unmeasured: Int = 0, val active: Int = 0, val total: Int = 0)
+@Serializable data class CcirBoard(val lines: List<CcirLine> = emptyList(), val counts: CcirCounts = CcirCounts())
 
 /** §5.10b Phase 3 — a decision the commander owes, with the time it has to be made by. The matrix lives on the wall;
  *  the phone shows the decision, its trigger, what happens, and whether the clock has run out. */

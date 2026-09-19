@@ -14,6 +14,7 @@ import { S4Headline, S4Panel, S6Headline, S6Panel } from './Sections'
 import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
+import { CcirPanel } from './Ccir'
 import { TaskingBox } from './Taskings'
 import { IsrPanel } from './IsrSync'
 import { LiaisonPanel } from './Liaison'
@@ -87,7 +88,7 @@ export default function App() {
   const [busy, setBusy] = useState<string | null>(null)
   const [sel, setSel] = useState<Selection>(null)
   const [ui, setUi] = useState<UiPrefs>(() => { try { return { ...UI_DEFAULTS, ...JSON.parse(localStorage.getItem('toc.ui') || '{}') } } catch { return UI_DEFAULTS } })
-  type RightPanel = 'right' | 's4' | 's6' | 'settings' | null
+  type RightPanel = 'right' | 's4' | 's6' | 'ccir' | 'settings' | null
   const [addSite, setAddSite] = useState(false)
   const [leftOpen, setLeftOpen] = useState<boolean>(() => {
     try {
@@ -386,6 +387,7 @@ export default function App() {
         {sectionOn('S2') && <button className={`rail-btn ${(!isCop && destination.section === 'S2') || (isCop && rightPanel === 'right') ? 'on' : ''}`} onClick={() => handleRailClick('S2')} title={`${sectionCode('S2')} ${sectionTitle('S2', 'INTELLIGENCE')}`}>{sectionLabel('S2')}{s && ((s.warnings_pending > 0) ? badge(s.warnings_pending, 'red', 'warnings awaiting release') : inbox('S2') ? badge(inbox('S2'), 'amber', 'taskings S2 owes') : badge(s.active_threats, 'dim', 'threats on the picture'))}</button>}
         {sectionOn('S4') && <button className={`rail-btn ${(!isCop && destination.section === 'S4') || (isCop && rightPanel === 's4') ? 'on' : ''} st-${s?.s4_status ?? 'green'}`} onClick={() => handleRailClick('S4')} title={`S4 ${sectionTitle('S4', 'LOGISTICS')} · ${s?.s4_status ?? ''}`}>S4<i className={`dot ${s?.s4_status ?? 'green'}`} />{snap && (snap.s4.counts.red + snap.s4.counts.late > 0 ? badge(snap.s4.counts.red + snap.s4.counts.late, 'red', 'red lines and late shipments') : snap.s4.counts.amber > 0 ? badge(snap.s4.counts.amber, 'amber', 'amber lines') : badge(inbox('S4'), 'amber', 'taskings S4 owes'))}</button>}
         {sectionOn('S6') && <button className={`rail-btn ${(!isCop && destination.section === 'S6') || (isCop && rightPanel === 's6') ? 'on' : ''} st-${s?.s6_status ?? 'green'}`} onClick={() => handleRailClick('S6')} title={`S6 ${sectionTitle('S6', 'SIGNAL')} · ${s?.s6_status ?? ''}`}>S6<i className={`dot ${s?.s6_status ?? 'green'}`} />{snap && (snap.s6.counts.down > 0 ? badge(snap.s6.counts.down, 'red', 'systems down') : snap.s6.counts.degraded > 0 ? badge(snap.s6.counts.degraded, 'amber', 'systems degraded') : badge(inbox('S6'), 'amber', 'taskings S6 owes'))}</button>}
+        <button className={`rail-btn ${isCop && rightPanel === 'ccir' ? 'on' : ''} ${(s?.ccir_tripped ?? 0) > 0 ? 'alert' : ''}`} onClick={() => { if (!isCop) navigate({ page: 'cop' }); toggleRight('ccir') }} title="CCIR · what has to wake the commander">CCIR{s && ((s.ccir_tripped ?? 0) > 0 ? badge(s.ccir_tripped!, 'red', 'requirements tripped') : (s.ccir_unmeasured ?? 0) > 0 ? badge(s.ccir_unmeasured!, 'amber', 'requirements with no reading') : badge(snap?.ccir?.counts.active ?? 0, 'dim', 'requirements active'))}</button>
         <button className={`rail-btn ${logOpen ? 'on' : ''}`} onClick={() => { if (!isCop) navigate({ page: 'cop' }); setLogOpen(v => !v) }} title="BATTLE LOG · hash-chained">LOG{snap && snap.log.length > 0 ? badge(snap.log.length, 'dim', 'actions logged') : null}</button>
       </nav>
       <aside className={`left ${isCop && leftOpen ? 'open' : ''}`} inert={!isCop || !leftOpen}>
@@ -744,6 +746,10 @@ export default function App() {
             <li key={i.id} className="row rollcall" onClick={() => setSel({ type: 'incident', id: i.id })}><span className="name">{i.title}</span><span className={`meta ${i.pct === 100 ? 'ok' : 'bad'}`}>{i.accounted}/{i.total}</span></li>))}</ul>
         </>}
         {released('S6')}
+      </aside>
+      <aside className={`right ${isCop && rightPanel === 'ccir' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'ccir'}>
+        <PanelHead code="!" title="CCIR" hint="What has to wake the commander" onClose={() => setRightPanel(null)} />
+        <CcirPanel board={snap?.ccir} canEdit={role === 'battle_captain'} busy={busy} act={act} pirs={snap?.pirs ?? []} />
       </aside>
       <aside className={`right ${isCop && rightPanel === 'right' ? 'open' : ''}`} inert={!isCop || rightPanel !== 'right'}>
         <PanelHead code={sectionCode('S2')} title={sectionTitle('S2', 'INTELLIGENCE')} hint="Sigtoc" onClose={() => setRightPanel(null)}>

@@ -4,7 +4,8 @@ import { Question } from './Headline'
 import type { Distribution, Role, Selection, Warning } from './types'
 
 type Act = (l: string, f: () => Promise<unknown>) => void
-const sel = (w: Warning): Selection => w.subject_type === 'location' ? { type: 'location', id: w.subject_id } : w.subject_type === 'person' ? { type: 'person', id: w.subject_id } : { type: 'event', id: w.subject_id }
+// a CCIR trip has no place on the map — it is a requirement, not a site — so unknown subjects select nothing
+const sel = (w: Warning): Selection => w.subject_type === 'location' ? { type: 'location', id: w.subject_id } : w.subject_type === 'person' ? { type: 'person', id: w.subject_id } : w.subject_type === 'event' ? { type: 'event', id: w.subject_id } : null
 
 /** The red strip under the header: every released warning, with the reader's acknowledgement (§5.6, S6 alerting). */
 export function FlashStrip({ warnings, role, busy, act, onSelect, reload }: { warnings: Warning[]; role: Role; busy: string | null; act: Act; onSelect: (s: Selection) => void; reload: number }) {

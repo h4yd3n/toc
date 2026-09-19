@@ -372,7 +372,8 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await _seed_directed(session, now_utc())
         await _seed_operation(session, now_utc())
     from .readiness import EquipmentRow, UnitPositionRow
-    for model in (UnitPositionRow, EquipmentRow, S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    from .ccir import CcirRow, seed as ccir_seed
+    for model in (CcirRow, UnitPositionRow, EquipmentRow, S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     await session.flush()
@@ -388,6 +389,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     from .sections import profile as _profile
     session.add_all(toc_areas.seed(dataset, now, _profile()))  # §5.6a what the analyst judges about each place
     session.add_all(toc_graphics.seed(dataset, now))  # §3.4 the control measures on the board
+    session.add_all(ccir_seed(dataset, now))  # §3.6 the commander's list: what has to wake him
     if dataset == "cab":
         from . import seed_cab
         await seed_cab.populate(session, now)

@@ -12,6 +12,7 @@ from .auth import router as auth_router, allowed_origins, startup_guard
 from .ingestion import router as intake_router
 from . import intake_monitor  # register administrative checks on the intake router
 from . import readiness  # noqa: F401 — registers cop_unit_positions and cop_equipment before create_all (§4, §7)
+from . import ccir  # noqa: F401 — registers cop_ccir before create_all (§3.6)
 
 
 async def _intsum_clock() -> None:
@@ -38,6 +39,22 @@ async def _escalation_clock() -> None:
         await asyncio.sleep(60)
 
 
+async def _ccir_clock() -> None:
+    """§3.6: every minute, evaluate the CCIR board and record what *changed*. A green line writes nothing."""
+    from .routes import sessions
+    from . import ccir as C
+    from .service import build_snapshot
+    from shared.ledger import AsyncDatabaseEventLedger
+    while True:
+        await asyncio.sleep(60)
+        try:
+            async with sessions()() as session:
+                snap = await build_snapshot(session, include_restricted=True)
+                await C.record_changes(session, snap, AsyncDatabaseEventLedger(sessions()))
+        except Exception:  # noqa: BLE001 — a failed evaluation must not kill the clock; the next tick retries
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     startup_guard()   # a closed deployment refuses to run on the dev secret or an open CORS policy
@@ -55,6 +72,8 @@ async def lifespan(_app: FastAPI):
         clocks.append(asyncio.create_task(_intsum_clock()))
     if os.environ.get("TOC_ESCALATION_CLOCK", "on") != "off":
         clocks.append(asyncio.create_task(_escalation_clock()))
+    if os.environ.get("TOC_CCIR_CLOCK", "on") != "off":
+        clocks.append(asyncio.create_task(_ccir_clock()))
     try:
         yield
     finally:

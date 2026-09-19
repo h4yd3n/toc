@@ -24,6 +24,7 @@ from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, Deli
                         TeamRow, ThreatLinkRow, ThreatRow, TripLegRow, TripRow)
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .readiness import EquipmentRow, UnitPositionRow  # noqa: F401 — §4/§7, registered before create_all
+from .ccir import CcirRow  # noqa: F401 — §3.6, registered before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
 from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
 from . import areas as toc_areas
@@ -31,7 +32,7 @@ from . import graphics as toc_graphics
 from .graphics import GraphicRow
 from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
+from .schemas import (CcirCreate, CcirUpdate, GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -1978,3 +1979,66 @@ async def seed(dataset: Optional[str] = None, session: AsyncSession = Depends(ge
 async def get_activity(before: int | None = None, limit: int = Query(default=40, ge=1, le=100), include_reads: bool = False, session: AsyncSession = Depends(get_session)):
     from .service import activity_log
     return await activity_log(session, limit=limit, before=before, include_reads=include_reads)
+
+
+# ---------------------------------------------------------------- §3.6 CCIR
+# The commander's list, so the Battle Captain owns it: a section proposes a line in conversation, the BC writes it.
+CCIR_OWNERS = {"battle_captain"}
+
+
+@router.get("/ccir")
+async def get_ccir(session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None)):
+    """The board with every line's live state. Read by anyone who can see the wall; the numbers behind the lines
+    follow the caller's restricted-site rights, so a line never reports a count the reader may not see."""
+    from . import ccir as C
+    rows = (await session.execute(select(C.CcirRow))).scalars().all()
+    snap = await build_snapshot(session, include_restricted=may_see_restricted(x_toc_role))
+    return C.board(rows, snap)
+
+
+@router.get("/ccir/metrics")
+async def get_ccir_metrics():
+    """What an FFIR can watch. Every one is already a number on the wall; this endpoint names them."""
+    from . import ccir as C
+    return {"metrics": C.metric_catalog(), "comparators": list(C.COMPARATORS), "kinds": list(C.KINDS)}
+
+
+@router.post("/ccir", status_code=201)
+async def create_ccir(body: CcirCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """§3.6 — write a CCIR line. PIR points at an existing PIR, FFIR names a metric and a threshold, EEFI is words."""
+    require_role(x_toc_role, CCIR_OWNERS, "Writing a CCIR line")
+    from . import ccir as C
+    try:
+        row = await C.create(session, body.model_dump(exclude_none=True), actor_from(x_toc_actor))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=row.id, event_type="cop.ccir.written", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state=row.state, reason=f"CCIR {row.kind.upper()} — {row.text} ({C.condition_text(row)})",
+                                    metadata={"kind": row.kind, "owner_section": row.owner_section, "priority": row.priority})
+    return C.to_dict(row)
+
+
+@router.patch("/ccir/{ccir_id}")
+async def update_ccir(ccir_id: str, body: CcirUpdate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    require_role(x_toc_role, CCIR_OWNERS, "Changing a CCIR line")
+    from . import ccir as C
+    row = await one_or_404(session, C.CcirRow, ccir_id, "CCIR line")
+    old = row.status
+    try:
+        row = await C.update(session, row, body.model_dump(exclude_none=True), actor_from(x_toc_actor))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=row.id, event_type="cop.ccir.written", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    old_state=old, new_state=row.status, reason=f"CCIR amended — {row.text} ({C.condition_text(row)})",
+                                    metadata={"kind": row.kind, "status": row.status})
+    return C.to_dict(row)
+
+
+@router.post("/ccir/evaluate")
+async def evaluate_ccir(session: AsyncSession = Depends(get_session)):
+    """Evaluate now and record any state change. The clock calls this every minute; the endpoint exists so a test —
+    or an operator who has just fixed something — does not have to wait for it."""
+    from . import ccir as C
+    snap = await build_snapshot(session, include_restricted=True)
+    changes = await C.record_changes(session, snap, get_ledger())
+    return {"changes": changes, "evaluated_at": C.iso(C.now_utc())}

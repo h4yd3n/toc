@@ -7,6 +7,7 @@ struct PersonnelScreen: View {
         List {
             Section { EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S1" }) }.listRowBackground(Theme.panel)
             TaskingsSection(section: "S1")
+            CcirSection(section: "S1")
             if !store.openIncidents.isEmpty {
                 Section(header: SectionLabel(text: "S6 · ROLL CALLS")) {
                     ForEach(store.openIncidents) { inc in
@@ -101,6 +102,7 @@ struct IntelScreen: View {
                 if store.openReports.isEmpty { Text("Nothing filed and waiting. File a SPOTREP from the field.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
             }.listRowBackground(Theme.panel)
             TaskingsSection(section: "S2")
+            CcirSection(section: "S2")
             DecisionsSection()
             // §5.10b Phase 3 — what the other side may do, in ICD 203 words. Written on the wall, read here.
             if !store.coas.filter({ $0.status != "rejected" }).isEmpty {
@@ -295,6 +297,7 @@ struct OpsScreen: View {
                     Color.clear.frame(height: 0).background(GeometryReader { g in Color.clear.preference(key: ScrollTopKey.self, value: g.frame(in: .named("agenda")).minY) })
                     EstimateLine(e: store.snapshot?.estimates?.first { $0.section == "S3" }).padding(.horizontal, 14)
                     TaskingsSection(section: "S3", plain: true)
+                    CcirSection(section: "S3", plain: true)
                     DecisionsSection(plain: true)
                     ForEach(Array(days.enumerated()), id: \.element.day) { idx, d in
                         if idx > 0, let gap = cal.dateComponents([.day], from: days[idx - 1].day, to: d.day).day, gap > 1 {
@@ -498,6 +501,7 @@ struct LogisticsScreen: View {
                 }
             }.listRowBackground(Theme.bg).listRowSeparator(.hidden)
             TaskingsSection(section: "S4")
+            CcirSection(section: "S4")
             if let b = board {
                 let lines = all ? b.supplies : b.supplies.filter { $0.status != "green" }
                 Section(header: SectionLabel(text: "SUPPLY & EQUIPMENT · \(lines.count)" + (all ? "" : " OF \(b.supplies.count)"))) {
@@ -563,6 +567,7 @@ struct SignalScreen: View {
                 }
             }.listRowBackground(Theme.bg).listRowSeparator(.hidden)
             TaskingsSection(section: "S6")
+            CcirSection(section: "S6")
             if let b = board {
                 Section(header: SectionLabel(text: "PACE · HOW TO REACH EACH SITE")) {
                     ForEach(b.pace.keys.sorted(), id: \.self) { site in
@@ -702,6 +707,47 @@ struct DecisionsSection: View {
                         Button("PASSED") { store.act("passing the decision point") { try await store.client.decideDecisionPoint(id: d.id, status: "passed", note: "") } }
                     }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).disabled(store.busy != nil)
                 }
+            }
+        }
+    }
+}
+
+/// §3.6 — the commander's list on the phone: the lines this section owns, plus anything tripped anywhere, because a
+/// tripped CCIR is the commander's business wherever the reader happens to be standing. Read-only: the board is
+/// written on the wall by the Battle Captain, and a phone that could edit it would be a second source of truth.
+struct CcirSection: View {
+    @Environment(COPStore.self) private var store
+    var section: String
+    var plain = false   // true inside a ScrollView (S3); false inside a List
+    var board: CcirBoard? { store.snapshot?.ccir }
+    var rowsData: [CcirLine] {
+        (board?.lines ?? []).filter { $0.status == "active" && ($0.ownerSection == section || $0.tripped) }
+    }
+    var tripped: Int { rowsData.filter { $0.tripped }.count }
+    var body: some View {
+        Group {
+            if rowsData.isEmpty { EmptyView() }
+            else if plain { VStack(alignment: .leading, spacing: 8) { header; rows }.padding(.horizontal, 14).padding(.top, 10) }
+            else { Section(header: header) { rows }.listRowBackground(Theme.panel) }
+        }
+    }
+    var header: some View {
+        SectionLabel(text: "CCIR · WHAT HAS TO WAKE THE COMMANDER\(tripped > 0 ? " · \(tripped) TRIPPED" : "")")
+    }
+    @ViewBuilder var rows: some View {
+        ForEach(rowsData) { l in
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Chip(text: l.kind.uppercased(), color: l.tripped ? Theme.red : l.state == "unmeasured" ? Theme.amber : Theme.dim, filled: l.tripped)
+                    Text(l.text).font(.system(size: 12, weight: .semibold)).lineLimit(2)
+                    Spacer()
+                    if l.ownerSection != section { Chip(text: l.ownerSection, color: Theme.dim) }
+                    Text(l.tripped ? "TRIPPED\(l.trippedMin.map { " · \($0)m" } ?? "")" : l.state == "unmeasured" ? "NO READING" : l.state == "narrative" ? "STANDING" : "GREEN")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(l.tripped ? Theme.red : l.state == "unmeasured" ? Theme.amber : Theme.dim)
+                }
+                Text("PRI \(l.priority) · \(l.condition)" + (l.value.map { v in " · now \(v.formatted(.number.precision(.fractionLength(0...1))))\(l.unit == "%" ? "%" : " " + l.unit)" } ?? ""))
+                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.dim).lineLimit(2)
             }
         }
     }

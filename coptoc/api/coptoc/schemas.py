@@ -347,3 +347,28 @@ class BadgeEvent(BaseModel):
 class BadgeBatch(BaseModel):
     events: List[BadgeEvent]
     source: Optional[str] = "badge"
+
+
+# §3.6 CCIR — the commander's critical information requirements
+class CcirCreate(BaseModel):
+    kind: Literal["pir", "ffir", "eefi"]
+    text: str
+    owner_section: Optional[str] = None
+    priority: Optional[int] = 2
+    metric: Optional[str] = None
+    comparator: Optional[Literal["lt", "lte", "gt", "gte", "eq"]] = "gte"
+    threshold: Optional[float] = None
+    scope: Optional[str] = None
+    pir_id: Optional[str] = None
+    approved_by: Optional[str] = None
+
+class CcirUpdate(BaseModel):
+    text: Optional[str] = None
+    owner_section: Optional[str] = None
+    priority: Optional[int] = None
+    metric: Optional[str] = None
+    comparator: Optional[Literal["lt", "lte", "gt", "gte", "eq"]] = None
+    threshold: Optional[float] = None
+    scope: Optional[str] = None
+    status: Optional[Literal["active", "inactive"]] = None
+    approved_by: Optional[str] = None

@@ -1,4 +1,4 @@
-import type { CaseSignal, Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
+import type { CcirBoard, CcirMetric, CaseSignal, Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -218,3 +218,9 @@ export async function downloadIntakeSource(id:string) {
 export type IntakeFinding={id:string;shipment_id:string;location_id:string;title:string;status:string;revision:number;checked_at:string;snoozed_until:string|null;history:{actor:string;action:string;note:string;at:string}[]}
 export const getIntakeFindings=()=>req<{rule:string;items:IntakeFinding[]}>('GET','/v1/intake/monitor/findings')
 export const decideIntakeFinding=(id:string,revision:number,action:string,note:string)=>req<unknown>('PATCH',`/v1/intake/monitor/findings/${id}`,{revision,action,note})
+
+// §3.6 CCIR — the commander's list. Reading is open to the wall; writing is the Battle Captain's.
+export const getCcir = () => req<CcirBoard>('GET', '/v1/cop/ccir')
+export const ccirMetrics = () => req<{ metrics: CcirMetric[]; comparators: string[]; kinds: string[] }>('GET', '/v1/cop/ccir/metrics')
+export const writeCcir = (body: Record<string, unknown>) => req<unknown>('POST', '/v1/cop/ccir', body)
+export const amendCcir = (id: string, body: Record<string, unknown>) => req<unknown>('PATCH', `/v1/cop/ccir/${id}`, body)

@@ -26,7 +26,7 @@ class WarningRow(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     title: Mapped[str] = mapped_column(String)
     text: Mapped[str] = mapped_column(Text, default="")
-    subject_type: Mapped[str] = mapped_column(String)  # location | person | event
+    subject_type: Mapped[str] = mapped_column(String)  # location | person | event | ccir (§3.6, a tripped requirement)
     subject_id: Mapped[str] = mapped_column(String, index=True)
     subject_name: Mapped[str] = mapped_column(String, default="")
     threat_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -205,6 +205,8 @@ def people_for_subject(snap: Dict[str, Any], w: WarningRow) -> List[Dict[str, An
         return [p for p in people if p.get("location_id") == w.subject_id or p.get("home_location_id") == w.subject_id or haversine_km(p["lat"], p["lon"], loc["lat"], loc["lon"]) <= 5]
     if w.subject_type == "person":
         return [p for p in people if p["id"] == w.subject_id]
+    if w.subject_type == "ccir":
+        return []  # §3.6 — a tripped requirement is a message to the floor, not an SMS to a site; releasing it posts to the ops channel
     ev = next((e for e in snap.get("events", []) if e["id"] == w.subject_id), None)
     ids = set(ev.get("attendee_ids", [])) if ev else set()
     return [p for p in people if p["id"] in ids]

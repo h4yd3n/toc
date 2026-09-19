@@ -79,6 +79,7 @@ export interface Assessment {
 export interface LogEntry { id: string; at: string; type: string; actor: string; actor_type: string; subject: string; old: string | null; new: string | null; summary: string | null }
 export interface Summary { s4_status?: Health; s6_status?: Health; taskings_open?: number; taskings_overdue?: number;
   s2_actors?: number; s2_reports_pending?: number; movement_risks?: number; decisions_open?: number; decisions_overdue?: number
+  ccir_tripped?: number; ccir_unmeasured?: number
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
@@ -178,11 +179,27 @@ export interface WeatherInfo {
   awc_url: string
 }
 
-export interface Snapshot { areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; unit_positions?: UnitPosition[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
+export interface Snapshot { ccir?: CcirBoard; areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; unit_positions?: UnitPosition[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
   s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]
 }
+// §3.6 CCIR — one list of what has to wake the commander: PIR (the enemy), FFIR (us), EEFI (our own signature)
+export interface CcirLine {
+  id: string; kind: 'pir' | 'ffir' | 'eefi'; text: string; owner_section: string; priority: number
+  status: 'active' | 'inactive'; metric: string | null; metric_label: string; unit: string
+  comparator: string; threshold: number | null; scope: string; pir_id: string | null
+  state: 'green' | 'tripped' | 'unmeasured' | 'narrative'; value?: number | null; last_value: number | null
+  last_eval_at: string | null; tripped_at: string | null; cleared_at: string | null; trips: number
+  tripped_min: number | null; created_by: string; created_at: string; approved_by: string; condition: string
+}
+export interface CcirBoard {
+  lines: CcirLine[]
+  counts: { tripped: number; unmeasured: number; active: number; total: number }
+  by_kind: Record<string, number>
+}
+export interface CcirMetric { id: string; label: string; section: string; unit: string }
+
 export type Selection =
   | { type: 'location'; id: string } | { type: 'person'; id: string } | { type: 'threat'; id: string } | { type: 'event'; id: string } | { type: 'incident'; id: string } | { type: 'graphic'; id: string } | null
 export interface Layers { locations: boolean; travelers: boolean; threats: boolean; routes: boolean; events: boolean; residences: boolean; s4: boolean; s6: boolean }

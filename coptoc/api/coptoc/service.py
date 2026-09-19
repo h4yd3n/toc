@@ -548,8 +548,15 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
                                      .order_by(LedgerEventRow.id))).scalars().all()
     watch_log = [{"id": r.event_id, "at": iso(r.timestamp), "type": r.event_type, "bucket": LOG_BUCKETS.get(r.event_type, "other"), "actor": r.actor_id, "subject": r.content_id, "summary": r.reason}
                  for r in wl_rows if LOG_BUCKETS.get(r.event_type, "other") != "estimates"]
+    # §3.6 the CCIR board: the lines are evaluated against the picture we have just built, so the board can never
+    # disagree with the numbers beside it. Evaluation here is read-only — trips are recorded by the clock.
+    from .ccir import CcirRow, board as ccir_board
+    ccir_rows = (await session.execute(select(CcirRow))).scalars().all()
     view_out = default_view(locations)
     weather_out = derive_weather(view_out.get("center_lat"), view_out.get("center_lon"), view_out.get("radius_km"), threats, prof)
+    ccir_out = ccir_board(ccir_rows, {"summary": summary, "s4": s4, "s6": s6, "pirs": pirs_out, "unit_positions": unit_positions}, now)
+    summary["ccir_tripped"] = ccir_out["counts"]["tripped"]
+    summary["ccir_unmeasured"] = ccir_out["counts"]["unmeasured"]
     return {
         "profile": toc_profile(), "sections": sections_config(), "view": view_out, "weather": weather_out, "s4": s4, "s6": s6, "me": _me(), "taskings": taskings_summary(taskings, now),
         "generated_at": iso(now), "restricted_included": include_restricted, "summary": summary, "warnings": warnings_out,
@@ -558,7 +565,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
         "graphics": graphics_out, "s2_actors": s2_actors_out, "s2_sightings": s2_sightings_out, "s2_reports": s2_reports_out, "movement_risks": movement_risks_out,
-        "decision_points": decision_points_out, "unit_positions": unit_positions,
+        "decision_points": decision_points_out, "unit_positions": unit_positions, "ccir": ccir_out,
     }
 
 

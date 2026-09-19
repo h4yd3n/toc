@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.49
+**Version:** v3.50
 **Date:** 2026-09-17
 **Status:** Prototype running — the web wall, native iOS and native Android against one API; the sign-in layer built and off by default (§9)
 
@@ -208,6 +208,39 @@ Built with other tools in the author's hands; recorded here from the code so the
 - **METOC weather and the clocks.** A tactical weather service (`coptoc/weather.py`) derives surface observations, aviation flight category (VMC / MVFR / IMC), ceiling and visibility against benchmarks, and impact statements for flights and ground convoys for a catalog of known stations, with links out to NWS and the Aviation Weather Center; a popover on the context row. The header carries several clocks, ordered Pacific to East, beside Zulu. DISPLAY folded into SETTINGS. Ultra-thin auto-hiding scrollbars; threat counters on the map overlay; the LAYERS button at the upper right.
 - **Posture in words on a corporate desk.** The corporate profile does not say DEFCON. It reads the same five levels as words — Normal, Guarded, Elevated, High, Critical — with corporate meanings (`POSTURE_MEANING_CORPORATE`); the military profile keeps DEFCON 5–1. Decision AC.
 - **The phones (iOS and Android).** A graduated tactical edge ruler flush under the header and a vertical scale on the right edge, the (0,0) corner aligned; miles or kilometres, persisted per device; the watch and counters as a floating status card; a stacked-paper LAYERS button with a multi-stage overlay menu on every tab, a master layer switch, and a CONTROL MEASURES toggle for the drawn graphics; tabs cycle on three taps — switch, expand the sheet, minimise it; the API origin resolves on a physical device and an error banner offers retry; a WORKSPACE button in each section sheet header opens the in-app console (§5.12).
+
+### 3.6 CCIR — what has to wake the commander **[BUILT]** (18 Sep 2026)
+
+Every number on this wall was already there — people unaccounted for, the OR rate, days of supply, a degraded PACE
+net, a unit nobody has heard from. What was missing was anybody *declaring* one of them a requirement. A CCIR is that
+declaration, and the three kinds sit in one list because a commander asks one question, not three:
+
+- **PIR** — about the enemy or the environment. These already exist as S2 objects, so a PIR line **points at one**
+  rather than copying it, and trips when that PIR is answered. What the commander wants to be told is not that a
+  question was asked; it is that it now has an answer.
+- **FFIR** — about us. A line names a metric the wall already carries, a comparator, a threshold, an owning section
+  and a priority: *Class III below three days of supply*, *a command post down to tertiary comms*, *any soldier
+  unaccounted for*. The threshold is the commander's number, held on the row and changed on the wall — never a
+  constant this code chose.
+- **EEFI** — what the other side must not learn. Nothing in the data measures our own signature, so an **EEFI never
+  trips**; it is a standing line the staff reads and checks itself against. An instrument with nothing behind it would
+  be worse than a written line.
+
+**A trip reports; it does not act.** Crossing a threshold turns the line red on the board, writes `cop.ccir.tripped`
+to the ledger, puts the line on the watch so the handover brief carries it, and **suggests** a warning (§5.6) for the
+Battle Captain to release or dismiss. Nothing is dispatched and nobody is tasked until a human says so. Recovery is
+recorded the same way, with the time the line spent tripped. Only *changes* are recorded: a line evaluated every
+minute for a day writes nothing while it stays green.
+
+**A metric with no reading says so.** A line whose number cannot be read is `unmeasured`, not green — "nothing told
+us" and "we checked and we are fine" are different answers, and conflating them is how a staff misses something.
+
+Writing and amending the list is the **Battle Captain's alone** — it is the commander's list; a section proposes a
+line in conversation. The board evaluates against the same snapshot the wall draws, so it can never disagree with the
+numbers beside it, and it is re-evaluated every minute by a clock (`TOC_CCIR_CLOCK`) as well as on demand. The wall
+carries it as a right-hand panel with a rail badge; both phones show each section its own lines plus anything tripped
+anywhere, read-only. `coptoc/ccir.py`, `/v1/cop/ccir`, `snapshot.ccir`, table `cop_ccir`. The brigade sample arrives
+with eight lines the sample commander approved; the corporate sample with six.
 
 ## 4. S1 — Personnel: Blue Force Tracker **[BUILT]**
 
@@ -761,6 +794,7 @@ open because nobody has chosen to build it yet. Neither list is a decision waiti
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.50** — 18 Sep: §3.6 CCIR — PIR, FFIR and EEFI in one list, an FFIR watching a number the wall already carries against the commander's threshold, a trip that reports (ledger, watch line, suggested warning) without acting, `unmeasured` kept apart from green, and the board on the wall and both phones.
 - **v3.49** — 17 Sep: a currency pass, no new product. The header, the scope tags and the platform table say what is actually running (web, iOS and Android; SQLite, not Postgres); §5.3 counts the eight keyless collectors and the worked example stops calling GDELT unconnected; §5.4 is built for ten collectors on one pattern; §10 is marked as the record of 2 September; new §15.1 lists what is not built, split into what waits on an account or key and what is open by choice. Verified the same day: 250 tests pass, web typecheck clean, iOS and Android build.
 - **v3.48** — 17 Sep: what a military deployment adds first (§4, §7): unit positions from a tracker with a staleness setting, equipment readiness by bumper number with the OR rate as its definition, and days of supply from the rate S4 enters.
 - **v3.47** — 17 Sep: the GDELT DOC 2.0 collector (§5.3, §13), keyless and country-scoped, carrying press reporting as press reporting at grade C.
