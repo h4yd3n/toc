@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.50
+**Version:** v3.51
 **Date:** 2026-09-17
 **Status:** Prototype running — the web wall, native iOS and native Android against one API; the sign-in layer built and off by default (§9)
 
@@ -241,6 +241,43 @@ numbers beside it, and it is re-evaluated every minute by a clock (`TOC_CCIR_CLO
 carries it as a right-hand panel with a rail badge; both phones show each section its own lines plus anything tripped
 anywhere, read-only. `coptoc/ccir.py`, `/v1/cop/ccir`, `snapshot.ccir`, table `cop_ccir`. The brigade sample arrives
 with eight lines the sample commander approved; the corporate sample with six.
+
+### 3.7 The exercise — a scenario driven against the wall **[BUILT]** (18 Sep 2026)
+
+A TOC proves itself in a command post exercise, and a CPX runs off a **MSEL** — a master scenario events list, written
+in advance, each inject timed against STARTEX. Exercise control fires them, the staff works them, and the log says
+what the staff did. That is what this is: the injects move the picture and the humans respond. Nothing here simulates
+a staff.
+
+**Three rules, the author's.**
+
+1. **The exercise has its own profile.** A third profile beside Military and Corporate (§11.2), the same brigade on
+   its own dataset. An exercise **refuses to start on any other profile**, and leaving the profile reloads the
+   deployment's own data — so nothing an inject does can reach a real picture, and there is no purge to get wrong.
+   The wall wears an **EXERCISE EXERCISE EXERCISE** banner the whole time one is running, on the wall and on both
+   phones, because a CPX message that is not marked EXERCISE is how a drill becomes a real alert by accident.
+2. **The real clock, a compressed schedule.** Every inject carries an offset in minutes from STARTEX and fires when
+   that offset has really passed. `speed` divides the offsets and nothing else: at ×10 a twenty-minute MSEL runs in
+   two minutes, and the Zulu clock, the watch strip, the staleness rules and the sun times all stay true. Nothing
+   fakes the time, because everything on this wall reads the time.
+3. **An inject writes what a person would have written.** Nine kinds — a controller `message`, a `spotrep`, a
+   `system` degraded, a `supply` line dropped to the days the scenario states, `equipment` taken NMC, a `position`
+   report, a `posture` change, a `rollcall` opened, a `tasking` raised — each into the same rows and through the same
+   rules as the staff's own action, with **EXERCISE CONTROL** as the actor on every ledger line. Targets are named
+   the way a person names them (by site, by unit, by supply class), so a scenario survives a reseed that changes
+   every id; a target that cannot be resolved **fails loudly on the board** rather than quietly doing nothing.
+
+Exercise control is the Battle Captain's seat, from SETTINGS: pick a scenario, set the speed, STARTEX, watch the MSEL
+fire, pull an inject forward, ENDEX. Only one exercise runs at a time. At ENDEX the injects that never came due are
+marked skipped, and **the picture the exercise left is not cleaned up** — what the staff did with it is the point,
+and it is what the AAR will read. Two scenarios ship: *FARP EAGLE under pressure* (eleven injects over twenty
+minutes — UAS over a forward arming point, comms degraded, fuel short, airframes down, an accountability
+requirement, a collection tasking) and a six-minute *accountability and comms drill*. Running the first one trips
+four of the brigade's CCIR lines (§3.6) without anybody touching the list, which is the whole point of the pairing.
+
+`coptoc/exercise.py`, `/v1/cop/exercise`, `snapshot.exercise`, tables `cop_exercises` and `cop_exercise_injects`, a
+clock every ten seconds (`TOC_EXERCISE_CLOCK`). **[LATER]** a MSEL uploaded as a spreadsheet rather than picked from
+the shelf, and a real deployment's exercise on a separate database rather than a separate profile.
 
 ## 4. S1 — Personnel: Blue Force Tracker **[BUILT]**
 
@@ -630,6 +667,8 @@ The native apps are native for a reason: the map has to be fluid and the animati
 
 **The profile (2026-09-05).** A menu beside the role menu on the wall — Battle Captain only — switches the deployment's shape and reloads the sample data. *Military*: S1–S6 by their staff codes, and the Combat Aviation Brigade (§4). *Corporate*: the product as it was before S4 and S6 — S1–S3 by the same names, the flat team list, and the executive-protection sample. The choice is the `TOC_PROFILE` setting (§11.3); the phones read it from the snapshot and show four tabs or six. Same model, same code, two shapes — the author's decision after first trying one dataset for both.
 
+*Exercise* (18 Sep) is the third: the same force and the same shape as military, on its own dataset, and the only profile on which a scenario may be run (§3.7).
+
 `TOC_SECTIONS` narrows the list further and `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` renames; S1–S3 cannot be switched off, and a corporate profile never shows S4 or S6 whatever the list says.
 
 ## 11.3 Settings — keys and options entered from the wall **[BUILT]**
@@ -794,6 +833,7 @@ open because nobody has chosen to build it yet. Neither list is a decision waiti
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.51** — 18 Sep: §3.7 the exercise — a MSEL driven against the wall on its own profile, on the real clock with a compressed schedule; nine kinds of inject that write what a person would have written, as EXERCISE CONTROL; the EXERCISE banner on all three clients; an exercise that refuses to run on a real profile.
 - **v3.50** — 18 Sep: §3.6 CCIR — PIR, FFIR and EEFI in one list, an FFIR watching a number the wall already carries against the commander's threshold, a trip that reports (ledger, watch line, suggested warning) without acting, `unmeasured` kept apart from green, and the board on the wall and both phones.
 - **v3.49** — 17 Sep: a currency pass, no new product. The header, the scope tags and the platform table say what is actually running (web, iOS and Android; SQLite, not Postgres); §5.3 counts the eight keyless collectors and the worked example stops calling GDELT unconnected; §5.4 is built for ten collectors on one pattern; §10 is marked as the record of 2 September; new §15.1 lists what is not built, split into what waits on an account or key and what is open by choice. Verified the same day: 250 tests pass, web typecheck clean, iOS and Android build.
 - **v3.48** — 17 Sep: what a military deployment adds first (§4, §7): unit positions from a tracker with a staleness setting, equipment readiness by bumper number with the OR rate as its definition, and days of supply from the rate S4 enters.

@@ -37,6 +37,7 @@ struct ContentView: View {
                             .background(GeometryReader { geo in
                                 Color.clear.preference(key: RulerBottomPreferenceKey.self, value: geo.frame(in: .global).maxY)
                             })
+                        ExerciseBanner()
                         FlashStrip()
                         if store.tab == "COP" {
                             StatusOverlayCard()
@@ -213,6 +214,27 @@ struct StatusOverlayCard: View {
 }
 
 /// §5.6 — released warnings, red, under the header, with the reader's acknowledgement.
+/// §3.7 — EXERCISE EXERCISE EXERCISE, across the top, for as long as a scenario is running. A CPX message says so
+/// on every line; a CPX picture has to do the same, or a drill becomes a real alert by accident.
+struct ExerciseBanner: View {
+    @Environment(COPStore.self) private var store
+    var body: some View {
+        if let ex = store.snapshot?.exercise, ex.running, let run = ex.exercise {
+            HStack(spacing: 8) {
+                Text("EXERCISE").font(.system(size: 9, weight: .heavy, design: .monospaced)).tracking(2)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Theme.amber, in: RoundedRectangle(cornerRadius: 3)).foregroundStyle(.black)
+                Text(run.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Spacer()
+                Text("T+\(String(format: "%.0f", run.elapsedMin ?? 0))′ · \(run.fired)/\(run.total)")
+                    .font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.amber)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.amber.opacity(0.16))
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.amber.opacity(0.7)).frame(height: 1) }
+        }
+    }
+}
+
 struct FlashStrip: View {
     @Environment(COPStore.self) private var store
     var body: some View {
@@ -226,7 +248,12 @@ struct FlashStrip: View {
                         Text("\(w.releasedBy ?? "") · \(w.ageMin ?? 0)m").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.dim)
                         Button("ACK") { store.act("acknowledging") { try await store.client.ackProduct("warning", w.id) } }.font(.system(size: 9, weight: .bold, design: .monospaced)).buttonStyle(.bordered).tint(Theme.green).disabled(store.busy != nil)
                     }
-                    .contentShape(Rectangle()).onTapGesture { store.selection = w.subjectType == "location" ? .site(w.subjectId) : w.subjectType == "person" ? .person(w.subjectId) : .event(w.subjectId) }
+                    .contentShape(Rectangle()).onTapGesture {
+                        // a CCIR trip (§3.6) is a requirement, not a place — it selects nothing on the map
+                        if w.subjectType == "location" { store.selection = .site(w.subjectId) }
+                        else if w.subjectType == "person" { store.selection = .person(w.subjectId) }
+                        else if w.subjectType == "event" { store.selection = .event(w.subjectId) }
+                    }
                 }
             }
             .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.red.opacity(0.14))

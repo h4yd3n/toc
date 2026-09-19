@@ -13,6 +13,7 @@ from .ingestion import router as intake_router
 from . import intake_monitor  # register administrative checks on the intake router
 from . import readiness  # noqa: F401 — registers cop_unit_positions and cop_equipment before create_all (§4, §7)
 from . import ccir  # noqa: F401 — registers cop_ccir before create_all (§3.6)
+from . import exercise  # noqa: F401 — registers cop_exercises and cop_exercise_injects before create_all (§3.7)
 
 
 async def _intsum_clock() -> None:
@@ -55,6 +56,21 @@ async def _ccir_clock() -> None:
             pass
 
 
+async def _exercise_clock() -> None:
+    """§3.7: fire the injects that have come due. Every ten seconds, because a scenario run at speed packs its
+    injects close together — the schedule compresses, the clock never does."""
+    from .routes import sessions
+    from . import exercise as X
+    from shared.ledger import AsyncDatabaseEventLedger
+    while True:
+        await asyncio.sleep(10)
+        try:
+            async with sessions()() as session:
+                await X.tick(session, AsyncDatabaseEventLedger(sessions()))
+        except Exception:  # noqa: BLE001 — a failed inject is recorded on the board; the clock keeps running
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     startup_guard()   # a closed deployment refuses to run on the dev secret or an open CORS policy
@@ -74,6 +90,8 @@ async def lifespan(_app: FastAPI):
         clocks.append(asyncio.create_task(_escalation_clock()))
     if os.environ.get("TOC_CCIR_CLOCK", "on") != "off":
         clocks.append(asyncio.create_task(_ccir_clock()))
+    if os.environ.get("TOC_EXERCISE_CLOCK", "on") != "off":
+        clocks.append(asyncio.create_task(_exercise_clock()))
     try:
         yield
     finally:

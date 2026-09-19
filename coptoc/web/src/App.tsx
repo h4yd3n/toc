@@ -15,6 +15,7 @@ import { TaskOrg } from './TaskOrg'
 import { SettingsPanel } from './Settings'
 import { UsersPanel } from './Users'
 import { CcirPanel } from './Ccir'
+import { ExerciseBanner, ExercisePanel } from './Exercise'
 import { TaskingBox } from './Taskings'
 import { IsrPanel } from './IsrSync'
 import { LiaisonPanel } from './Liaison'
@@ -147,8 +148,11 @@ export default function App() {
   const sectionTitle = (code: string, fallback: string) => snap?.sections?.find(x => x.code === code)?.title ?? fallback
   const sectionLabel = (code: string) => snap?.sections?.find(x => x.code === code)?.label ?? code
   const sectionCode = (code: string) => (snap?.sections?.find(x => x.code === code)?.show_code ?? true) ? code : ''
-  const switchProfile = (profile: 'military' | 'corporate') => {
-    if (!window.confirm(`Switch to the ${profile.toUpperCase()} profile? This reloads the sample data — ${profile === 'military' ? 'the Combat Aviation Brigade with S4 and S6' : 'the executive-protection sample, S1–S3 only'}.`)) return
+  const switchProfile = (profile: 'military' | 'corporate' | 'exercise') => {
+    const what = profile === 'military' ? 'the Combat Aviation Brigade with S4 and S6'
+      : profile === 'corporate' ? 'the executive-protection sample, S1–S3 only'
+      : 'the exercise ground — the same force, on its own profile, where a scenario may be run against it (§3.7)'
+    if (!window.confirm(`Switch to the ${profile.toUpperCase()} profile? This reloads the sample data — ${what}.`)) return
     act(`switching to the ${profile} profile`, async () => { await api.setProfile(profile); window.location.reload() })
   }
   const [showSettings, setShowSettings] = useState(false)
@@ -315,15 +319,15 @@ export default function App() {
     {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
   </>
 
-  const hasStrips = ((snap?.warnings?.length ?? 0) > 0) || (snap?.incidents ?? []).some(i => i.status === 'open')
+  const hasStrips = ((snap?.warnings?.length ?? 0) > 0) || (snap?.incidents ?? []).some(i => i.status === 'open') || (snap?.exercise?.running ?? false)
 
   return (
     <div className={`wall ${hasStrips ? 'has-strips' : ''} ${isCop ? '' : 'is-workspace bottom-closed'} ${(!s3Open && !logOpen) || !isCop ? 'bottom-closed' : ''} ${s3Flash ? 's3-flash' : ''} profile-${snap?.profile ?? 'military'} posture-${s?.posture ?? 'normal'} ${(s?.flash ?? 0) > 0 ? 'has-flash' : ''} ${alert ? 'alert' : ''} labels-${ui.labels} header-${ui.header} ${openPanel ? 'panel-' + openPanel : ''}`}>
       <header className="top">
         <div className="top-left">
           <div className="brand"><img className="glyph" src={`${import.meta.env.BASE_URL}mark.svg`} alt="" /><span className="mark">TOC</span><span className="sub">COMMON OPERATING PICTURE</span></div>
-          {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
-            <option value="military">Military</option><option value="corporate">Corporate</option>
+          {role === 'battle_captain' && <select className="role profile" value={snap?.profile ?? 'military'} onChange={e => switchProfile(e.target.value as 'military' | 'corporate' | 'exercise')} title="Deployment profile — reloads the sample data" disabled={!!busy}>
+            <option value="military">Military</option><option value="corporate">Corporate</option><option value="exercise">Exercise</option>
           </select>}
           {snap?.profile === 'corporate' ? (
             <button className={`posture-chip ${s?.posture ?? ''}`} onClick={() => { setShowDefcon(v => !v); setShowSettings(false) }} title="The wall's posture is the worst site's effective posture. Click for the levels.">{s?.posture?.toUpperCase() ?? 'NORMAL'}</button>
@@ -372,6 +376,7 @@ export default function App() {
       </header>
       {hasStrips && (
         <div className="strips">
+          <ExerciseBanner board={snap?.exercise} />
           <FlashStrip warnings={snap?.warnings ?? []} role={role} busy={busy} act={act} onSelect={setSel} reload={briefReload} />
           <RollCallStrip incidents={snap?.incidents ?? []} now={now} role={role} busy={busy} act={act} onSelect={setSel} selected={sel} />
         </div>
@@ -720,6 +725,7 @@ export default function App() {
           </div>
         </div>
         {(me && me.user_id ? me.admin : true) && <><div className="section-label">USERS &amp; PERMISSIONS <span className="dim">admin</span></div><UsersPanel busy={busy} act={act} reload={briefReload} onChanged={() => setBriefReload(n => n + 1)} /></>}
+        <ExercisePanel board={snap?.exercise} profile={snap?.profile ?? 'military'} busy={busy} act={act} />
         <SettingsPanel busy={busy} act={act} reload={briefReload} />
       </aside>
       <aside className={`right ${isCop && rightPanel === 's4' ? 'open' : ''}`} inert={!isCop || rightPanel !== 's4'}>

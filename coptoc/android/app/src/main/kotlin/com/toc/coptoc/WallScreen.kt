@@ -68,6 +68,7 @@ fun TabletWall(st: WallState, store: Store) {
     val snap = st.snap
     Column(Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding()) {  // stay clear of the cutout and the system bars on a real phone
         Header(st, store)
+        ExerciseBanner(st)
         FlashStrip(st, store)
         Row(Modifier.weight(1f).fillMaxWidth()) {
             val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 1100
@@ -336,12 +337,26 @@ fun ColumnScope.LogPanel(st: WallState) {
 
 /** §5.6 — released warnings under the header, with the reader's acknowledgement. */
 @Composable
+fun ExerciseBanner(st: WallState) {
+    val run = st.snap?.exercise?.takeIf { it.running }?.exercise ?: return
+    Row(Modifier.fillMaxWidth().background(Palette.amber.copy(alpha = .16f)).padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("EXERCISE", Modifier.background(Palette.amber, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+             color = Color.Black, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
+        Text(run.name, color = Palette.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text("T+${(run.elapsedMin ?: 0.0).toInt()}′ · ${run.fired}/${run.total}", color = Palette.amber, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+    }
+}
+
+/** §3.7 — EXERCISE EXERCISE EXERCISE across the top while a scenario runs, the way a CPX message is marked. */
+@Composable
 fun FlashStrip(st: WallState, store: Store) {
     val live = st.snap?.warnings?.filter { it.status == "released" } ?: return
     if (live.isEmpty()) return
     Column(Modifier.fillMaxWidth().background(Palette.red.copy(alpha = .14f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
         live.forEach { w ->
-            Row(Modifier.fillMaxWidth().clickable { store.select(when (w.subjectType) { "location" -> Selection.SiteSel(w.subjectId); "person" -> Selection.PersonSel(w.subjectId); else -> Selection.EventSel(w.subjectId) }) }, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // a CCIR trip (§3.6) is a requirement, not a place: it selects nothing on the map
+            Row(Modifier.fillMaxWidth().clickable { store.select(when (w.subjectType) { "location" -> Selection.SiteSel(w.subjectId); "person" -> Selection.PersonSel(w.subjectId); "event" -> Selection.EventSel(w.subjectId); else -> null }) }, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("FLASH", Modifier.background(Palette.red, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp, vertical = 1.dp), color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, fontFamily = FontFamily.Monospace, letterSpacing = 2.sp)
                 Text(w.shortTitle, color = Color(0xFFFECACA), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text("${w.releasedBy ?: ""} · ${w.ageMin ?: 0}m", color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
@@ -433,6 +448,7 @@ fun PhoneScreen(st: WallState, store: Store) {
             Column(Modifier.fillMaxWidth().onSizeChanged { headerPx = it.height }) {
                 PhoneTopBar(st, store)
                 TacticalRuler(miles = st.viewportWidthMiles, km = st.viewportWidthKm, unit = st.distanceUnit)
+                ExerciseBanner(st)
                 FlashStrip(st, store)
             }
             if (tab == Tab.COP) {

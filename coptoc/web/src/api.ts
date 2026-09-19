@@ -1,4 +1,4 @@
-import type { CcirBoard, CcirMetric, CaseSignal, Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
+import type { CcirBoard, CcirMetric, ExerciseBoard, Inject, CaseSignal, Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -119,7 +119,7 @@ export const updateSystem = (id: string, body: { status?: string; pace?: string 
 export const listSettings = () => req<{ settings: SettingInfo[]; note: string }>('GET', '/v1/cop/settings')
 export const putSetting = (name: string, value: string) => req<SettingInfo>('PUT', `/v1/cop/settings/${name}`, { value })
 export const clearSetting = (name: string) => req<SettingInfo>('DELETE', `/v1/cop/settings/${name}`)
-export const setProfile = (profile: 'military' | 'corporate') => req<{ profile: string; dataset: string }>('PUT', '/v1/cop/profile', { profile })
+export const setProfile = (profile: 'military' | 'corporate' | 'exercise') => req<{ profile: string; dataset: string }>('PUT', '/v1/cop/profile', { profile })
 
 // §9 users and permissions
 export const me = () => req<Me>('GET', '/v1/cop/me')
@@ -224,3 +224,10 @@ export const getCcir = () => req<CcirBoard>('GET', '/v1/cop/ccir')
 export const ccirMetrics = () => req<{ metrics: CcirMetric[]; comparators: string[]; kinds: string[] }>('GET', '/v1/cop/ccir/metrics')
 export const writeCcir = (body: Record<string, unknown>) => req<unknown>('POST', '/v1/cop/ccir', body)
 export const amendCcir = (id: string, body: Record<string, unknown>) => req<unknown>('PATCH', `/v1/cop/ccir/${id}`, body)
+
+// §3.7 the exercise — exercise control is the Battle Captain's seat, and only on the exercise profile
+export const getExercise = () => req<ExerciseBoard>('GET', '/v1/cop/exercise')
+export const createExercise = (scenario: string, speed: number) => req<ExerciseBoard>('POST', '/v1/cop/exercise', { scenario, speed })
+export const startExercise = (id: string) => req<ExerciseBoard>('POST', `/v1/cop/exercise/${id}/start`)
+export const endExercise = (id: string, notes: string) => req<ExerciseBoard>('POST', `/v1/cop/exercise/${id}/end`, { notes })
+export const fireInject = (id: string) => req<Inject>('POST', `/v1/cop/exercise/injects/${id}/fire`)

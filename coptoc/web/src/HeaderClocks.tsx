@@ -41,7 +41,7 @@ function formatTz(d: Date, tz: string): string {
 
 interface Props {
   now: number
-  profile?: 'military' | 'corporate'
+  profile?: 'military' | 'corporate' | 'exercise'   // the exercise keeps the military clocks: it is the same force
 }
 
 export default function HeaderClocks({ now, profile = 'military' }: Props) {

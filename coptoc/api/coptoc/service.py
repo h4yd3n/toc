@@ -554,7 +554,14 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     ccir_rows = (await session.execute(select(CcirRow))).scalars().all()
     view_out = default_view(locations)
     weather_out = derive_weather(view_out.get("center_lat"), view_out.get("center_lon"), view_out.get("radius_km"), threats, prof)
+    # §3.7 — whether this wall is running a scenario. Every client wears the banner off this one key; a CPX picture
+    # that is not marked EXERCISE is how a drill turns into a real alert by accident.
+    from .exercise import ExerciseRow, InjectRow, board as exercise_board, current as current_exercise
+    ex_row = await current_exercise(session)
+    ex_injects = list((await session.execute(select(InjectRow).where(InjectRow.exercise_id == ex_row.id))).scalars()) if ex_row else []
+    exercise_out = exercise_board(ex_row, ex_injects, now)
     ccir_out = ccir_board(ccir_rows, {"summary": summary, "s4": s4, "s6": s6, "pirs": pirs_out, "unit_positions": unit_positions}, now)
+    summary["exercise"] = exercise_out["running"]
     summary["ccir_tripped"] = ccir_out["counts"]["tripped"]
     summary["ccir_unmeasured"] = ccir_out["counts"]["unmeasured"]
     return {
@@ -565,7 +572,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
         "graphics": graphics_out, "s2_actors": s2_actors_out, "s2_sightings": s2_sightings_out, "s2_reports": s2_reports_out, "movement_risks": movement_risks_out,
-        "decision_points": decision_points_out, "unit_positions": unit_positions, "ccir": ccir_out,
+        "decision_points": decision_points_out, "unit_positions": unit_positions, "ccir": ccir_out, "exercise": exercise_out,
     }
 
 

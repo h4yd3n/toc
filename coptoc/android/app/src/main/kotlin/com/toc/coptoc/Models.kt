@@ -101,7 +101,14 @@ import kotlinx.serialization.json.double
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList(),
-                                  val decisionPoints: List<SnapDecisionPoint> = emptyList(), val ccir: CcirBoard? = null)
+                                  val decisionPoints: List<SnapDecisionPoint> = emptyList(), val ccir: CcirBoard? = null, val exercise: ExerciseBoard? = null)
+
+/** §3.7 — the phone reads one thing about an exercise and reads it loudly: that there is one. Exercise control is
+ *  the wall's seat; what a phone must never do is let a drill read as real. */
+@Serializable data class ExerciseRun(val id: String, val name: String = "", val scenario: String = "", val status: String = "planned", val speed: Double = 1.0,
+                                     val startedAt: String? = null, val endedAt: String? = null, val elapsedMin: Double? = null,
+                                     val fired: Int = 0, val failed: Int = 0, val pending: Int = 0, val total: Int = 0)
+@Serializable data class ExerciseBoard(val running: Boolean = false, val exercise: ExerciseRun? = null)
 
 /** §3.6 — the commander's critical information requirements. Written on the wall, read here; the phone never
  *  edits the commander's list. An EEFI never trips: nothing in the data measures our own signature. */

@@ -85,6 +85,20 @@ struct Snapshot: Decodable {
     var s2Actors: [S2Actor]?, s2Sightings: [S2Sighting]?, s2Reports: [S2Report]?, movementRisks: [MovementRisk]?   // §5.10b the live S2 picture
     var decisionPoints: [SnapDecisionPoint]?   // §5.10b Phase 3, on the strip and in the S2 panel: what we decide, and when
     var ccir: CcirBoard?                        // §3.6 the commander's list: what has to wake him
+    var exercise: ExerciseBoard?                // §3.7 whether this wall is running a scenario
+}
+
+/// §3.7 — the phone reads one thing about an exercise and reads it loudly: that there is one. Exercise control is
+/// the wall's seat; what a phone must never do is let a drill read as real.
+struct ExerciseRun: Decodable, Hashable {
+    var id: String, name: String, scenario: String, status: String, speed: Double
+    var startedAt: String?, endedAt: String?, elapsedMin: Double?
+    var fired: Int, failed: Int, pending: Int, total: Int
+}
+
+struct ExerciseBoard: Decodable, Hashable {
+    var running: Bool
+    var exercise: ExerciseRun?
 }
 
 /// §3.6 — one line of the commander's critical information requirements. Written on the wall, read here: the phone

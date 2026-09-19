@@ -25,6 +25,7 @@ from .db_models import (EventCoverageRow, AccountabilityRow, AssessmentRow, Deli
 from .operations import OperationRow, OpResourceRow, OpTaskRow  # noqa: F401 — registered on Base before create_all
 from .readiness import EquipmentRow, UnitPositionRow  # noqa: F401 — §4/§7, registered before create_all
 from .ccir import CcirRow  # noqa: F401 — §3.6, registered before create_all
+from .exercise import ExerciseRow, InjectRow  # noqa: F401 — §3.7, registered before create_all
 from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYSTEM_CATEGORIES, PACE  # noqa: F401 — same
 from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
 from . import areas as toc_areas
@@ -32,7 +33,7 @@ from . import graphics as toc_graphics
 from .graphics import GraphicRow
 from .areas import AreaRatingRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (CcirCreate, CcirUpdate, GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
+from .schemas import (CcirCreate, CcirUpdate, ExerciseCreate, ExerciseEnd, GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -222,7 +223,7 @@ class SettingValue(BaseModel):
 
 
 class ProfileChoice(BaseModel):
-    profile: Literal["military", "corporate"]
+    profile: Literal["military", "corporate", "exercise"]
 
 
 @router.put("/profile")
@@ -2042,3 +2043,101 @@ async def evaluate_ccir(session: AsyncSession = Depends(get_session)):
     snap = await build_snapshot(session, include_restricted=True)
     changes = await C.record_changes(session, snap, get_ledger())
     return {"changes": changes, "evaluated_at": C.iso(C.now_utc())}
+
+
+# ---------------------------------------------------------------- §3.7 the exercise
+# Exercise control is the Battle Captain's seat, and an exercise only runs on the exercise profile: that separation
+# is the whole guarantee that an inject cannot reach a deployment's real picture.
+EXERCISE_CONTROL = {"battle_captain"}
+
+
+def _exercise_profile_or_422() -> None:
+    from .sections import profile as _profile
+    if _profile() != "exercise":
+        raise HTTPException(422, "An exercise runs on the exercise profile only. Switch the profile first — that is "
+                                 "what keeps injects off a real wall.")
+
+
+@router.get("/exercise")
+async def get_exercise(session: AsyncSession = Depends(get_session)):
+    """The current or last exercise, its MSEL, and the scenarios on the shelf."""
+    from . import exercise as X
+    ex = await X.current(session)
+    injects = (await session.execute(select(X.InjectRow).where(X.InjectRow.exercise_id == ex.id))).scalars().all() if ex else []
+    return X.board(ex, list(injects), X.now_utc())
+
+
+@router.post("/exercise", status_code=201)
+async def create_exercise(body: ExerciseCreate, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Load a scenario as a MSEL. Nothing fires until STARTEX."""
+    require_role(x_toc_role, EXERCISE_CONTROL, "Setting up an exercise")
+    _exercise_profile_or_422()
+    from . import exercise as X
+    try:
+        ex = await X.create(session, body.scenario, actor_from(x_toc_actor), speed=body.speed or 1.0, name=body.name or "")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=ex.id, event_type="cop.exercise.created", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state="planned", reason=f"EXERCISE {ex.name} loaded from scenario {ex.scenario} at speed ×{ex.speed:g}",
+                                    metadata={"scenario": ex.scenario, "speed": ex.speed})
+    injects = (await session.execute(select(X.InjectRow).where(X.InjectRow.exercise_id == ex.id))).scalars().all()
+    return X.board(ex, list(injects), X.now_utc())
+
+
+@router.post("/exercise/{exercise_id}/start")
+async def start_exercise(exercise_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """STARTEX. The offsets start counting against the real clock from this moment."""
+    require_role(x_toc_role, EXERCISE_CONTROL, "Starting an exercise")
+    _exercise_profile_or_422()
+    from . import exercise as X
+    ex = await one_or_404(session, X.ExerciseRow, exercise_id, "exercise")
+    try:
+        await X.start(session, ex, actor_from(x_toc_actor))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    await get_ledger().append_event(content_id=ex.id, event_type="cop.exercise.startex", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    old_state="planned", new_state="running", reason=f"STARTEX — {ex.name} (×{ex.speed:g}). EXERCISE EXERCISE EXERCISE.",
+                                    metadata={"scenario": ex.scenario, "speed": ex.speed})
+    fired = await X.tick(session, get_ledger())   # an inject at offset 0 belongs to STARTEX itself
+    injects = (await session.execute(select(X.InjectRow).where(X.InjectRow.exercise_id == ex.id))).scalars().all()
+    return {**X.board(ex, list(injects), X.now_utc()), "fired": fired}
+
+
+@router.post("/exercise/{exercise_id}/end")
+async def end_exercise(exercise_id: str, body: ExerciseEnd, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """ENDEX. Injects that never came due are skipped and say so; the picture the exercise left is not cleaned up,
+    because what the staff did with it is the point. Switching the profile back reloads the deployment's own data."""
+    require_role(x_toc_role, EXERCISE_CONTROL, "Ending an exercise")
+    from . import exercise as X
+    ex = await one_or_404(session, X.ExerciseRow, exercise_id, "exercise")
+    ex, skipped = await X.end(session, ex, actor_from(x_toc_actor), body.notes or "")
+    await get_ledger().append_event(content_id=ex.id, event_type="cop.exercise.endex", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    old_state="running", new_state="ended",
+                                    reason=f"ENDEX — {ex.name}" + (f"; {skipped} inject(s) never came due" if skipped else "") + (f". {ex.notes}" if ex.notes else ""),
+                                    metadata={"scenario": ex.scenario, "skipped": skipped})
+    injects = (await session.execute(select(X.InjectRow).where(X.InjectRow.exercise_id == ex.id))).scalars().all()
+    return X.board(ex, list(injects), X.now_utc())
+
+
+@router.post("/exercise/tick")
+async def tick_exercise(session: AsyncSession = Depends(get_session)):
+    """Fire whatever is due now. The clock does this every few seconds; the endpoint exists for a test and for a
+    controller who does not want to wait for the next tick."""
+    from . import exercise as X
+    return {"fired": await X.tick(session, get_ledger())}
+
+
+@router.post("/exercise/injects/{inject_id}/fire")
+async def fire_inject(inject_id: str, session: AsyncSession = Depends(get_session), x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Exercise control pulls an inject forward. A MSEL is a plan, and a controller who follows it off a cliff is
+    not running an exercise."""
+    require_role(x_toc_role, EXERCISE_CONTROL, "Firing an inject")
+    _exercise_profile_or_422()
+    from . import exercise as X
+    row = await one_or_404(session, X.InjectRow, inject_id, "inject")
+    ex = await one_or_404(session, X.ExerciseRow, row.exercise_id, "exercise")
+    if ex.status != "running":
+        raise HTTPException(422, "the exercise is not running")
+    if row.status != "pending":
+        raise HTTPException(409, f"inject already {row.status}")
+    return await X.fire(session, ex, row, get_ledger())

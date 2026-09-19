@@ -19,17 +19,19 @@ from sqlalchemy.orm import Mapped, mapped_column
 from shared.database import Base
 
 SECTION_TITLES = {"S1": "PERSONNEL", "S2": "INTELLIGENCE", "S3": "OPERATIONS", "S4": "LOGISTICS", "S6": "SIGNAL"}
-PROFILES = ("military", "corporate")
+PROFILES = ("military", "corporate", "exercise")
 
 
 def profile() -> str:
-    """`military`: S1–S6 and the brigade. `corporate`: S1–S3 and the executive-protection sample — the product as it was before S4/S6."""
+    """`military`: S1–S6 and the brigade. `corporate`: S1–S3 and the executive-protection sample — the product as it
+    was before S4/S6. `exercise` (§3.7): the same shape as military on its own dataset, where a scenario is run —
+    it exists so nothing an inject does can reach a deployment's real picture."""
     v = (settings.get("TOC_PROFILE") or "military").lower()
     return v if v in PROFILES else "military"
 
 
 def dataset_for(prof: str) -> str:
-    return "corporate" if prof == "corporate" else "cab"
+    return "corporate" if prof == "corporate" else "exercise" if prof == "exercise" else "cab"
 SECTION_HINTS = {"S1": "Blue force", "S2": "Sigtoc", "S3": "Travel & events", "S4": "Supply & equipment", "S6": "Comms & systems"}
 STATUS_RANK = {"green": 0, "amber": 1, "red": 2}
 SUPPLY_CATEGORIES = ("fuel", "water", "rations", "medical", "ammunition", "parts", "equipment", "other")
@@ -41,7 +43,7 @@ def sections_config() -> List[Dict[str, Any]]:
     """Which staff sections this deployment runs, in wall order. `TOC_SECTIONS=S1,S2,S3` for a commercial desk;
     `TOC_SECTION_TITLES=S4=SUPPLY,S6=COMMS` to rename. S1–S3 are always present: the COP is built on them."""
     prof = profile()
-    default = "S1,S2,S3,S4,S6" if prof == "military" else "S1,S2,S3"
+    default = "S1,S2,S3" if prof == "corporate" else "S1,S2,S3,S4,S6"   # the exercise runs the full staff
     enabled = [s.strip().upper() for s in (settings.get("TOC_SECTIONS") or default).split(",") if s.strip()]
     if prof == "corporate":
         enabled = [c for c in enabled if c in ("S1", "S2", "S3")]  # a corporate desk has no S4 or S6, whatever the list says

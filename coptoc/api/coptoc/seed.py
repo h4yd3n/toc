@@ -355,7 +355,7 @@ async def _seed_operation(session: AsyncSession, now: datetime) -> None:
     await session.flush()
 
 
-DATASETS = ("cab", "corporate")
+DATASETS = ("cab", "corporate", "exercise")
 
 
 async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
@@ -367,6 +367,9 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     dataset = dataset.lower()
     if dataset not in DATASETS:
         raise ValueError(f"dataset must be one of {DATASETS}")
+    # §3.7 the exercise is the brigade on its own profile: the same force, seeded into a place a scenario may break.
+    # Everything downstream that shapes sample data by dataset reads the flavour, so only the profile differs.
+    flavour = "cab" if dataset == "exercise" else dataset
     if dataset == "corporate":
         await _seed_case(session, now_utc())
         await _seed_directed(session, now_utc())
@@ -376,6 +379,11 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     for model in (CcirRow, UnitPositionRow, EquipmentRow, S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
+    # §3.7 whatever an exercise wrote goes with it. Reports are not cleared wholesale — the sample cases own some —
+    # so the exercise's own are deleted by their source. Every other kind of inject writes a row already wiped above.
+    from sigtoc.cases import ReportRow as _ReportRow
+    for row in (await session.execute(select(_ReportRow).where(_ReportRow.source == "exercise"))).scalars():
+        await session.delete(row)
     await session.flush()
     now = now_utc()
     # §9 the directory follows the dataset
@@ -383,17 +391,18 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await session.delete(u)
     await session.flush()
     toc_users._cache.clear()
-    for spec in toc_users.seed_users(dataset):
+    for spec in toc_users.seed_users(flavour):
         await toc_users.upsert(session, spec, "seed")
-    session.add_all(toc_taskings.seed(dataset, now))  # §5.10 the work moving between sections
+    session.add_all(toc_taskings.seed(flavour, now))  # §5.10 the work moving between sections
     from .sections import profile as _profile
-    session.add_all(toc_areas.seed(dataset, now, _profile()))  # §5.6a what the analyst judges about each place
-    session.add_all(toc_graphics.seed(dataset, now))  # §3.4 the control measures on the board
-    session.add_all(ccir_seed(dataset, now))  # §3.6 the commander's list: what has to wake him
-    if dataset == "cab":
+    session.add_all(toc_areas.seed(flavour, now, _profile()))  # §5.6a what the analyst judges about each place
+    session.add_all(toc_graphics.seed(flavour, now))  # §3.4 the control measures on the board
+    session.add_all(ccir_seed(flavour, now))  # §3.6 the commander's list: what has to wake him
+    if dataset in ("cab", "exercise"):
+        # §3.7 the exercise runs the same force on its own profile: identical data, a separate place to break it
         from . import seed_cab
         await seed_cab.populate(session, now)
-        session.add_all(s2_picture.seed(dataset, now))
+        session.add_all(s2_picture.seed(flavour, now))
         await session.commit()
         return
     # the corporate desk follows the sun (§3.1); undo a brigade's day/night watch if that is what was loaded before

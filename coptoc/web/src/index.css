@@ -1510,3 +1510,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .redmap { height: 220px; margin: 4px 0 6px; border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden; }
 .row.liaison .grade { font: 10px var(--mono); background: var(--panel); color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; margin-left: 6px; }
 .sev.grade-A, .sev.grade-B { color: var(--green); } .sev.grade-C { color: var(--amber); } .sev.grade-D, .sev.grade-E { color: var(--red); } .sev.grade-F { color: var(--dim); }
+
+/* §3.7 the exercise banner — a CPX message is marked EXERCISE, and so is the wall running one */
+.ex-banner { display: flex; align-items: center; gap: 12px; padding: 4px 16px; white-space: nowrap; overflow: hidden;
+  background: repeating-linear-gradient(135deg, rgba(245,158,11,.14) 0 12px, rgba(245,158,11,.05) 12px 24px);
+  border-bottom: 2px solid var(--amber); }
+.ex-tape { font: 800 10px var(--mono); letter-spacing: .18em; color: #000; background: var(--amber); padding: 3px 8px; border-radius: 3px; }
+.ex-banner .ex-name { font-weight: 700; font-size: 12px; }
+.ex-banner .ex-clock, .ex-banner .ex-count { font-size: 11px; color: var(--amber); }
+.ex-banner .ex-next { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+.row.inject .ex-seq { font-size: 10px; margin-right: 6px; }
+.row.inject.failed .name { color: var(--red); }
+.row.inject.skipped { opacity: .55; }
+.wall.profile-exercise .brand .sub::after { content: ' · EXERCISE'; color: var(--amber); }
+.ex-run-name { font: 600 12px var(--sans); margin: 2px 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

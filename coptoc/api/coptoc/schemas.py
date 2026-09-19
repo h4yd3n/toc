@@ -372,3 +372,13 @@ class CcirUpdate(BaseModel):
     scope: Optional[str] = None
     status: Optional[Literal["active", "inactive"]] = None
     approved_by: Optional[str] = None
+
+
+# §3.7 the exercise
+class ExerciseCreate(BaseModel):
+    scenario: str
+    speed: Optional[float] = 1.0
+    name: Optional[str] = None
+
+class ExerciseEnd(BaseModel):
+    notes: Optional[str] = None

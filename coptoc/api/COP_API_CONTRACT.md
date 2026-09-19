@@ -112,6 +112,7 @@ contract — same endpoints, same shapes — so every client shares one backend 
 | `GET` | `/log?limit=50` | the battle log |
 | `GET` | `/ccir` | §3.6 the commander's list with every line's live state (`lines[]`, `counts`, `by_kind`); also `snapshot.ccir` |
 | `GET` | `/ccir/metrics` | what an FFIR may watch — id, label, owning section, unit — plus the comparators and kinds |
+| `GET` | `/exercise` | §3.7 the current or last exercise, its MSEL and the scenarios on the shelf; also `snapshot.exercise` |
 
 ## 3. Writes — every one appends a hash-chained ledger event
 | Method | Path | Body | Ledger event |
@@ -119,6 +120,11 @@ contract — same endpoints, same shapes — so every client shares one backend 
 | `POST` | `/ccir` | `kind (pir\|ffir\|eefi), text, owner_section, priority`; an FFIR adds `metric, comparator, threshold, scope`, a PIR adds `pir_id`. Battle Captain only | `cop.ccir.written` |
 | `PATCH` | `/ccir/{id}` | partial; `status: active\|inactive` retires a line. Battle Captain only | `cop.ccir.written` |
 | `POST` | `/ccir/evaluate` | none — evaluates now and records state *changes* only; the clock does this every minute | `cop.ccir.tripped` / `cop.ccir.cleared` (actor `system`) |
+| `POST` | `/exercise` | `scenario, speed, name`. Battle Captain only, and **only on the exercise profile** (422 otherwise) | `cop.exercise.created` |
+| `POST` | `/exercise/{id}/start` | none — STARTEX; offsets start counting on the real clock and the offset-0 inject fires | `cop.exercise.startex` |
+| `POST` | `/exercise/{id}/end` | `notes` — ENDEX; injects that never came due are skipped | `cop.exercise.endex` |
+| `POST` | `/exercise/injects/{id}/fire` | none — exercise control pulls an inject forward | `cop.exercise.inject` (actor `EXERCISE CONTROL`) |
+| `POST` | `/exercise/tick` | none — fire whatever is due; the clock does this every ten seconds | `cop.exercise.inject` per inject |
 | `POST` | `/trips` | `person_id, origin_location_id, dest_location_id | dest_name+dest_lat+dest_lon, depart_at, return_at, purpose` | `cop.trip.created` |
 | `PATCH` / `DELETE` | `/trips/{id}` | partial | `cop.trip.updated` / `cop.trip.cancelled` |
 | `POST` | `/events` | `name, event_type, venue_location_id | venue_*, start_at, end_at, description, security_plan, attendee_ids[], generate_trips=true` → generates a planned trip per attendee not already at the venue | `cop.event.created` |

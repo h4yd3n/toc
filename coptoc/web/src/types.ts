@@ -79,7 +79,7 @@ export interface Assessment {
 export interface LogEntry { id: string; at: string; type: string; actor: string; actor_type: string; subject: string; old: string | null; new: string | null; summary: string | null }
 export interface Summary { s4_status?: Health; s6_status?: Health; taskings_open?: number; taskings_overdue?: number;
   s2_actors?: number; s2_reports_pending?: number; movement_risks?: number; decisions_open?: number; decisions_overdue?: number
-  ccir_tripped?: number; ccir_unmeasured?: number
+  ccir_tripped?: number; ccir_unmeasured?: number; exercise?: boolean
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
@@ -179,11 +179,25 @@ export interface WeatherInfo {
   awc_url: string
 }
 
-export interface Snapshot { ccir?: CcirBoard; areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; unit_positions?: UnitPosition[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
+export interface Snapshot { exercise?: ExerciseBoard; ccir?: CcirBoard; areas: AreaRating[]; watch_log: WatchLogEntry[]; nais: NAI[]; movements: Movement[]; graphics: Graphic[]; decision_points?: SnapDecisionPoint[]; unit_positions?: UnitPosition[]; warnings: Warning[]; me: Me; taskings: TaskingBoard; profile: 'military' | 'corporate' | 'exercise'; sections: SectionCfg[]; s4: S4Board; s6: S6Board; view: View; weather?: WeatherInfo;
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
   s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]
 }
+// §3.7 the exercise — a MSEL driven against the wall on its own profile, on the real clock
+export interface Inject {
+  id: string; seq: number; offset_min: number; kind: string; title: string; section: string
+  status: 'pending' | 'fired' | 'failed' | 'skipped'; fired_at: string | null; result: string; error: string
+  due_at: string | null; in_min: number | null; payload: Record<string, unknown>
+}
+export interface ExerciseRun {
+  id: string; name: string; scenario: string; status: 'planned' | 'running' | 'ended'; speed: number
+  started_at: string | null; ended_at: string | null; started_by: string; notes: string
+  elapsed_min: number | null; fired: number; failed: number; pending: number; total: number; next: Inject | null
+}
+export interface ScenarioHead { id: string; name: string; summary: string; profile: string; injects: number; runs_min: number }
+export interface ExerciseBoard { running: boolean; exercise: ExerciseRun | null; injects: Inject[]; scenarios: ScenarioHead[] }
+
 // §3.6 CCIR — one list of what has to wake the commander: PIR (the enemy), FFIR (us), EEFI (our own signature)
 export interface CcirLine {
   id: string; kind: 'pir' | 'ffir' | 'eefi'; text: string; owner_section: string; priority: number
