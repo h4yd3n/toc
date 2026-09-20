@@ -21,6 +21,31 @@ A corporate-security **Tactical Operations Center**, built the way a military st
 
 Everything is synthetic: people, sites, phone numbers, reports. Live feeds are real. Nothing needs a key to run.
 
+## Who this is for
+
+Corporate security, crisis response, and threat intelligence: a protective-intelligence desk, a global security
+operations center, a trust-and-safety investigations team. It is **not** a bid against a military command-and-control
+programme of record — the US Army settled that ground in 2026 on Anduril's Lattice and Palantir's Foundry, and this
+is one author writing in the open.
+
+The military shape is in here for two honest reasons. It is where the author's twenty years are, so those are the
+features he can build correctly and defend line by line; and almost all of it transfers — a roll call is a roll call,
+a collection plan is a collection plan, days of supply and a comms PACE plan have exact corporate equivalents. So the
+Combat Aviation Brigade is the **worked example**, not the target market, and the corporate desk is the product. Both
+shapes are built together and either one loads from the profile menu (PRD §11.2).
+
+There is a second audience, and it is not the programme of record. **Most people who run an operations center will
+never be issued one** — a National Guard battalion, a state emergency operations center, a county fusion desk, a
+campus police department, a partner nation's brigade, an NGO moving people through a hostile place. They run the
+same staff process on a spreadsheet and a chat group. Against that, this is Apache 2.0, runs on synthetic data with
+no key, documents one API contract, keeps a hash-chained record the organization owns, and locks nobody into
+anything. The cost of finding out whether the operating model fits is zero.
+
+What *free and open* does not clear on its own, stated plainly: an Authority to Operate, IL5/IL6 accreditation,
+sustainment and 24/7 support, an SBOM and supply-chain attestation, and someone accountable when it breaks. Software
+does not reach a classified network by being free. The realistic shape is an open core with paid accreditation,
+integration and support around it — see the boundary below — not a displacement of anybody's prime contractor.
+
 ## Open source and commercial boundary
 
 TOC is an open-source reference implementation for intelligence-led corporate-security operations. The public

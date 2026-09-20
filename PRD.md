@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.51
+**Version:** v3.52
 **Date:** 2026-09-17
 **Status:** Prototype running — the web wall, native iOS and native Android against one API; the sign-in layer built and off by default (§9)
 
@@ -15,6 +15,32 @@
 ## 1. What This Is
 
 **TOC is a corporate security operations center organized the way a military TOC is organized** — a staff structure (S1 personnel, S2 intelligence, S3 operations, S4 supply, S6 communications) arranged around a single common operating picture.
+
+**Who it is for (Decision AD, 2026-09-19).** Corporate security, crisis response, and threat intelligence — a
+protective-intelligence desk, a global security operations center, a trust-and-safety investigations team. It is
+*not* a bid against a military command-and-control programme of record: the US Army's NGC2 settled that ground in
+2026 on Anduril's Lattice and Palantir's Foundry, and a one-author open-source project has no business pretending
+otherwise. The military shape stays in the product for two reasons, both honest. It is where the author's twenty
+years are, so the doctrinal features are the ones he can build correctly and defend line by line; and almost all of
+it transfers — a roll call is a roll call, a collection plan is a collection plan, days of supply and a comms PACE
+plan have exact corporate equivalents. The brigade is therefore the **worked example**, not the target market, and
+the two shapes are built together (§11.2).
+
+**The military and public-safety lane, honestly (Decision AD).** There is a second audience, and the argument for
+it is not that this beats NGC2. It is that **most people who run an operations center will never be issued one**. A
+National Guard battalion, a state emergency operations center, a county fusion desk, a campus police department, a
+partner nation's brigade, an NGO moving people through a hostile place: all of them run the same staff process on a
+spreadsheet, a whiteboard and a chat group. Against that, the offer is real — Apache 2.0, synthetic data in the box,
+no key needed to run it, one documented API contract, a hash-chained record the organization owns, and no lock-in on
+its own process or its own data. The cost of finding out whether the operating model fits is zero.
+
+What that argument does **not** clear on its own, and this document should say so rather than be caught out: an
+Authority to Operate, IL5/IL6 accreditation, sustainment and 24/7 support, an SBOM and supply-chain attestation, and
+a program office accountable when it breaks. Free software does not reach a classified network by being free, and
+price is rarely the binding constraint in defense procurement. The realistic shape is an **open core with paid
+accreditation, integration and support around it** (§11.4), or a reference implementation that shapes what the
+standard looks like — not a displacement of the prime. Said that way it is a position that survives contact with
+someone who buys this for a living.
 
 The center of the screen is a map. Around it, every staff section's status is visible at once, the way a TOC's wall is: personnel disposition, intelligence assessments and open questions, operations calendar, equipment posture. A Battle Captain reads the whole wall in a glance, and anything on the wall can be clicked to drive the map to it.
 
@@ -573,7 +599,7 @@ All taken — see §14 (G–J, and O–R for the workbench): INTSUM drafted at a
 
 ## 7. S4 — Logistics: Supply & Equipment Board **[BUILT]**
 
-Reinstated 2026-09-04 with §8 as the *background sections*, built for a generic operations center — military, government, police — where S4 and S6 are inside the TOC by doctrine. A commercial security desk hides them (§11.2).
+Reinstated 2026-09-04 with §8 as the *background sections*. They are inside the TOC by doctrine on a military, government or police desk, and they have exact corporate equivalents — S4 is facilities and equipment stock, S6 is the systems and channels the desk depends on. A corporate deployment hides them by default and can turn them on (§11.2); the brigade runs them in full because that is the clearest way to show what they are for.
 
 **The doctrine.** S1, S2, and S3 are what the Battle Captain lives in. S4 and S6 are managed by someone on the staff and speak only when something is wrong: a shipment the force is waiting on is late, fuel at a site is below the line, a system the TOC depends on is down. So they roll up to one status each — GREEN nothing to say, AMBER watch it, RED it is a problem now — and the wall shows only that roll-up (a dot on the rail button) until someone opens the panel. The exceptions ride into the handover brief (§3.1) and the INTSUM.
 
@@ -665,7 +691,13 @@ The native apps are native for a reason: the map has to be fluid and the animati
 
 ## 11.2 The profile and the section set are configuration
 
-**The profile (2026-09-05).** A menu beside the role menu on the wall — Battle Captain only — switches the deployment's shape and reloads the sample data. *Military*: S1–S6 by their staff codes, and the Combat Aviation Brigade (§4). *Corporate*: the product as it was before S4 and S6 — S1–S3 by the same names, the flat team list, and the executive-protection sample. The choice is the `TOC_PROFILE` setting (§11.3); the phones read it from the snapshot and show four tabs or six. Same model, same code, two shapes — the author's decision after first trying one dataset for both.
+**The profile (2026-09-05, reframed 2026-09-19).** A menu beside the role menu on the wall — Battle Captain only — switches the deployment's shape and reloads the sample data. Same model, same code, two shapes.
+
+*Corporate* is the product this is sold and written as (Decision AD): S1–S3 under their staff codes, the flat team list, the executive-protection sample, posture in words rather than DEFCON (Decision AC). S4 and S6 are off by default and available.
+
+*Military* is the fuller staff and the worked example: S1–S6, the Combat Aviation Brigade (§4), supply and comms as doctrine runs them, DEFCON 5–1. It exists because it is the shape the author can build correctly, and because nearly every part of it has a corporate equivalent — building it first and translating is cheaper than guessing at the corporate version.
+
+The choice is the `TOC_PROFILE` setting (§11.3); the phones read it from the snapshot and show four tabs or six.
 
 *Exercise* (18 Sep) is the third: the same force and the same shape as military, on its own dataset, and the only profile on which a scenario may be run (§3.7).
 
@@ -678,6 +710,8 @@ Connecting a data source or a channel is a key, and keys used to live only in th
 ## 11.4 The landing site and the open-source boundary (11–15 Sep 2026)
 
 `landing/` is a static site for Coptoc, Sigtoc, and Modtoc: the COP wall and the phone tabs as screenshots, a callout map of capabilities, Sigtoc named as a headless engine and Modtoc as under construction. The README states the boundary: the code is open source under Apache 2.0 so an operator can read exactly how the picture is built and run it privately or on-premise; open source does not make anyone's intelligence public, and provider configuration, compliance, integrations, and managed operation are where a commercial offer would sit.
+
+**Open core, stated as a model (19 Sep, Decision AD).** The same boundary is the answer to "why would anyone run this instead of buying the thing with a programme office behind it": the core is free, inspectable and lock-in-free, and what a buyer pays for is accreditation, hardened deployment, connectors to their own systems, support and someone accountable. That is a real model — it is how Red Hat sells Linux — and it is the only version of the free-and-open argument that survives a procurement conversation. The argument is *no lock-in on your own process and your own data*, not *cheaper than Palantir*; price is rarely the binding constraint, and an ATO, IL5/IL6, an SBOM and 24/7 sustainment are (§1).
 
 ## 11.1 Repository Layout
 
@@ -789,6 +823,7 @@ COP never writes back to a source system.
 | AA | Sigtoc / Cop Talk boundary (2026-09-05) | **Sigtoc owns the intelligence objects** — actors, sightings, reports, threat graphics, dispositions, products; **Cop Talk displays the live slice** and can file a report in. No second workbench inside the COP | §5.10b, `docs/sigtoc-plan.md` |
 | AB | AI in the staff workflow (2026-09-06/08) | **AI drafts, cites, and proposes; a human reviews and releases.** The worker reads scoped records and writes drafts only; the Battle Captain alone releases; nothing without a cited finding is released; intake applies only explicitly approved proposals; the provider is off by default | §5.12, §5.13 |
 | AC | Posture on a corporate desk (2026-09-11) | **No DEFCON on the corporate profile.** The five levels read as words with corporate meanings; the military profile keeps DEFCON 5–1 | §3.5 |
+| AD | Who this is for (2026-09-19) | **Corporate security, crisis response and threat intelligence is the positioning; the military shape is the worked example, not the target market.** Taken after the Army's NGC2 award to Anduril and Palantir: a one-author open-source project does not compete with a C2 programme of record, and the author's differentiation is intelligence-led corporate security, not defence procurement. Both shapes keep getting built, because the doctrine transfers and it is the shape the author can defend. **Second audience:** the operations centers that will never be issued NGC2 — Guard, state EOC, county fusion desk, campus police, partner nation, NGO — where open, inspectable and free-to-run with no lock-in is a real offer; stated with what it does not clear on its own (ATO, IL5/IL6, sustainment, SBOM) | §1, §11.2, §11.4 |
 | Y | Taskings create things (2026-09-05) | **Collection → operation, supply → shipment, comms / coverage → a task on the subject's operation**; linked both ways so finishing either side completes the other; movement asks create nothing yet | §5.10a, `taskings.on_accept` |
 
 ---
@@ -833,6 +868,7 @@ open because nobody has chosen to build it yet. Neither list is a decision waiti
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.52** — 19 Sep: positioning stated out loud (Decision AD, §1, §7, §11.2, README): corporate security, crisis response and threat intelligence is who this is for; the military shape is the worked example and the author's ground, not a bid against a C2 programme of record.
 - **v3.51** — 18 Sep: §3.7 the exercise — a MSEL driven against the wall on its own profile, on the real clock with a compressed schedule; nine kinds of inject that write what a person would have written, as EXERCISE CONTROL; the EXERCISE banner on all three clients; an exercise that refuses to run on a real profile.
 - **v3.50** — 18 Sep: §3.6 CCIR — PIR, FFIR and EEFI in one list, an FFIR watching a number the wall already carries against the commander's threshold, a trip that reports (ledger, watch line, suggested warning) without acting, `unmeasured` kept apart from green, and the board on the wall and both phones.
 - **v3.49** — 17 Sep: a currency pass, no new product. The header, the scope tags and the platform table say what is actually running (web, iOS and Android; SQLite, not Postgres); §5.3 counts the eight keyless collectors and the worked example stops calling GDELT unconnected; §5.4 is built for ten collectors on one pattern; §10 is marked as the record of 2 September; new §15.1 lists what is not built, split into what waits on an account or key and what is open by choice. Verified the same day: 250 tests pass, web typecheck clean, iOS and Android build.
