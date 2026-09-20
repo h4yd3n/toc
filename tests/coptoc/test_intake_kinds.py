@@ -26,6 +26,7 @@ def no_worker(monkeypatch):
     monkeypatch.setenv('TOC_AI_WORKER', 'off')
     monkeypatch.setenv('TOC_OFFLINE', '1')
     monkeypatch.setenv('TOC_AI_PROVIDER', 'off')
+    monkeypatch.setenv('TOC_PROFILE','military')  # S4/S6 intake needs those sections; corporate is the default profile now (Decision AD)
 
 
 def site(c):

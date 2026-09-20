@@ -5,6 +5,7 @@ os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_tmp.name}"
 os.environ["TOC_OFFLINE"] = "1"; os.environ["TOC_INTSUM_CLOCK"] = "off"; os.environ["TOC_ESCALATION_CLOCK"] = "off"
 os.environ.pop("ANTHROPIC_API_KEY", None)
 
+import os
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
@@ -17,6 +18,9 @@ def U(uid): return {"X-TOC-User": uid}
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as c:
+        # Decision AD made corporate the default profile; a module that exercises the brigade or the
+        # S4/S6 sections declares it. Stored rather than env, so a test may still switch profiles.
+        assert c.put("/v1/cop/profile", json={"profile": "military"}, headers={"X-TOC-Role": "battle_captain"}).status_code == 200
         c.post("/v1/cop/seed?dataset=cab")
         yield c
 

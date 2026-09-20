@@ -26,7 +26,9 @@ def profile() -> str:
     """`military`: S1–S6 and the brigade. `corporate`: S1–S3 and the executive-protection sample — the product as it
     was before S4/S6. `exercise` (§3.7): the same shape as military on its own dataset, where a scenario is run —
     it exists so nothing an inject does can reach a deployment's real picture."""
-    v = (settings.get("TOC_PROFILE") or "military").lower()
+    # Decision AD: corporate is the default because corporate is who this is for. A fresh install opens on the
+    # product; the brigade is one menu click away and is the worked example, not the front door.
+    v = (settings.get("TOC_PROFILE") or "corporate").lower()
     return v if v in PROFILES else "military"
 
 

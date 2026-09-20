@@ -1973,7 +1973,8 @@ async def seed(dataset: Optional[str] = None, session: AsyncSession = Depends(ge
     except ValueError as e:
         raise HTTPException(422, str(e))
     await sync_standing_requirements(session)
-    return {"status": "reseeded", "dataset": (dataset or os.environ.get("TOC_SEED", "cab")).lower()}
+    from .sections import dataset_for, profile as _prof
+    return {"status": "reseeded", "dataset": (dataset or os.environ.get("TOC_SEED") or dataset_for(_prof())).lower()}
 
 
 @router.get('/activity')

@@ -17,12 +17,21 @@ S6 = {"X-TOC-Role": "signal", "X-TOC-Actor": "S6 NCO"}
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as c:
+        # Decision AD made corporate the default profile; a module that exercises the brigade or the
+        # S4/S6 sections declares it. Stored rather than env, so a test may still switch profiles.
+        assert c.put("/v1/cop/profile", json={"profile": "military"}, headers={"X-TOC-Role": "battle_captain"}).status_code == 200
         c.post("/v1/cop/seed")
         yield c
 
 
 def test_sections_are_configuration(monkeypatch):
-    assert [s["code"] for s in sections_config()] == ["S1", "S2", "S3", "S4", "S6"] and all(s["enabled"] for s in sections_config())
+    # Decision AD: a default install is a corporate desk, so it runs S1–S3 and keeps S4/S6 available but off.
+    cfg = {s["code"]: s for s in sections_config()}
+    assert [s["code"] for s in sections_config()] == ["S1", "S2", "S3", "S4", "S6"], "all five are always described"
+    assert cfg["S1"]["enabled"] and cfg["S2"]["enabled"] and cfg["S3"]["enabled"]
+    assert not cfg["S4"]["enabled"] and not cfg["S6"]["enabled"], "the corporate default hides the background sections"
+    monkeypatch.setenv("TOC_PROFILE", "military")  # the fuller staff runs all five
+    assert all(s["enabled"] for s in sections_config())
     monkeypatch.setenv("TOC_SECTIONS", "S1,S2,S3"); monkeypatch.setenv("TOC_SECTION_TITLES", "S4=SUPPLY")
     cfg = {s["code"]: s for s in sections_config()}
     assert not cfg["S4"]["enabled"] and not cfg["S6"]["enabled"] and cfg["S4"]["title"] == "SUPPLY" and cfg["S1"]["enabled"]

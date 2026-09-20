@@ -17,6 +17,9 @@ BC = {"X-TOC-Role": "battle_captain", "X-TOC-Actor": "bc"}
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as c:
+        # Decision AD made corporate the default profile; a module that exercises the brigade or the
+        # S4/S6 sections declares it. Stored rather than env, so a test may still switch profiles.
+        assert c.put("/v1/cop/profile", json={"profile": "military"}, headers={"X-TOC-Role": "battle_captain"}).status_code == 200
         c.post("/v1/cop/seed?dataset=cab")
         yield c
 
