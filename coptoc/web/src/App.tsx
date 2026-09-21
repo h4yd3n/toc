@@ -25,6 +25,7 @@ import { ContextRow, RollCallStrip } from './Strips'
 import WeatherPopover from './WeatherPopover'
 import { CommandBar, buildCommands } from './CommandBar'
 import { AreaPanel as RatedAreaPanel, AreasSection, AreaStrip, type AreaMode } from './Areas'
+import { SubjectPanel, SubjectStrip, SubjectsSection, type SubjectMode } from './Subjects'
 import * as api from './api'
 import Workspaces from './Workspaces'
 import { useDestination } from './navigation'
@@ -176,6 +177,8 @@ export default function App() {
   const [cov, setCov] = useState<Coverage | null>(null)
   const [cmd, setCmd] = useState(false)
   const [areaMode, setAreaMode] = useState<AreaMode | null>(null)
+  const [subjMode, setSubjMode] = useState<SubjectMode | null>(null)   // §5.6b the file on a person
+  const [subjReload, setSubjReload] = useState(0)
   const [overlay, setOverlay] = useState<Overlay>('COP')
   const [timeBack, setTimeBack] = useState<number | null>(null)
   const [scrub, setScrub] = useState<{ t: number; pinned: boolean } | null>(null)
@@ -219,7 +222,7 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmd(v => !v) }
       if (e.key === 'Escape') {
         setDraw(null); setDrawMenu(false); setCoaMenu(false); setCoaId(null); setOverlayMenuOpen(false); setShowDefcon(false); setShowSettings(false);
-        setSel(null); setOpId(null); setShowIntsum(false); setShowPlan(false); setAreaId(null); setAreaMode(null); setShowBrief(false); setCmd(false);
+        setSel(null); setOpId(null); setShowIntsum(false); setShowPlan(false); setAreaId(null); setAreaMode(null); setSubjMode(null); setShowBrief(false); setCmd(false);
         setShowWeather(false);
         if (!isCop && !workspaceDetail) navigate({ page: 'cop' })
       }
@@ -315,7 +318,8 @@ export default function App() {
     {showIntsum && !opId && <IntsumPanel role={role} busy={busy} act={act} onClose={() => setShowIntsum(false)} reload={briefReload} />}
     {areaId && !showIntsum && !opId && <AreaPanel id={areaId} role={role} busy={busy} act={act} onClose={() => setAreaId(null)} reload={briefReload} />}
     {areaMode && snap && <RatedAreaPanel mode={areaMode} areas={snap.areas ?? []} locations={snap.locations} role={role} busy={busy} act={act} onClose={() => setAreaMode(null)} onSelect={s => { setSel(s); setAreaMode(null) }} />}
-    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && !areaMode && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} onArea={m => { setAreaMode(m); setShowBrief(false) }} onOpenWorkspace={openWorkspace} />}
+    {subjMode && snap && <SubjectPanel mode={subjMode} people={snap.people ?? []} locations={snap.locations ?? []} role={role} busy={busy} act={act} onClose={() => setSubjMode(null)} onSelect={s => { setSel(s); setSubjMode(null) }} onChanged={() => setSubjReload(n => n + 1)} />}
+    {sel && snap && !showBrief && !areaId && !showIntsum && !opId && !showPlan && !areaMode && !subjMode && <Detail sel={sel} snap={snap} byId={byId} now={now} busy={busy} act={act} onClose={() => { setSel(null); setWorkspaceDetail(false) }} onSelect={setSel} onOp={setOpId} role={role} onArea={m => { setAreaMode(m); setShowBrief(false) }} onSubject={m => { setSubjMode(m); setShowBrief(false) }} onOpenWorkspace={openWorkspace} />}
     {showBrief && <BriefPanel role={role} busy={busy} act={act} onClose={() => setShowBrief(false)} reload={briefReload} />}
   </>
 
@@ -832,6 +836,7 @@ export default function App() {
             </li>))}
         </ul>
         {snap && <AreasSection areas={snap.areas ?? []} locations={snap.locations ?? []} role={role} onOpen={m => { setAreaMode(m); setShowBrief(false) }} onSelect={setSel} />}
+        <SubjectsSection role={role} reload={subjReload} onOpen={m => { setSubjMode(m); setShowBrief(false) }} />
         <Question q="What we still need to know" count={`${s?.open_pirs ?? 0} open PIRs`} />
         <ul className="list cards">
           {(snap?.pirs ?? []).map(p => (
@@ -928,9 +933,9 @@ function SiteForm({ busy, act, onDone, site }: { busy: string | null; act: (l: s
 }
 
 const LEG_ICON: Record<string, string> = { flight: '✈', ground: '🚗', lodging: '🏨' }
-function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, role, onOp, onOpenWorkspace }: {
+function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, onSubject, role, onOp, onOpenWorkspace }: {
   sel: NonNullable<Selection>; snap: Snapshot; byId: ById; now: number; busy: string | null
-  act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void; onArea?: (m: AreaMode) => void; role: Role; onOp: (id: string) => void
+  act: (l: string, f: () => Promise<unknown>) => void; onClose: () => void; onSelect: (s: Selection) => void; onArea?: (m: AreaMode) => void; onSubject?: (m: SubjectMode) => void; role: Role; onOp: (id: string) => void
   onOpenWorkspace?: (section: SectionCode, tab?: string, record?: string) => void
 }) {
   const [addOpen, setAddOpen] = useState(false)
@@ -1035,6 +1040,7 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, ro
           <ul className="people">{threatRows(Array.from(new Set([...l.confirmed_threat_ids, ...l.threat_ids_in_area])), l.confirmed_threat_ids, { type: 'location', id: l.id })}</ul>
         </>}
         <div className="kv area"><span>Place</span>{l.area ? <AreaStrip a={l.area} onOpen={() => onArea?.({ kind: 'view', id: l.area!.id })} /> : <span className="dim">not rated</span>}{['battle_captain', 'analyst'].includes(role) && <button className="mini" onClick={() => onArea?.({ kind: 'new', location_id: l.id })} title="S2 rates this place, indicator by indicator">{l.area ? 'REASSESS' : 'RATE'}</button>}</div>
+        {(l.subjects ?? []).length > 0 && <div className="kv area"><span>Files</span><span className="subj-strips">{l.subjects!.map(sj => <SubjectStrip key={sj.id} s={sj} onOpen={() => onSubject?.({ kind: 'view', id: sj.id })} />)}</span></div>}
         <div className="d-actions">{draftBtn('location', l.id)} {rollCallBtn({ location_id: l.id })}
           {mayEditSites && <>
             <button className={`chip btn ${l.is_toc ? 'on' : ''}`} disabled={!!busy || l.is_toc}
@@ -1092,6 +1098,9 @@ function Detail({ sel, snap, byId, now, busy, act, onClose, onSelect, onArea, ro
         {p.email && <div className="kv"><span>Email</span>{p.email}</div>}
         <div className="kv"><span>Source</span><code>{p.source}</code></div>
         <div className="kv"><span>Home</span><a onClick={() => home && onSelect({ type: 'location', id: home.id })}>{home?.name ?? '⚿ restricted'}</a></div>
+        {/* §5.6b: who is directed at this principal. The EP question the wall could not answer before. */}
+        {(p.subjects ?? []).length > 0 && <div className="kv area"><span>Directed at them</span><span className="subj-strips">{p.subjects!.map(sj => <SubjectStrip key={sj.id} s={sj} onOpen={() => onSubject?.({ kind: 'view', id: sj.id })} />)}</span></div>}
+        {p.is_vip && (p.subjects ?? []).length === 0 && ['battle_captain', 'ep', 'analyst'].includes(role) && <div className="kv area"><span>Directed at them</span><span className="dim">no file open</span><button className="mini" onClick={() => onSubject?.({ kind: 'new', principal_id: p.id })} title="Open a file on a person directed at this principal">+ OPEN FILE</button></div>}
         {trip && <>
           <div className="section-label">TRIP · {trip.id}{ev && <> · <a onClick={() => onSelect({ type: 'event', id: ev.id })}>{ev.name}</a></>}</div>
           <div className="kv"><span>To</span><b>{trip.dest_name}</b></div>

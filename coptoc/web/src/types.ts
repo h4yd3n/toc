@@ -10,8 +10,37 @@ export interface AreaRatingLine { indicator: string; label: string; rating: Rati
 export interface AreaRating { id: string; place: string; location_id: string | null; lat: number | null; lon: number | null; ratings: AreaRatingLine[]; summary: string; assessed_by: string; assessed_at: string; updated_at: string
   status: 'current' | 'superseded'; supersedes: string | null; counts: Record<Rating, number>; worst: Rating; worst_indicator: string | null; age_days: number; stale: boolean }
 export interface AreaCompact { id: string; place: string; worst: Rating; worst_indicator: string | null; counts: Record<Rating, number>; strip: Rating[]; assessed_by: string; assessed_at: string; age_days: number; stale: boolean }
+
+// §5.6b the subject of concern: the file on a *person*, rated the way §5.6a rates a place. Nothing is summed.
+export type SubjectStatus = 'open' | 'monitoring' | 'referred' | 'closed'
+export type Directness = 'directed' | 'conditional' | 'veiled' | 'none'
+export type ContactChannel = 'email' | 'dm' | 'letter' | 'phone' | 'form' | 'in_person' | 'other'
+export type TriageState = 'new' | 'assessed' | 'filed' | 'dismissed'
+export interface Contact {
+  id: string; subject_id: string | null; channel: ContactChannel; received_at: string; filed_at: string
+  from_label: string; principal_id: string | null; principal_name: string; text: string
+  directness: Directness; triage: TriageState; reliability: string; credibility: number
+  received_by: string; note: string | null; triaged_by: string | null; triaged_at: string | null
+}
+export interface SubjectAssessment { id: string; subject_id: string; ratings: AreaRatingLine[]; summary: string; assessed_by: string; assessed_at: string; updated_at: string
+  status: 'current' | 'superseded'; supersedes: string | null; counts: Record<Rating, number>; worst: Rating; worst_indicator: string | null; age_days: number; stale: boolean }
+export interface Subject {
+  id: string; name: string; aliases: string[]; status: SubjectStatus; summary: string
+  principal_id: string | null; principal_name: string; location_id: string | null; case_id: string | null
+  last_seen_at: string | null; last_seen_place: string | null; lat: number | null; lon: number | null
+  opened_by: string; opened_at: string; updated_at: string
+  closed_at: string | null; closed_reason: string | null; referred_to: string | null; referred_at: string | null
+  assessment: SubjectAssessment | null; history?: SubjectAssessment[]
+  worst: Rating; worst_indicator: string | null; counts: Record<Rating, number>
+  assessed_at: string | null; age_days: number | null; unassessed: boolean; stale: boolean
+  contacts: Contact[]; contact_count: number; new_contacts: number; worst_directness: Directness; last_contact_at: string | null
+}
+export interface SubjectCompact { id: string; name: string; status: SubjectStatus; worst: Rating; worst_indicator: string | null; counts: Record<Rating, number>; strip: Rating[]
+  assessed_at: string | null; age_days: number | null; stale: boolean; unassessed: boolean; worst_directness: Directness
+  contact_count: number; new_contacts: number; last_seen_place: string | null; last_contact_at: string | null }
+export interface InboxItem { id: string; channel: ContactChannel; received_at: string; from_label: string; principal_id: string | null; principal_name: string; text: string; directness: Directness; triage: TriageState; received_by: string }
 export interface Location {
-  area?: AreaCompact | null
+  area?: AreaCompact | null; subjects?: SubjectCompact[]
   s4_status?: Health | null; s4_lines?: number; s4_red?: number; s4_amber?: number; s4_inbound?: number; s6_status?: Health | null; s6_systems?: number; s6_down?: number; s6_degraded?: number; s6_in_use?: string | null
   id: string; name: string; type: LocationType; lat: number; lon: number
   city: string; country: string; posture: Posture; effective_posture: Posture; defcon?: number; sensitivity: 'standard' | 'restricted'; is_toc: boolean
@@ -28,6 +57,7 @@ export interface Person { availability: 'on_shift' | 'off_duty' | 'available' | 
   last_checkin_at: string | null; last_checkin_note: string | null
   threat_ids_in_area: string[]; confirmed_threat_ids: string[]
   phone: string | null; email: string | null; source: string; incident_status: RosterStatus | null
+  subjects?: SubjectCompact[]   // §5.6b the open files directed at this principal
 }
 export type RosterStatus = 'unaccounted' | 'contacted' | 'safe' | 'injured' | 'assist' | 'unreachable'
 export interface RosterEntry {
@@ -80,6 +110,7 @@ export interface LogEntry { id: string; at: string; type: string; actor: string;
 export interface Summary { s4_status?: Health; s6_status?: Health; taskings_open?: number; taskings_overdue?: number;
   s2_actors?: number; s2_reports_pending?: number; movement_risks?: number; decisions_open?: number; decisions_overdue?: number
   ccir_tripped?: number; ccir_unmeasured?: number; exercise?: boolean
+  subjects_open?: number; subjects_red?: number; subjects_unassessed?: number; subjects_stale?: number; subject_inbox?: number
   total_people: number; present: number; traveling: number; vips_traveling: number; security_on_shift: number
   active_threats: number; real_threats: number; confirmed_links: number; checked_in_fresh: number; open_pirs: number; upcoming_events: number
   open_incidents: number; unaccounted: number; defcon: number; defcon_levels: DefconLevel[]; flash: number; warnings_pending: number; off_duty: number; unreachable: number; posture: Posture
@@ -183,6 +214,7 @@ export interface Snapshot { exercise?: ExerciseBoard; ccir?: CcirBoard; areas: A
   generated_at: string; restricted_included: boolean; restricted_denied: boolean; role: string; watch: Watch; estimates: Estimate[]; summary: Summary; locations: Location[]; teams: Team[]
   people: Person[]; trips: Trip[]; events: CopEvent[]; threats: Threat[]; pirs: PIR[]; assessments: Assessment[]; incidents: Incident[]; log: LogEntry[]
   s2_actors: S2Actor[]; s2_sightings: S2Sighting[]; s2_reports: S2Report[]; movement_risks: MovementRisk[]
+  subjects: Subject[]; subject_inbox: InboxItem[]   // §5.6b — empty unless the caller is cleared for restricted
 }
 // §3.7 the exercise — a MSEL driven against the wall on its own profile, on the real clock
 export interface Inject {

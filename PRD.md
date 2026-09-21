@@ -1,8 +1,8 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.52
-**Date:** 2026-09-17
+**Version:** v3.53
+**Date:** 2026-09-20
 **Status:** Prototype running — the web wall, native iOS and native Android against one API; the sign-in layer built and off by default (§9)
 
 > [!NOTE]
@@ -18,29 +18,18 @@
 
 **Who it is for (Decision AD, 2026-09-19).** Corporate security, crisis response, and threat intelligence — a
 protective-intelligence desk, a global security operations center, a trust-and-safety investigations team. It is
-*not* a bid against a military command-and-control programme of record: the US Army's NGC2 settled that ground in
-2026 on Anduril's Lattice and Palantir's Foundry, and a one-author open-source project has no business pretending
-otherwise. The military shape stays in the product for two reasons, both honest. It is where the author's twenty
-years are, so the doctrinal features are the ones he can build correctly and defend line by line; and almost all of
-it transfers — a roll call is a roll call, a collection plan is a collection plan, days of supply and a comms PACE
-plan have exact corporate equivalents. The brigade is therefore the **worked example**, not the target market, and
-the two shapes are built together (§11.2).
+*not* a bid against a military command-and-control programme of record, and §11.4 says why. The military shape
+stays in the product for two reasons, both honest: it is where the author's twenty years are, so the doctrinal
+features are the ones he can build correctly and defend line by line; and almost all of it transfers — a roll call
+is a roll call, a collection plan is a collection plan, days of supply and a comms PACE plan have exact corporate
+equivalents. The brigade is therefore the **worked example**, not the target market, and the two shapes are built
+together (§11.2).
 
-**The military and public-safety lane, honestly (Decision AD).** There is a second audience, and the argument for
-it is not that this beats NGC2. It is that **most people who run an operations center will never be issued one**. A
-National Guard battalion, a state emergency operations center, a county fusion desk, a campus police department, a
-partner nation's brigade, an NGO moving people through a hostile place: all of them run the same staff process on a
-spreadsheet, a whiteboard and a chat group. Against that, the offer is real — Apache 2.0, synthetic data in the box,
-no key needed to run it, one documented API contract, a hash-chained record the organization owns, and no lock-in on
-its own process or its own data. The cost of finding out whether the operating model fits is zero.
-
-What that argument does **not** clear on its own, and this document should say so rather than be caught out: an
-Authority to Operate, IL5/IL6 accreditation, sustainment and 24/7 support, an SBOM and supply-chain attestation, and
-a program office accountable when it breaks. Free software does not reach a classified network by being free, and
-price is rarely the binding constraint in defense procurement. The realistic shape is an **open core with paid
-accreditation, integration and support around it** (§11.4), or a reference implementation that shapes what the
-standard looks like — not a displacement of the prime. Said that way it is a position that survives contact with
-someone who buys this for a living.
+**The other desks (Decision AD).** There is a second audience — the operations centers that will never be
+issued a programme of record: a National Guard battalion, a state emergency operations center, a county fusion
+desk, a campus police department, a partner nation's brigade, an NGO moving people through a hostile place. The
+case for them, and what free and open does *not* clear on its own, is §11.4; it is a business-model argument
+rather than a description of the product, which is why it is not in the first screen a buyer reads.
 
 The center of the screen is a map. Around it, every staff section's status is visible at once, the way a TOC's wall is: personnel disposition, intelligence assessments and open questions, operations calendar, equipment posture. A Battle Captain reads the whole wall in a glance, and anything on the wall can be clicked to drive the map to it.
 
@@ -84,7 +73,7 @@ This is the organizing principle for the whole product. Every feature belongs to
 | Section | Military function | Corporate translation | TOC module | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **S1** | Personnel | Where everyone is, who's assigned where, who's on shift, how to reach them | **Blue Force Tracker** | **[BUILT]** |
-| **S2** | Intelligence | External and open-source threat intel, assessments, PIRs | **Sigtoc** | **[BUILT]** live GDACS collection, analyst-confirmed links, CLUE-style drafter with refuse-to-assess |
+| **S2** | Intelligence | External and open-source threat intel, assessments, PIRs, **the files on people directed at us** | **Sigtoc** | **[BUILT]** live GDACS collection, analyst-confirmed links, CLUE-style drafter with refuse-to-assess |
 | **S3** | Operations | Executive travel, corporate events, planned activity | **Ops Calendar** | **[BUILT]** travel + events (attendees generate trips), write API for EAs |
 | **S4** | Logistics | Supply, equipment, transportation | **Logistics Board** | **[BUILT]** supplies and equipment by site against a required level; inbound shipments; by exception |
 | **S6** | Signal | Communications, networks, systems, accountability | **Signal Board** | **[BUILT]** systems by site with PACE comms; roll calls and check-ins (§8) |
@@ -412,6 +401,69 @@ The machine collects, normalizes, filters, deduplicates, and **drafts**. A human
 
 **The rated area assessment (v3.29, Decision X)** is the other half of the same product. Collection says what has been *reported* about a place; the analyst's rating says what S2 *judges* about it — against a fixed indicator list, green / amber / red per indicator, each with one line that says why, owned and dated. Still no composite: the picture is the row of ratings and the worst of them, and the reader ranks. The indicator list is configuration like the section titles — a brigade asks *routes, MEDEVAC reach, PACE, sustainment, ISR, host-nation, weather*; a corporate desk asks *transit corridors, trauma proximity, cyber redundancy, law-enforcement liaison* — set by the profile or `TOC_AREA_INDICATORS`. A place is a site on the wall or anywhere with a name; a new assessment supersedes the last, which stays as history on the ledger. Every site, trip, and event carries the strip for its place; the S2 panel lists every rated place worst first and compares any two side by side (`/v1/cop/areas`). The seed rates FARP Eagle, FOB Warrior, and Peason Ridge for the brigade, and Lisbon, Porto, and London for the corporate desk, in words that agree with what the S4 and S6 boards show.
 
+
+### 5.6b The subject of concern — the file on a person **[BUILT]** (20 Sep 2026, Decision AE)
+
+§5.6a rates a **place**. This is its sibling, and it rates a **person**: the individual who keeps turning up at the
+north gate, who writes to the CEO, who has found the residence. A protective-intelligence desk lives on that file,
+and until now TOC had nowhere to put it. A threat in `cop_threats` must carry a lat, a lon and a radius, and a
+person fixated on a principal does not have one — the seeded "North gate loiterer" case shows the strain, filed
+`kind="person"` against `loc_sf` because the only place to put a man was a circle drawn around a building. **The
+gap was one missing noun, not a missing product.** The subject gets its own row rather than a nullable threat:
+proximity in `service.py` runs `haversine_km` over every threat, and a threat without coordinates would have to be
+special-cased everywhere it is read.
+
+**The discipline is §5.6a's, unchanged.** A fixed indicator list, green / amber / red per indicator, each with one
+line that says why, owned and dated. **Nothing is scored or summed** (Decision I): the picture is the row of ratings
+and the worst of them, and the reader ranks. A new assessment supersedes the last, which stays as history on the
+ledger. An open file nobody has assessed reads as **`unassessed`, never as green** — that is an exception in its own
+right — and one nobody has reassessed in thirty days reads as stale.
+
+**Where the indicators come from, and what they are not.** They are plain-language categories of concern drawn from
+the open behavioral-threat-assessment literature: a corporate desk asks about *grievance, fixation, identification
+with violence, leakage, a directly communicated threat, research and preparation, approach and proximity, means and
+capability, a change in tempo, and the stabilizers holding a person in place*; a military desk asks instead about
+*association, access, hostile reconnaissance, preparation, proximity to the force and a change in pattern of life*.
+TOC does **not** implement, reproduce or score any proprietary instrument — no WAVR-21 or TRAP-18 item wording, no
+total and no band. An analyst who uses such an instrument records its result as their own judgment in the note, the
+way they would any other source. The list is configuration like §5.6a's (`TOC_SUBJECT_INDICATORS`).
+
+**The mailroom** is the other half, and it is the desk's actual daily workload. Something arrives naming one of ours
+— an email, a DM, a letter, a call, a contact form, someone at the desk. It is graded **when it lands** at F/6, the
+§5.11 default, because an unknown sender cannot be judged and one uncorroborated item says nothing about whether it
+is true. It is triaged for how the threat is *worded* — **directed / conditional / veiled / none**, which is the
+wording and never our view of the risk — and it is filed onto a subject **or left in the inbox**. *Nothing is
+guessed onto a folder*: the seeded web-form message reads like Vane and stays unattributed, because nothing in it
+says it is him. Dismissing one needs a line saying why; closing a file needs a reason and referring one needs the
+name of who it was handed to.
+
+**Who may read it.** A subject file names a private individual against whom nothing has been proven, so it sits
+behind a clearance — Battle Captain, Executive Protection, or the S2 analyst — enforced by the API as a **pure role
+check with no per-section escape, because a section right is not a clearance**. It is a *separate* clearance from
+the restricted sites: the analyst who works the files has no business in the CEO's home address, and the residences
+layer is a toggle the operator flips rather than a clearance, so neither implies the other. The floor still sees the
+**tally** — how many files are open, how many are red, how many nobody has assessed — because a count is not an
+identity.
+
+**On the wall.** An S2 rail section (*Who is directed at us*) lists every file worst first with the inbox count
+beside it; the file opens over the map with its assessment, its correspondence and its history; and the strip rides
+on the two objects that needed it — **a principal carries the files directed at them** (the executive-protection
+question the wall could not answer before) and **a site carries the files that name it**. `coptoc/subjects.py`,
+`/v1/cop/subjects` and `/v1/cop/contacts`, snapshot keys `subjects` and `subject_inbox` with `summary.subjects_*`,
+tables `cop_subjects`, `cop_subject_ratings`, `cop_subject_contacts`. On the ledger as `cop.subject.*` and
+`cop.contact.*`.
+
+**The worked example is the one already in the sample.** Marcus Vane is the man two guards reported; he is now a
+file, rated in words that agree with those two SPOTREPs and no further — approach and reconnaissance are red because
+that is what the reports establish, a directly communicated threat is **green** because there is not one in any of
+the three letters, and means, identification, leakage and stabilizers stay **unknown** because nobody has looked.
+Dana Ortiz has her own file because she is in both reports, and it says exactly that rather than implying anything.
+Two messages sit in the inbox: a web-form note that reads like Vane and is not attributed to him, and a DM naming
+the CFO by title — the *target* resolved from our own directory, which is our data and not a guess, while the
+*sender* stays unknown.
+
+**[NEXT]** the phones. iOS and Android show neither the files nor the inbox yet; the wall is the only surface.
+
 **The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. Drafted at a fixed time and released by the Battle Captain (Decision G).
 
 ### 5.7 Surfaces (Decision 3a) **[BUILT]** — `/v1/s2` API mounted in the wall and standalone (`make run-s2`); the S2 panel shows requirements, coverage, gaps, the directed form, and the source settings
@@ -713,6 +765,30 @@ Connecting a data source or a channel is a key, and keys used to live only in th
 
 **Open core, stated as a model (19 Sep, Decision AD).** The same boundary is the answer to "why would anyone run this instead of buying the thing with a programme office behind it": the core is free, inspectable and lock-in-free, and what a buyer pays for is accreditation, hardened deployment, connectors to their own systems, support and someone accountable. That is a real model — it is how Red Hat sells Linux — and it is the only version of the free-and-open argument that survives a procurement conversation. The argument is *no lock-in on your own process and your own data*, not *cheaper than Palantir*; price is rarely the binding constraint, and an ATO, IL5/IL6, an SBOM and 24/7 sustainment are (§1).
 
+**The military and public-safety lane, honestly (Decision AD).** Moved here from §1 on 20 September: it is an
+argument about who else would run this and on what terms, which belongs beside the model rather than in front of
+a corporate reader.
+
+**Why this is not a bid against a programme of record.** The US Army's NGC2 settled that ground in 2026 on Anduril's
+Lattice and Palantir's Foundry, and a one-author open-source project has no business pretending otherwise. Stating
+it plainly is what makes the rest of this section credible rather than wishful.
+
+**The military and public-safety lane, honestly (Decision AD).** There is a second audience, and the argument for
+it is not that this beats NGC2. It is that **most people who run an operations center will never be issued one**. A
+National Guard battalion, a state emergency operations center, a county fusion desk, a campus police department, a
+partner nation's brigade, an NGO moving people through a hostile place: all of them run the same staff process on a
+spreadsheet, a whiteboard and a chat group. Against that, the offer is real — Apache 2.0, synthetic data in the box,
+no key needed to run it, one documented API contract, a hash-chained record the organization owns, and no lock-in on
+its own process or its own data. The cost of finding out whether the operating model fits is zero.
+
+What that argument does **not** clear on its own, and this document should say so rather than be caught out: an
+Authority to Operate, IL5/IL6 accreditation, sustainment and 24/7 support, an SBOM and supply-chain attestation, and
+a program office accountable when it breaks. Free software does not reach a classified network by being free, and
+price is rarely the binding constraint in defense procurement. The realistic shape is an **open core with paid
+accreditation, integration and support around it** (§11.4), or a reference implementation that shapes what the
+standard looks like — not a displacement of the prime. Said that way it is a position that survives contact with
+someone who buys this for a living.
+
 ## 11.1 Repository Layout
 
 | Folder | Module | Role |
@@ -824,6 +900,7 @@ COP never writes back to a source system.
 | AB | AI in the staff workflow (2026-09-06/08) | **AI drafts, cites, and proposes; a human reviews and releases.** The worker reads scoped records and writes drafts only; the Battle Captain alone releases; nothing without a cited finding is released; intake applies only explicitly approved proposals; the provider is off by default | §5.12, §5.13 |
 | AC | Posture on a corporate desk (2026-09-11) | **No DEFCON on the corporate profile.** The five levels read as words with corporate meanings; the military profile keeps DEFCON 5–1 | §3.5 |
 | AD | Who this is for (2026-09-19) | **Corporate security, crisis response and threat intelligence is the positioning; the military shape is the worked example, not the target market.** Taken after the Army's NGC2 award to Anduril and Palantir: a one-author open-source project does not compete with a C2 programme of record, and the author's differentiation is intelligence-led corporate security, not defence procurement. Both shapes keep getting built, because the doctrine transfers and it is the shape the author can defend. **Second audience:** the operations centers that will never be issued NGC2 — Guard, state EOC, county fusion desk, campus police, partner nation, NGO — where open, inspectable and free-to-run with no lock-in is a real offer; stated with what it does not clear on its own (ATO, IL5/IL6, sustainment, SBOM) | §1, §11.2, §11.4 |
+| AE | The subject of concern (2026-09-20) | **A person directed at us is its own object, not a threat circle.** A file on a named individual, rated on a fixed indicator list with one line of justification each, **nothing summed**; unassessed is an exception, never green. Its indicators are plain-language categories from the open literature — **no proprietary instrument is implemented and nothing is scored**. Inbound contact is graded on arrival at F/6, triaged for how the threat is *worded*, and filed onto a file **or left in the inbox** — never guessed onto one. The file carries **its own clearance**, separate from the restricted sites, while the floor keeps the tally | §5.6b, `coptoc/subjects.py` |
 | Y | Taskings create things (2026-09-05) | **Collection → operation, supply → shipment, comms / coverage → a task on the subject's operation**; linked both ways so finishing either side completes the other; movement asks create nothing yet | §5.10a, `taskings.on_accept` |
 
 ---
@@ -868,6 +945,7 @@ open because nobody has chosen to build it yet. Neither list is a decision waiti
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.53** — 20 Sep: §5.6b the subject of concern (Decision AE) — the file on a *person* directed at us, rated on a fixed indicator list with one line each and nothing summed, and the mailroom that feeds it: inbound contact graded on arrival, triaged for how the threat is worded, filed onto a file or left unattributed in the inbox. Its own clearance, separate from the restricted sites; the floor keeps the tally. A principal now carries who is directed at them. Also: §1 trimmed to speak to a corporate reader first, with the programme-of-record argument moved intact to §11.4; and the §5.6a area-assessment styles restored, having been deleted by `b24f250` in the header-bar rework.
 - **v3.52** — 19 Sep: positioning stated out loud and acted on (Decision AD, §1, §7, §11.2, README) — **`TOC_PROFILE` now defaults to `corporate`**: corporate security, crisis response and threat intelligence is who this is for; the military shape is the worked example and the author's ground, not a bid against a C2 programme of record.
 - **v3.51** — 18 Sep: §3.7 the exercise — a MSEL driven against the wall on its own profile, on the real clock with a compressed schedule; nine kinds of inject that write what a person would have written, as EXERCISE CONTROL; the EXERCISE banner on all three clients; an exercise that refuses to run on a real profile.
 - **v3.50** — 18 Sep: §3.6 CCIR — PIR, FFIR and EEFI in one list, an FFIR watching a number the wall already carries against the commander's threshold, a trip that reports (ledger, watch line, suggested warning) without acting, `unmeasured` kept apart from green, and the board on the wall and both phones.

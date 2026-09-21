@@ -104,6 +104,69 @@ class AreaCreate(BaseModel):
     ratings: List[AreaRatingIn] = []
     summary: str = ""
 
+# §5.6b the subject of concern — the file on a person, and the mailroom that feeds it
+class SubjectRatingIn(BaseModel):
+    indicator: str
+    rating: Literal["green", "amber", "red", "unknown"] = "unknown"
+    note: str = ""
+
+class SubjectCreate(BaseModel):
+    name: str
+    aliases: List[str] = []
+    summary: str = ""
+    principal_id: Optional[str] = None       # the person he is directed at, when it is one person
+    location_id: Optional[str] = None
+    case_id: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+    last_seen_place: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    ratings: List[SubjectRatingIn] = []      # an opening assessment, if the analyst has one already
+
+class SubjectUpdate(BaseModel):
+    name: Optional[str] = None
+    aliases: Optional[List[str]] = None
+    summary: Optional[str] = None
+    status: Optional[Literal["open", "monitoring", "referred", "closed"]] = None
+    principal_id: Optional[str] = None
+    location_id: Optional[str] = None
+    case_id: Optional[str] = None
+    last_seen_at: Optional[datetime] = None
+    last_seen_place: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    closed_reason: Optional[str] = None
+    referred_to: Optional[str] = None
+
+class SubjectAssess(BaseModel):
+    ratings: List[SubjectRatingIn] = []
+    summary: str = ""
+
+class SubjectAssessUpdate(BaseModel):
+    ratings: Optional[List[SubjectRatingIn]] = None
+    summary: Optional[str] = None
+
+class ContactCreate(BaseModel):
+    text: str
+    channel: Literal["email", "dm", "letter", "phone", "form", "in_person", "other"] = "email"
+    received_at: Optional[datetime] = None
+    from_label: str = ""
+    principal_id: Optional[str] = None
+    principal_name: str = ""
+    subject_id: Optional[str] = None         # omit and it lands in the inbox, which is the honest default
+    directness: Literal["directed", "conditional", "veiled", "none"] = "none"
+    received_by: str = ""
+    note: Optional[str] = None
+
+class ContactTriage(BaseModel):
+    subject_id: Optional[str] = None
+    directness: Optional[Literal["directed", "conditional", "veiled", "none"]] = None
+    triage: Optional[Literal["new", "assessed", "filed", "dismissed"]] = None
+    principal_id: Optional[str] = None
+    note: Optional[str] = None
+    reliability: Optional[str] = None
+    credibility: Optional[int] = None
+
 class GraphicCreate(BaseModel):
     type: str
     kind: Literal["point", "line", "polygon"]

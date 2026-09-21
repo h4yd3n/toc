@@ -14,6 +14,8 @@ from .watch import LOG_BUCKETS, current_watch, estimates as section_estimates, g
 from . import names
 from .taskings import TaskingRow, summarize as taskings_summary
 from .areas import AreaRatingRow, compact as area_compact, out as area_out, same_place
+from .subjects import (ContactRow, SubjectRatingRow, SubjectRow, compact as subject_compact,
+                       out as subject_out, summary_counts as subject_counts)
 from . import overlays
 from .graphics import GraphicRow, out as graphic_out
 from .sections import SupplyRow, ShipmentRow, SystemRow, profile as toc_profile, s4_summary, s6_summary, sections_config, worst as worst_status
@@ -207,8 +209,15 @@ async def activity_log(session: AsyncSession, limit: int = 40, before: int | Non
     return {"items": items, "next_cursor": rows[limit - 1].id if len(rows) > limit else None}
 
 
-async def build_snapshot(session: AsyncSession, include_restricted: bool = False, log_limit: int = 40) -> Dict[str, Any]:
+async def build_snapshot(session: AsyncSession, include_restricted: bool = False, log_limit: int = 40,
+                         include_subjects: Optional[bool] = None) -> Dict[str, Any]:
+    """`include_subjects` is a *separate* clearance from `include_restricted` (§5.6b): the S2 analyst who works
+    the subject files has no business in the CEO's home address, and the residences layer is a toggle the
+    operator flips rather than a clearance. Left unset it follows the restricted flag, which is what every
+    internal caller wants."""
     now = now_utc()
+    if include_subjects is None:
+        include_subjects = include_restricted
     locations = (await session.execute(select(LocationRow))).scalars().all()
     teams = (await session.execute(select(TeamRow))).scalars().all()
     people = (await session.execute(select(PersonRow))).scalars().all()
@@ -219,6 +228,9 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
     systems = (await session.execute(select(SystemRow))).scalars().all()
     taskings = (await session.execute(select(TaskingRow))).scalars().all()
     area_rows = (await session.execute(select(AreaRatingRow).where(AreaRatingRow.status == "current"))).scalars().all()
+    subject_rows = (await session.execute(select(SubjectRow))).scalars().all()
+    subject_rating_rows = (await session.execute(select(SubjectRatingRow).where(SubjectRatingRow.status == "current"))).scalars().all()
+    contact_rows = (await session.execute(select(ContactRow))).scalars().all()
     graphic_rows = (await session.execute(select(GraphicRow).where(GraphicRow.status != "retired"))).scalars().all()
     threats = (await session.execute(select(ThreatRow))).scalars().all()
     links = (await session.execute(select(ThreatLinkRow))).scalars().all()
@@ -333,6 +345,27 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         if not a:
             a = next((x for x in areas_out if same_place(x["place"], name) or same_place(x["place"], name.split(",")[0])), None)
         return area_compact(a) if a else None
+    # §5.6b the file on a person. Built here so a site and a principal can each carry the open files that name them.
+    rating_by_subject = {r.subject_id: r for r in subject_rating_rows}
+    contacts_by_subject: Dict[str, List[ContactRow]] = {}
+    for c in contact_rows:
+        if c.subject_id:
+            contacts_by_subject.setdefault(c.subject_id, []).append(c)
+    subjects_out = sorted((subject_out(sr, rating_by_subject.get(sr.id), contacts_by_subject.get(sr.id, []), now) for sr in subject_rows),
+                          key=lambda x: (x["status"] in ("closed", "referred"), -{"red": 3, "amber": 2, "green": 1, "unknown": 0}[x["worst"]], x["name"]))
+    # The inbox is what has arrived and been attributed to nobody. It is a queue, not a folder (§5.6b).
+    inbox_out = [{"id": c.id, "channel": c.channel, "received_at": iso(c.received_at), "from_label": c.from_label,
+                  "principal_id": c.principal_id, "principal_name": c.principal_name, "text": c.text,
+                  "directness": c.directness, "triage": c.triage, "received_by": c.received_by}
+                 for c in sorted((c for c in contact_rows if not c.subject_id), key=lambda c: c.received_at, reverse=True)]
+    live_subjects = [x for x in subjects_out if x["status"] in ("open", "monitoring")]
+    subjects_by_loc: Dict[str, List[Dict[str, Any]]] = {}
+    subjects_by_person: Dict[str, List[Dict[str, Any]]] = {}
+    # A compact carries the subject's name, so it rides on a site or a principal only for a caller cleared
+    # for the files. An uncleared wall sees the tally in `summary` and nothing else.
+    for x in (live_subjects if include_subjects else []):
+        if x["location_id"]: subjects_by_loc.setdefault(x["location_id"], []).append(subject_compact(x))
+        if x["principal_id"]: subjects_by_person.setdefault(x["principal_id"], []).append(subject_compact(x))
     locations_out = []
     for l in locations:
         in_area = [t.id for t in threats if haversine_km(l.lat, l.lon, t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM]
@@ -343,11 +376,12 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
             "id": l.id, "name": l.name, "type": l.type, "lat": l.lat, "lon": l.lon, "city": l.city,
             "country": l.country, "posture": l.posture, "effective_posture": effective, "defcon": DEFCON[effective], "sensitivity": l.sensitivity, "is_toc": bool(l.is_toc),
             "threat_ids_in_area": in_area, "confirmed_threat_ids": [lk.threat_id for lk in my_links],
-            "area": area_for(l.id, l.name),
+            "area": area_for(l.id, l.name), "subjects": subjects_by_loc.get(l.id, []),
             **counts[l.id], **site_health(l.id),
         })
     for po in people_out:
         po["threat_ids_in_area"] = [t.id for t in threats if haversine_km(po["lat"], po["lon"], t.lat, t.lon) <= t.radius_km + PROXIMITY_BUFFER_KM]
+        po["subjects"] = subjects_by_person.get(po["id"], [])  # §5.6b: who is directed at this principal
 
     teams_out = [{"id": t.id, "name": t.name, "location_id": t.location_id, "function": t.function, "is_security": t.is_security,
                   "parent_id": t.parent_id, "echelon": t.echelon or "company", "short": t.short, "equipment": t.equipment} for t in teams if t.location_id in loc_by_id]
@@ -511,6 +545,12 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "defcon_levels": [{"defcon": DEFCON[p], "posture": p, "meaning": (POSTURE_MEANING_CORPORATE[p] if prof == "corporate" else DEFCON_MEANING[p]), "sites": sum(1 for l in locations_out if l["effective_posture"] == p)} for p in POSTURES],
     }
     summary["s4_status"], summary["s6_status"] = s4["status"], s6["status"]
+    # §5.6b. The count is not an identity: everyone on the floor sees how many files are open and how many nobody
+    # has reassessed this month; only a cleared role gets the names (Decision AE).
+    _sj = subject_counts(subjects_out)
+    summary["subjects_open"], summary["subjects_red"] = _sj["open"], _sj["red"]
+    summary["subjects_unassessed"], summary["subjects_stale"] = _sj["unassessed"], _sj["stale"]
+    summary["subject_inbox"] = len(inbox_out)
     _tk = taskings_summary(taskings, now); summary["taskings_open"], summary["taskings_overdue"] = _tk["open"], _tk["overdue"]
     # §3.4 the section overlays, derived: every active requirement is an NAI; everything that moves is a movement
     from sigtoc import requirements as s2req
@@ -571,6 +611,7 @@ async def build_snapshot(session: AsyncSession, include_restricted: bool = False
         "locations": locations_out, "teams": teams_out, "people": people_out, "trips": trips_out,
         "events": events_out, "threats": threats_out, "pirs": pirs_out, "assessments": assessments_out, "incidents": incidents_out, "log": log_out,
         "operations": operations_out, "areas": areas_out, "watch_log": watch_log, "nais": nais_out, "movements": movements_out,
+        "subjects": subjects_out if include_subjects else [], "subject_inbox": inbox_out if include_subjects else [],
         "graphics": graphics_out, "s2_actors": s2_actors_out, "s2_sightings": s2_sightings_out, "s2_reports": s2_reports_out, "movement_risks": movement_risks_out,
         "decision_points": decision_points_out, "unit_positions": unit_positions, "ccir": ccir_out, "exercise": exercise_out,
     }

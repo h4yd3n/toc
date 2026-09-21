@@ -1,4 +1,4 @@
-import type { CcirBoard, CcirMetric, ExerciseBoard, Inject, CaseSignal, Graphic, GraphicType, AreaRating, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
+import type { CcirBoard, CcirMetric, ExerciseBoard, Inject, CaseSignal, Graphic, GraphicType, AreaRating, Subject, Contact, Tasking, UploadPreview, Me, UserInfo, SettingInfo, AreaAssessment, Distribution, Warning, Planning, ImportResult, Operation, Intsum, IntsumHead, Case, CaseDetail, CaseEntity, Queue, Report, Snapshot, Location, IsrSync, Patterns, ThreatCoa, DecisionPoint, Dsm, StaffProduct, StaffProductHead, LiaisonSource } from './types'
 
 import type { Brief, Coverage, Plan, Requirement, Role, SourceInfo, Watch } from './types'
 
@@ -148,6 +148,18 @@ export const areaIndicators = () => req<{ profile: string; indicators: { id: str
 export const listAreaRatings = (all = false) => req<AreaRating[]>('GET', `/v1/cop/areas${all ? '?all=true' : ''}`)
 export const assessArea = (body: { place?: string; location_id?: string; lat?: number; lon?: number; summary?: string; ratings: { indicator: string; rating: string; note: string }[] }) => req<AreaRating>('POST', '/v1/cop/areas', body)
 export const amendArea = (id: string, body: { summary?: string; ratings?: { indicator: string; rating: string; note: string }[] }) => req<AreaRating>('PATCH', `/v1/cop/areas/${id}`, body)
+
+// §5.6b the subject of concern, and the mailroom. Restricted: these 403 for a role without the clearance.
+export const subjectIndicators = () => req<{ profile: string; indicators: { id: string; label: string }[] }>('GET', '/v1/cop/subjects/indicators')
+export const listSubjects = (status?: string) => req<Subject[]>('GET', `/v1/cop/subjects${status ? `?status=${status}` : ''}`)
+export const getSubject = (id: string) => req<Subject>('GET', `/v1/cop/subjects/${id}`)
+export const openSubject = (body: { name: string; aliases?: string[]; summary?: string; principal_id?: string; location_id?: string; case_id?: string; last_seen_place?: string; lat?: number; lon?: number; ratings?: { indicator: string; rating: string; note: string }[] }) => req<Subject>('POST', '/v1/cop/subjects', body)
+export const updateSubject = (id: string, body: Record<string, unknown>) => req<Subject>('PATCH', `/v1/cop/subjects/${id}`, body)
+export const assessSubject = (id: string, body: { summary?: string; ratings: { indicator: string; rating: string; note: string }[] }) => req<Subject>('POST', `/v1/cop/subjects/${id}/assess`, body)
+export const amendSubjectAssessment = (id: string, body: { summary?: string; ratings?: { indicator: string; rating: string; note: string }[] }) => req<Subject>('PATCH', `/v1/cop/subjects/${id}/assessment`, body)
+export const listContacts = (q: { inbox?: boolean; subject_id?: string } = {}) => req<Contact[]>('GET', `/v1/cop/contacts${q.inbox ? '?inbox=true' : q.subject_id ? `?subject_id=${q.subject_id}` : ''}`)
+export const fileContact = (body: { text: string; channel?: string; from_label?: string; principal_id?: string; subject_id?: string; directness?: string; received_by?: string; note?: string }) => req<Contact>('POST', '/v1/cop/contacts', body)
+export const triageContact = (id: string, body: { subject_id?: string; directness?: string; triage?: string; principal_id?: string; note?: string }) => req<Contact>('PATCH', `/v1/cop/contacts/${id}`, body)
 
 // §5.10 taskings
 export const raiseTasking = (body: Partial<Tasking> & { title: string; from_section: string; to_section: string }) => req<Tasking>('POST', '/v1/cop/taskings', body)

@@ -15,6 +15,8 @@ from . import taskings as toc_taskings
 from .taskings import TaskingRow
 from . import areas as toc_areas
 from .areas import AreaRatingRow
+from . import subjects as toc_subjects
+from .subjects import ContactRow, SubjectRatingRow, SubjectRow
 from . import graphics as toc_graphics
 from .graphics import GraphicRow
 from .users import UserRow
@@ -376,7 +378,7 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
         await _seed_operation(session, now_utc())
     from .readiness import EquipmentRow, UnitPositionRow
     from .ccir import CcirRow, seed as ccir_seed
-    for model in (CcirRow, UnitPositionRow, EquipmentRow, S2SightingRow, S2ActorRow, GraphicRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
+    for model in (CcirRow, UnitPositionRow, EquipmentRow, S2SightingRow, S2ActorRow, GraphicRow, ContactRow, SubjectRatingRow, SubjectRow, AreaRatingRow, TaskingRow, SupplyRow, ShipmentRow, SystemRow, AccountabilityRow, IncidentRow, ThreatLinkRow, AssessmentRow, PIRRow, TripLegRow, TripRow, EventAttendeeRow, EventRow, ThreatRow, PersonRow, TeamRow, LocationRow):
         for row in (await session.execute(select(model))).scalars():
             await session.delete(row)
     # §3.7 whatever an exercise wrote goes with it. Reports are not cleared wholesale — the sample cases own some —
@@ -396,6 +398,9 @@ async def reseed(session: AsyncSession, dataset: Optional[str] = None) -> None:
     session.add_all(toc_taskings.seed(flavour, now))  # §5.10 the work moving between sections
     from .sections import profile as _profile
     session.add_all(toc_areas.seed(flavour, now, _profile()))  # §5.6a what the analyst judges about each place
+    _subj, _subj_ratings, _contacts = toc_subjects.seed(flavour, now, _profile())  # §5.6b the files on people, and the mailroom
+    session.add_all(_subj); await session.flush()
+    session.add_all(_subj_ratings + _contacts)
     session.add_all(toc_graphics.seed(flavour, now))  # §3.4 the control measures on the board
     session.add_all(ccir_seed(flavour, now))  # §3.6 the commander's list: what has to wake him
     if dataset in ("cab", "exercise"):

@@ -30,10 +30,12 @@ from .sections import ShipmentRow, SupplyRow, SystemRow, SUPPLY_CATEGORIES, SYST
 from .taskings import TaskingRow, out as tasking_out, on_accept as tasking_on_accept, on_complete as tasking_on_complete, complete_from as tasking_complete_from
 from . import areas as toc_areas
 from . import graphics as toc_graphics
+from . import subjects as toc_subjects
 from .graphics import GraphicRow
 from .areas import AreaRatingRow
+from .subjects import ContactRow, SubjectRatingRow, SubjectRow
 from .watch import (PATTERNS, SECTIONS, SectionEstimateRow, WatchRow, build_brief, current_watch, get_config, next_slot, watch_summary)
-from .schemas import (CcirCreate, CcirUpdate, ExerciseCreate, ExerciseEnd, GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
+from .schemas import (ContactCreate, ContactTriage, SubjectAssess, SubjectAssessUpdate, SubjectCreate, SubjectUpdate, CcirCreate, CcirUpdate, ExerciseCreate, ExerciseEnd, GraphicCreate, GraphicUpdate, AreaCreate, AreaUpdate, TaskingCreate, TaskingUpdate, SupplyCreate, SupplyUpdate, ShipmentCreate, ShipmentUpdate, SystemCreate, SystemUpdate, LegCreate, CoverageAssign, ImportText, BadgeBatch, OperationCreate, OperationUpdate, TaskCreate, TaskUpdate, ResourceCreate, ResourceUpdate, RosterAdd, Acknowledge, EstimateUpdate, Handover, WatchConfigUpdate, WatchTake, AssessmentDraftRequest, AssessmentUpdate, AttendeesAdd, CheckIn, EventCreate, EventUpdate, IncidentClose, IncidentOpen, LocationCreate, LocationUpdate,
                       PIRCreate, PIRUpdate, PostureUpdate, RosterUpdate, ShiftUpdate, ThreatLinkCreate, TripCreate, TripUpdate)
 from .seed import generate_event_trips, reseed, seed_if_empty
 from .service import build_snapshot, haversine_km, may_see_restricted, now_utc
@@ -131,7 +133,10 @@ async def snapshot(restricted: bool = Query(False, description="Include restrict
     """Everything the wall needs, in one call. Decision C: `restricted=true` is honored only for X-TOC-Role
     battle_captain or ep; anyone else gets the standard picture with `restricted_denied: true`."""
     allowed = restricted and may_see_restricted(x_toc_role)
-    snap = await build_snapshot(session, include_restricted=allowed)
+    # §5.6b the subject files carry their own clearance: the analyst who works them is not cleared for the
+    # residences, and the residences layer is a toggle rather than a clearance, so neither implies the other.
+    snap = await build_snapshot(session, include_restricted=allowed,
+                                include_subjects=(x_toc_role or "").lower() in SUBJECT_READERS)
     snap["restricted_denied"] = bool(restricted and not allowed)
     snap["role"] = (x_toc_role or "unspecified").lower()
     return snap
@@ -367,6 +372,275 @@ async def update_area_rating(area_id: str, body: AreaUpdate, session: AsyncSessi
     await get_ledger().append_event(content_id=row.id, event_type="cop.area.updated", actor_type="human", actor_id=actor_from(x_toc_actor), new_state=o["worst"],
                                     reason=f"{row.place}: assessment amended — {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green")
     return o
+
+
+
+
+# ---------------------------------------------------------------- §5.6b the subject of concern: the file on a person, and the mailroom
+
+# Who may read a subject file. It names a private individual against whom nothing has been proven, so it sits behind
+# the same clearance as the residences (Decision 1) rather than being open to the floor — a pure role check, with no
+# per-section escape, because a section right is not a clearance.
+SUBJECT_READERS = {"battle_captain", "ep", "analyst"}
+SUBJECT_OWNERS = {"battle_captain", "ep", "analyst"}     # open a file, amend it, refer it, close it
+SUBJECT_ASSESSORS = {"battle_captain", "analyst"}        # rate it — the same hands that rate a place (§5.6a)
+CONTACT_FILERS = {"battle_captain", "ep", "analyst", "security"}   # whoever opened the envelope
+CONTACT_TRIAGERS = {"battle_captain", "ep", "analyst"}
+
+
+def require_subject_read(role: Optional[str]) -> None:
+    if (role or "").lower() not in SUBJECT_READERS:
+        raise HTTPException(403, f"Subject files require role {' or '.join(sorted(SUBJECT_READERS))}; you are {role or 'unspecified'}")
+
+
+async def _subject_payload(session: AsyncSession, row: SubjectRow, now: datetime) -> Dict[str, Any]:
+    rating = (await session.execute(select(SubjectRatingRow).where(SubjectRatingRow.subject_id == row.id, SubjectRatingRow.status == "current"))).scalars().first()
+    contacts = list((await session.execute(select(ContactRow).where(ContactRow.subject_id == row.id))).scalars())
+    return toc_subjects.out(row, rating, contacts, now)
+
+
+@router.get("/subjects/indicators")
+async def subject_indicators(x_toc_role: Optional[str] = Header(None)):
+    """The indicator list this deployment rates a person on — the profile's default unless TOC_SUBJECT_INDICATORS says otherwise."""
+    from .sections import profile
+    require_subject_read(x_toc_role)
+    return {"profile": profile(), "indicators": toc_subjects.indicators(profile())}
+
+
+@router.get("/subjects")
+async def list_subjects(status: Optional[str] = Query(None, description="open | monitoring | referred | closed"),
+                        session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None)):
+    require_subject_read(x_toc_role)
+    now = now_utc()
+    rows = list((await session.execute(select(SubjectRow))).scalars())
+    out_ = [await _subject_payload(session, r, now) for r in rows]
+    if status:
+        out_ = [s for s in out_ if s["status"] == status]
+    return sorted(out_, key=lambda s: (s["status"] in ("closed", "referred"), -toc_subjects.RANK[s["worst"]], s["name"]))
+
+
+@router.get("/subjects/{subject_id}")
+async def get_subject(subject_id: str, session: AsyncSession = Depends(get_session), x_toc_role: Optional[str] = Header(None)):
+    require_subject_read(x_toc_role)
+    row = await one_or_404(session, SubjectRow, subject_id, "subject")
+    payload = await _subject_payload(session, row, now_utc())
+    payload["history"] = [toc_subjects.rating_out(r, now_utc()) for r in sorted(
+        (await session.execute(select(SubjectRatingRow).where(SubjectRatingRow.subject_id == subject_id, SubjectRatingRow.status == "superseded"))).scalars(),
+        key=lambda r: r.assessed_at, reverse=True)]
+    return payload
+
+
+@router.post("/subjects", status_code=201)
+async def open_subject(body: SubjectCreate, session: AsyncSession = Depends(get_session),
+                       x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Open a file on a person. A name is all it takes — everything else, including the assessment, can come later,
+    and an open file with no assessment reads as `unassessed`, never as green."""
+    from .sections import profile
+    require_role(x_toc_role, SUBJECT_OWNERS, "Opening a subject file")
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(422, "a subject file needs a name, or what we call him until we have one")
+    if body.principal_id:
+        await one_or_404(session, PersonRow, body.principal_id, "person")
+    if body.location_id:
+        await one_or_404(session, LocationRow, body.location_id, "location")
+    now, actor = now_utc(), actor_from(x_toc_actor)
+    principal_name = ""
+    if body.principal_id:
+        principal_name = (await session.get(PersonRow, body.principal_id)).name
+    row = SubjectRow(id=f"subj_{uuid.uuid4().hex[:8]}", name=name, aliases_json=json.dumps(body.aliases or []), summary=(body.summary or "").strip(),
+                     principal_id=body.principal_id, principal_name=principal_name, location_id=body.location_id, case_id=body.case_id,
+                     last_seen_at=body.last_seen_at, last_seen_place=body.last_seen_place, lat=body.lat, lon=body.lon,
+                     opened_by=actor, opened_at=now, updated_at=now)
+    session.add(row)
+    if body.ratings:
+        session.add(SubjectRatingRow(id=f"subjr_{uuid.uuid4().hex[:8]}", subject_id=row.id,
+                                     ratings_json=json.dumps(toc_subjects.normalize([r.model_dump() for r in body.ratings], toc_subjects.indicators(profile()))),
+                                     summary="", assessed_by=actor, assessed_at=now, updated_at=now))
+    await session.commit()
+    payload = await _subject_payload(session, row, now)
+    await get_ledger().append_event(content_id=row.id, event_type="cop.subject.opened", actor_type="human", actor_id=actor, new_state=payload["worst"],
+                                    reason=f"Subject file opened on {name}" + (f", directed at {principal_name}" if principal_name else ""),
+                                    metadata={"principal_id": body.principal_id, "location_id": body.location_id, "case_id": body.case_id})
+    return payload
+
+
+@router.patch("/subjects/{subject_id}")
+async def update_subject(subject_id: str, body: SubjectUpdate, session: AsyncSession = Depends(get_session),
+                         x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Amend the file, move it between states, hand it on, or close it. Closing wants a reason; referring wants a name."""
+    require_role(x_toc_role, SUBJECT_OWNERS, "Amending a subject file")
+    row = await one_or_404(session, SubjectRow, subject_id, "subject")
+    now, actor, old_status = now_utc(), actor_from(x_toc_actor), row.status
+    if body.principal_id is not None:
+        await one_or_404(session, PersonRow, body.principal_id, "person")
+        row.principal_id = body.principal_id
+        row.principal_name = (await session.get(PersonRow, body.principal_id)).name
+    if body.location_id is not None:
+        await one_or_404(session, LocationRow, body.location_id, "location")
+        row.location_id = body.location_id
+    for field in ("name", "summary", "case_id", "last_seen_at", "last_seen_place", "lat", "lon", "closed_reason"):
+        v = getattr(body, field)
+        if v is not None:
+            setattr(row, field, v.strip() if isinstance(v, str) else v)
+    if body.aliases is not None:
+        row.aliases_json = json.dumps(body.aliases)
+    if body.referred_to is not None:
+        row.referred_to, row.referred_at = body.referred_to.strip(), now
+    if body.status is not None and body.status != old_status:
+        if body.status == "closed" and not (body.closed_reason or row.closed_reason):
+            raise HTTPException(422, "closing a subject file needs a reason — what changed, or what it turned out to be")
+        if body.status == "referred" and not (body.referred_to or row.referred_to):
+            raise HTTPException(422, "referring a subject file needs a name — who it was handed to")
+        row.status = body.status
+        row.closed_at = now if body.status == "closed" else None
+    row.updated_at = now
+    await session.commit()
+    payload = await _subject_payload(session, row, now)
+    if body.status is not None and body.status != old_status:
+        ev = {"closed": "cop.subject.closed", "referred": "cop.subject.referred"}.get(row.status, "cop.subject.updated")
+        reason = (f"{row.name}: closed — {row.closed_reason}" if row.status == "closed"
+                  else f"{row.name}: referred to {row.referred_to}" if row.status == "referred"
+                  else f"{row.name}: now {row.status}")
+        await get_ledger().append_event(content_id=row.id, event_type=ev, actor_type="human", actor_id=actor,
+                                        old_state=old_status, new_state=row.status, reason=reason)
+    else:
+        await get_ledger().append_event(content_id=row.id, event_type="cop.subject.updated", actor_type="human", actor_id=actor,
+                                        new_state=row.status, reason=f"{row.name}: file amended")
+    return payload
+
+
+@router.post("/subjects/{subject_id}/assess", status_code=201)
+async def assess_subject(subject_id: str, body: SubjectAssess, session: AsyncSession = Depends(get_session),
+                         x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Rate a person, indicator by indicator. A new assessment supersedes the current one; the old one stays as history.
+
+    Nothing here is summed. `worst` is the worst rated indicator and the reader ranks (Decision I, §5.6a)."""
+    from .sections import profile
+    require_role(x_toc_role, SUBJECT_ASSESSORS, "Assessing a subject", section="S2")
+    row = await one_or_404(session, SubjectRow, subject_id, "subject")
+    now, actor = now_utc(), actor_from(x_toc_actor)
+    ratings = toc_subjects.normalize([r.model_dump() for r in body.ratings], toc_subjects.indicators(profile()))
+    prev = (await session.execute(select(SubjectRatingRow).where(SubjectRatingRow.subject_id == subject_id, SubjectRatingRow.status == "current"))).scalars().first()
+    if prev:
+        prev.status, prev.updated_at = "superseded", now
+    new = SubjectRatingRow(id=f"subjr_{uuid.uuid4().hex[:8]}", subject_id=subject_id, ratings_json=json.dumps(ratings),
+                           summary=(body.summary or "").strip(), assessed_by=actor, assessed_at=now, updated_at=now,
+                           supersedes=prev.id if prev else None)
+    session.add(new)
+    row.updated_at = now
+    await session.commit()
+    o = toc_subjects.rating_out(new, now)
+    await get_ledger().append_event(content_id=row.id, event_type="cop.subject.assessed", actor_type="human", actor_id=actor,
+                                    old_state=prev.id if prev else None, new_state=o["worst"],
+                                    reason=f"{row.name}: {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green · {o['counts']['unknown']} unknown"
+                                           + (f"; worst {o['worst_indicator']}" if o["worst_indicator"] else "") + (" (supersedes the last)" if prev else ""),
+                                    metadata={"subject_id": row.id, "counts": o["counts"]})
+    return await _subject_payload(session, row, now)
+
+
+@router.patch("/subjects/{subject_id}/assessment")
+async def amend_subject_assessment(subject_id: str, body: SubjectAssessUpdate, session: AsyncSession = Depends(get_session),
+                                   x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Correct the current assessment in place — a note, a rating — without a new version. Superseded ones are history."""
+    from .sections import profile
+    require_role(x_toc_role, SUBJECT_ASSESSORS, "Amending a subject assessment", section="S2")
+    row = await one_or_404(session, SubjectRow, subject_id, "subject")
+    cur = (await session.execute(select(SubjectRatingRow).where(SubjectRatingRow.subject_id == subject_id, SubjectRatingRow.status == "current"))).scalars().first()
+    if cur is None:
+        raise HTTPException(409, "this subject has never been assessed; assess it instead")
+    if body.ratings is not None:
+        current = {r["indicator"]: r for r in json.loads(cur.ratings_json or "[]")}
+        for r in body.ratings:
+            current[r.indicator] = {"indicator": r.indicator, "rating": r.rating, "note": r.note}
+        cur.ratings_json = json.dumps(toc_subjects.normalize(list(current.values()), toc_subjects.indicators(profile())))
+    if body.summary is not None:
+        cur.summary = body.summary.strip()
+    cur.updated_at = row.updated_at = now_utc()
+    await session.commit()
+    o = toc_subjects.rating_out(cur, now_utc())
+    await get_ledger().append_event(content_id=row.id, event_type="cop.subject.assessment_amended", actor_type="human", actor_id=actor_from(x_toc_actor),
+                                    new_state=o["worst"], reason=f"{row.name}: assessment amended — {o['counts']['red']} red · {o['counts']['amber']} amber · {o['counts']['green']} green")
+    return await _subject_payload(session, row, now_utc())
+
+
+@router.get("/contacts")
+async def list_contacts(inbox: bool = Query(False, description="only what has been attributed to nobody"),
+                        subject_id: Optional[str] = Query(None), session: AsyncSession = Depends(get_session),
+                        x_toc_role: Optional[str] = Header(None)):
+    require_subject_read(x_toc_role)
+    q = select(ContactRow)
+    rows = list((await session.execute(q)).scalars())
+    if inbox:
+        rows = [c for c in rows if not c.subject_id]
+    if subject_id:
+        rows = [c for c in rows if c.subject_id == subject_id]
+    return [toc_subjects.contact_out(c) for c in sorted(rows, key=lambda c: c.received_at, reverse=True)]
+
+
+@router.post("/contacts", status_code=201)
+async def file_contact(body: ContactCreate, session: AsyncSession = Depends(get_session),
+                       x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Something arrived naming one of ours. It lands graded F/6 — an unknown sender cannot be judged and one
+    uncorroborated item says nothing about whether it is true (§5.11) — and, unless the filer says which subject it
+    belongs to, it lands in the **inbox**. Nothing guesses a message onto a folder."""
+    require_role(x_toc_role, CONTACT_FILERS, "Filing an inbound contact")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(422, "a contact needs its text — what arrived, in the words it arrived in")
+    if body.subject_id:
+        await one_or_404(session, SubjectRow, body.subject_id, "subject")
+    principal_name = (body.principal_name or "").strip()
+    if body.principal_id:
+        principal_name = (await one_or_404(session, PersonRow, body.principal_id, "person")).name
+    now, actor = now_utc(), actor_from(x_toc_actor)
+    row = ContactRow(id=f"cont_{uuid.uuid4().hex[:8]}", subject_id=body.subject_id, channel=body.channel,
+                     received_at=body.received_at or now, filed_at=now, from_label=(body.from_label or "").strip(),
+                     principal_id=body.principal_id, principal_name=principal_name, text=text, directness=body.directness,
+                     triage="filed" if body.subject_id else "new", received_by=(body.received_by or actor).strip(), note=body.note)
+    session.add(row)
+    await session.commit()
+    await get_ledger().append_event(content_id=row.id, event_type="cop.contact.received", actor_type="human", actor_id=actor,
+                                    new_state=row.triage,
+                                    reason=f"{row.channel} received" + (f" naming {principal_name}" if principal_name else "")
+                                           + f"; threat expressed: {row.directness}" + (" — filed to the inbox" if not row.subject_id else ""),
+                                    metadata={"subject_id": row.subject_id, "channel": row.channel, "directness": row.directness})
+    return toc_subjects.contact_out(row)
+
+
+@router.patch("/contacts/{contact_id}")
+async def triage_contact(contact_id: str, body: ContactTriage, session: AsyncSession = Depends(get_session),
+                         x_toc_actor: Optional[str] = Header(None), x_toc_role: Optional[str] = Header(None)):
+    """Work the inbox: say how the threat is expressed, attribute it to a subject, or dismiss it with a line saying why."""
+    require_role(x_toc_role, CONTACT_TRIAGERS, "Triaging an inbound contact")
+    row = await one_or_404(session, ContactRow, contact_id, "contact")
+    now, actor, was = now_utc(), actor_from(x_toc_actor), row.subject_id
+    if body.subject_id is not None:
+        await one_or_404(session, SubjectRow, body.subject_id, "subject")
+        row.subject_id, row.triage = body.subject_id, body.triage or "filed"
+    if body.principal_id is not None:
+        row.principal_id = body.principal_id
+        row.principal_name = (await one_or_404(session, PersonRow, body.principal_id, "person")).name
+    if body.directness is not None:
+        row.directness = body.directness
+    if body.triage is not None:
+        if body.triage == "dismissed" and not (body.note or row.note):
+            raise HTTPException(422, "dismissing a contact needs a line saying why")
+        row.triage = body.triage
+    if body.note is not None:
+        row.note = body.note.strip()
+    if body.reliability is not None:
+        row.reliability = body.reliability.strip().upper()[:1]
+    if body.credibility is not None:
+        row.credibility = body.credibility
+    row.triaged_by, row.triaged_at = actor, now
+    await session.commit()
+    subject = await session.get(SubjectRow, row.subject_id) if row.subject_id else None
+    reason = (f"attributed to {subject.name}" if subject and was != row.subject_id
+              else f"dismissed — {row.note}" if row.triage == "dismissed" else f"triaged: {row.directness}")
+    await get_ledger().append_event(content_id=row.id, event_type="cop.contact.triaged", actor_type="human", actor_id=actor,
+                                    old_state=was, new_state=row.subject_id or row.triage, reason=f"{row.channel} contact {reason}")
+    return toc_subjects.contact_out(row)
 
 
 # ---------------------------------------------------------------- §5.10 taskings: work moving between sections
