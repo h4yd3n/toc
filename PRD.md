@@ -1,7 +1,7 @@
 # TOC — Tactical Operations Center
 ## Product Requirements Document
 
-**Version:** v3.53
+**Version:** v3.54
 **Date:** 2026-09-20
 **Status:** Prototype running — the web wall, native iOS and native Android against one API; the sign-in layer built and off by default (§9)
 
@@ -462,7 +462,18 @@ Two messages sit in the inbox: a web-form note that reads like Vane and is not a
 the CFO by title — the *target* resolved from our own directory, which is our data and not a guess, while the
 *sender* stays unknown.
 
-**[NEXT]** the phones. iOS and Android show neither the files nor the inbox yet; the wall is the only surface.
+**On the phones (20 Sep, later the same day).** Both phones read the files and the inbox straight from the snapshot,
+gated by the same role clearance — an uncleared sign-in sees the tally and a one-line reason. The S2 tab carries
+*Who is directed at us*: every live file worst first with its rating strip, then the inbox with how each message is
+worded and the note that attribution happens at the wall. A principal's card carries *Directed at them* and a site's
+card *Files naming this site*, each strip opening the file: the assessment as the analyst wrote it, indicator by
+indicator with its line, what has arrived, and the history. **The phone never rates a person**; rating, referring
+and closing are the wall's, and the card says so. The one write is the mailroom's field door: **+ CONTACT** files
+something that arrived or someone who approached — in person, by phone, a letter handed to the desk — onto the file
+it was opened from, or into the inbox when it was not, graded F/6 on arrival like everything else. On both phones a
+row on a section tab highlights and flies the map; the card itself opens from the COP map, which is how every other
+row behaves (a file with no last-known position, like an actor without one, is reached through its site or its
+principal). `coptoc/ios/Sources/Subjects.swift`, `coptoc/android/.../Subjects.kt`.
 
 **The INTSUM is a diff**, not a report written from scratch: it is what the standing requirements produced since the last one. Fixed structure so a Battle Captain reads it at shift change in under five minutes. Drafted at a fixed time and released by the Battle Captain (Decision G).
 
@@ -945,6 +956,7 @@ open because nobody has chosen to build it yet. Neither list is a decision waiti
 - **v3.1** — S2/S3/S6 built; three decisions taken; data-sources map added; native iOS client.
 - **v3.2** — roll-call scope, check-in requests, and restricted-layer roles decided and built (A/B/C).
 - **v3.3** — S6 outbound (SMS + chat, real or simulated), check-in links, Battle-Captain-only opening (D/E/F).
+- **v3.54** — 20 Sep, later: §5.6b on both phones — the files and the inbox on the S2 tab, the strips on a principal and a site, the file's card read-only with the assessment as written, and one write: a contact filed from the field onto a file or into the inbox. The phone never rates a person.
 - **v3.53** — 20 Sep: §5.6b the subject of concern (Decision AE) — the file on a *person* directed at us, rated on a fixed indicator list with one line each and nothing summed, and the mailroom that feeds it: inbound contact graded on arrival, triaged for how the threat is worded, filed onto a file or left unattributed in the inbox. Its own clearance, separate from the restricted sites; the floor keeps the tally. A principal now carries who is directed at them. Also: §1 trimmed to speak to a corporate reader first, with the programme-of-record argument moved intact to §11.4; and the §5.6a area-assessment styles restored, having been deleted by `b24f250` in the header-bar rework.
 - **v3.52** — 19 Sep: positioning stated out loud and acted on (Decision AD, §1, §7, §11.2, README) — **`TOC_PROFILE` now defaults to `corporate`**: corporate security, crisis response and threat intelligence is who this is for; the military shape is the worked example and the author's ground, not a bid against a C2 programme of record.
 - **v3.51** — 18 Sep: §3.7 the exercise — a MSEL driven against the wall on its own profile, on the real clock with a compressed schedule; nine kinds of inject that write what a person would have written, as EXERCISE CONTROL; the EXERCISE banner on all three clients; an exercise that refuses to run on a real profile.

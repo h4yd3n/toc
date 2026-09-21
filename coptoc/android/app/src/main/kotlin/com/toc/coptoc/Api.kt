@@ -53,6 +53,8 @@ class CopClient(
     suspend fun runWarningRule() = send("POST", "/v1/s2/warnings/suggest", buildJsonObject { })
     /** §5.10b a SPOTREP from the field: Cop Talk files it, Sigtoc disposes of it. */
     suspend fun fileReport(body: kotlinx.serialization.json.JsonObject) = send("POST", "/v1/s2/reports", body)
+    /** §5.6b the mailroom's field door: something arrived, or someone approached — onto a subject, or into the inbox when nobody can say whose it is. */
+    suspend fun fileContact(body: kotlinx.serialization.json.JsonObject) = send("POST", "/v1/cop/contacts", body)
     suspend fun ackProduct(ptype: String, pid: String) = send("POST", "/v1/s2/products/$ptype/$pid/ack", buildJsonObject { })
     suspend fun releaseIntsum(id: String) = send("POST", "/v1/s2/intsum/$id/release", buildJsonObject { })
     suspend fun draftIntsum() = send("POST", "/v1/s2/intsum/draft", buildJsonObject { })

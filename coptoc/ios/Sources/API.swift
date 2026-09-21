@@ -61,6 +61,8 @@ struct COPClient {
     func refreshIntel() async throws { try await send("POST", "/v1/cop/intel/refresh", nil) }
     /// §5.10b a SPOTREP from the field: Cop Talk files it, Sigtoc disposes of it.
     func fileReport(_ body: [String: Any]) async throws { try await send("POST", "/v1/s2/reports", body) }
+    /// §5.6b the mailroom's field door: something arrived, or someone approached — filed onto a subject, or into the inbox when nobody can say whose it is.
+    func fileContact(_ body: [String: Any]) async throws { try await send("POST", "/v1/cop/contacts", body) }
     func checkIn(personId: String, lat: Double, lon: Double, note: String) async throws {
         try await send("POST", "/v1/cop/people/\(personId)/checkin", ["lat": lat, "lon": lon, "note": note])
     }

@@ -195,6 +195,7 @@ struct MapScreen: View {
         case .incident(let id): if let i = store.incident(id) { target = (i.coordinate, max(i.radiusKm * 4_000, 20_000)) }
         case .actor(let id): if let a = store.actor(id), let c = a.coordinate { target = (c, 30_000) }
         case .report(let id): if let r = store.report(id), let c = r.coordinate { target = (c, 20_000) }
+        case .subject(let id): if let sj = store.subject(id), let la = sj.lat, let lo = sj.lon { target = (.init(latitude: la, longitude: lo), 20_000) }   // §5.6b last known, when there is one
         }
         guard let (c, d) = target else { return }
 

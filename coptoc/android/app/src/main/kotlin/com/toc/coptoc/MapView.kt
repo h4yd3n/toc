@@ -246,6 +246,11 @@ private fun resolveTarget(st: WallState, sel: Selection): TargetLocation? {
             val lon = r.lon ?: 0.0
             if (lat != 0.0 && lon != 0.0) TargetLocation(lat, lon, 30_000.0) else null
         }
+        is Selection.SubjectSel -> snap.subjects.firstOrNull { it.id == sel.id }?.let { sj ->   // §5.6b last known, when there is one
+            val lat = sj.lat ?: 0.0
+            val lon = sj.lon ?: 0.0
+            if (lat != 0.0 && lon != 0.0) TargetLocation(lat, lon, 20_000.0) else null
+        }
     }
 }
 

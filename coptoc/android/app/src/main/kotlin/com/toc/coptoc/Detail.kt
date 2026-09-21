@@ -28,6 +28,8 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
     val isBC = st.role == "battle_captain"; val busy = st.busy != null
     var editingSite by remember { mutableStateOf<Site?>(null) }
     editingSite?.let { s -> SiteFormDialog(store, s) { editingSite = null } }
+    var filingFor by remember { mutableStateOf<String?>(null) }; var filing by remember { mutableStateOf(false) }   // §5.6b
+    ContactDialog(st, store, filingFor, filing) { filing = false }
     Column(Modifier.padding(10.dp).widthIn(max = 420.dp).fillMaxWidth().fillMaxHeight().background(Palette.panel.copy(alpha = .97f), RoundedCornerShape(6.dp)).border(1.dp, Palette.line, RoundedCornerShape(6.dp)).padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth()) { Spacer(Modifier.weight(1f)); Text("×", Modifier.clickable { onClose() }, color = Palette.dim, fontSize = 18.sp) }
         when (sel) {
@@ -35,6 +37,7 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                 Kicker("S1 SITE · ${l.type.uppercase()} · ${l.city}, ${l.country}"); Title(l.name)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip("POSTURE ${l.posture.uppercase()}", Palette.posture(l.posture), filled = true); if (l.effectivePosture != l.posture) Chip("EFFECTIVE ${l.effectivePosture.uppercase()}", Palette.posture(l.effectivePosture), filled = true) }
                 Stats("${l.present}/${l.assigned} present", "${l.securityOnShift} sec on shift", "${l.vipsPresent} VIP")
+                if (l.subjects.isNotEmpty()) { Section("FILES NAMING THIS SITE", "${l.subjects.size}"); l.subjects.forEach { sj -> SubjectStripRow(sj) { store.select(Selection.SubjectSel(sj.id)) } } }   // §5.6b
                 if (l.threatIdsInArea.isNotEmpty()) { Section("THREATS IN AREA", "confirmed ones change posture (Decision 3)")
                     l.threatIdsInArea.mapNotNull { id -> snap.threats.firstOrNull { it.id == id } }.forEach { t -> Row(Modifier.clickable { store.select(Selection.ThreatSel(t.id)) }, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Chip(t.severity.take(3).uppercase(), Palette.severity(t.severity), filled = true); Text(t.title, color = Palette.text, fontSize = 11.sp, modifier = Modifier.weight(1f)); if (t.id in l.confirmedThreatIds) Chip("CONFIRMED", Palette.amber) } } }
@@ -53,6 +56,8 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                 Kicker("S1 PERSON · ${p.status.uppercase().replace('_', ' ')} · ${p.teamName}"); Title((if (p.isVip) "★ " else "") + p.name); Text(p.role, color = Palette.dim, fontSize = 11.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Chip(p.availability.uppercase().replace('_', ' '), when (p.availability) { "unreachable" -> Palette.red; "off_duty" -> Palette.dim; else -> Palette.green }); Chip(if (p.positionSource == "checkin") "CHECKED IN ${"%.0f".format(p.checkinAgeH ?: 0.0)}h ago" else "DERIVED POSITION", if (p.positionSource == "checkin") Palette.green else Palette.dim); if (p.checkinStale) Chip("STALE", Palette.amber); p.incidentStatus?.let { Chip("ROLL CALL · ${it.uppercase()}", Palette.roster(it)) } }
                 p.lastCheckinNote?.let { KV("Last note", it) }; p.phone?.let { KV("Phone", it) }; p.email?.let { KV("Email", it) }
+                // §5.6b who is directed at this principal — the executive-protection question the phone could not answer before
+                if (p.subjects.isNotEmpty()) { Section("DIRECTED AT THEM", "${p.subjects.size}"); p.subjects.forEach { sj -> SubjectStripRow(sj) { store.select(Selection.SubjectSel(sj.id)) } } }
                 snap.trips.firstOrNull { it.id == p.tripId }?.let { t -> KV("Trip", "${t.originName} → ${t.destName} · ${t.purpose}"); t.operation?.let { KV("Operation", "${it.title} · ${it.tasksDone}/${it.tasksTotal} tasks · ${it.status}") }
                     if (t.legs.isNotEmpty()) { Section("ITINERARY", "${t.legs.size} legs" + (t.currentLeg?.let { " · now: ${it.label.ifEmpty { it.toName }}" } ?: ""))
                         t.legs.forEach { l -> Row(Modifier.fillMaxWidth().alpha(if (l.status == "done") .55f else 1f), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -94,6 +99,7 @@ fun DetailSheet(sel: Selection, st: WallState, store: Store, onClose: () -> Unit
                     Text(sg.what.ifEmpty { sg.place ?: sg.sourceType }, color = Palette.text, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
                 Text("Actors, sightings, and dispositions are worked in Sigtoc; the phone shows the live picture.", color = Palette.dim, fontSize = 9.sp)
             }
+            is Selection.SubjectSel -> snap.subjects.firstOrNull { it.id == sel.id }?.let { sj -> SubjectDetailBody(sj, st, store) { filingFor = sj.id; filing = true } }   // §5.6b
             is Selection.ReportSel -> snap.s2Reports.firstOrNull { it.id == sel.id }?.let { r ->
                 Kicker("${r.kind.uppercase()} · ${r.grade} · ${r.status.uppercase()}"); Title(r.reportedBy)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Text(r.at.take(16).replace('T', ' ') + "Z", color = Palette.text, fontSize = 11.sp, fontFamily = FontFamily.Monospace); if (r.reporterRole.isNotEmpty()) Text(r.reporterRole, color = Palette.dim, fontSize = 11.sp) }

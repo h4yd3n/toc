@@ -214,9 +214,11 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
     val snap = st.snap ?: return
     var tkRaising by remember { mutableStateOf(false) }; var tkDeclining by remember { mutableStateOf<Tasking?>(null) }
     var filing by remember { mutableStateOf(false) }
+    var contacting by remember { mutableStateOf(false) }   // §5.6b
     var triggering by remember { mutableStateOf<SnapDecisionPoint?>(null) }
     TaskingDialogs(st, store, "S2", tkRaising, { tkRaising = false }, tkDeclining, { tkDeclining = null })
     SpotrepDialog(st, store, filing) { filing = false }
+    ContactDialog(st, store, null, contacting) { contacting = false }
     DecisionTriggerDialog(store, triggering) { triggering = null }
     Label("", action = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { Mini("+ SPOTREP", Palette.amber, st.busy == null) { filing = true }; Mini("⟳ COLLECT", enabled = st.busy == null) { store.act("collecting") { refreshIntel() } } } })
     EstimateLine(snap.estimates.firstOrNull { it.section == "S2" })
@@ -234,6 +236,7 @@ fun ColumnScope.S2Panel(st: WallState, store: Store) {
         items(openReports.take(8), key = { it.id }) { r -> RowItem(selected = (st.selection as? Selection.ReportSel)?.id == r.id, onClick = { store.select(Selection.ReportSel(r.id)) }) {
             Chip("${r.kind.uppercase()} ${r.grade}", Palette.amber); Text(r.text, color = Palette.text, fontSize = 10.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); Text(r.at.take(16).replace('T', ' '), color = Palette.dim, fontSize = 9.sp, fontFamily = FontFamily.Monospace) } }
         if (openReports.isEmpty()) item { Text("Nothing filed and waiting. File a SPOTREP from the field.", Modifier.padding(horizontal = 10.dp), color = Palette.dim, fontSize = 10.sp) }
+        subjectsSection(st, store) { contacting = true }   // §5.6b the files on people directed at us, and the inbox
         taskingsSection(st, store, "S2", tkRaising, { tkRaising = !tkRaising }, { tkDeclining = it })
         ccirSection(st, "S2")
         decisionsSection(st, store) { triggering = it }

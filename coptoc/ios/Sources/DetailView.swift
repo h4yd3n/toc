@@ -16,6 +16,7 @@ struct DetailView: View {
                 case .incident(let id): if let i = store.incident(id) { incidentView(i) }
                 case .actor(let id): if let a = store.actor(id) { actorView(a) }
                 case .report(let id): if let r = store.report(id) { reportView(r) }
+                case .subject(let id): if let sj = store.subject(id) { SubjectDetail(s: sj) }   // §5.6b
                 }
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
@@ -114,6 +115,10 @@ struct DetailView: View {
         kicker("\(s.type.uppercased()) · \(s.city), \(s.country)\(s.sensitivity == "restricted" ? " · ⚿ RESTRICTED" : "")")
         title(s.name)
         HStack(spacing: 14) { stat(s.present, "present"); stat(s.assigned, "assigned"); stat(s.securityOnShift, "sec on shift"); stat(s.vipsPresent, "VIP") }
+        if let files = s.subjects, !files.isEmpty {   // §5.6b the open files that name this site
+            SectionLabel(text: "FILES NAMING THIS SITE · \(files.count)")
+            ForEach(files) { SubjectStripRow(s: $0) }
+        }
         HStack(spacing: 6) {
             Text("posture").font(.system(size: 12)).foregroundStyle(Theme.dim)
             ForEach(["normal", "guarded", "elevated", "high", "critical"], id: \.self) { p in
@@ -178,6 +183,11 @@ struct DetailView: View {
         if let em = p.email { kv("Email", em) }
         kv("Source", p.source)
         kv("Home", store.site(p.homeLocationId)?.name ?? "⚿ restricted")
+        // §5.6b who is directed at this principal — the executive-protection question the phone could not answer before
+        if let files = p.subjects, !files.isEmpty {
+            SectionLabel(text: "DIRECTED AT THEM · \(files.count)")
+            ForEach(files) { SubjectStripRow(s: $0) }
+        }
         if let trip {
             SectionLabel(text: "TRIP · \(trip.id)")
             kv("To", trip.destName); kv("Depart", "\(ISO.short(trip.departAt)) (\(ISO.rel(trip.departAt, now: store.now)))")

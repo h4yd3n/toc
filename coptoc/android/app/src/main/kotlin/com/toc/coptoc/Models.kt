@@ -14,14 +14,16 @@ import kotlinx.serialization.json.double
 @Serializable data class Estimate(val section: String, val assessment: String = "", val recommendation: String = "", val updatedBy: String? = null, val updatedAt: String? = null)
 @Serializable data class Summary(val s2Actors: Int = 0, val s2ReportsPending: Int = 0, val movementRisks: Int = 0, val s4Status: String = "green", val s6Status: String = "green", val totalPeople: Int = 0, val present: Int = 0, val traveling: Int = 0, val vipsTraveling: Int = 0, val securityOnShift: Int = 0, val activeThreats: Int = 0,
                                  val realThreats: Int = 0, val confirmedLinks: Int = 0, val checkedInFresh: Int = 0, val openPirs: Int = 0, val upcomingEvents: Int = 0, val openIncidents: Int = 0,
-                                 val unaccounted: Int = 0, val posture: String = "normal", val defcon: Int = 5, val defconLevels: List<DefconLevel> = emptyList(), val flash: Int = 0, val warningsPending: Int = 0, val offDuty: Int = 0, val unreachable: Int = 0)
+                                 val unaccounted: Int = 0, val posture: String = "normal", val defcon: Int = 5, val defconLevels: List<DefconLevel> = emptyList(), val flash: Int = 0, val warningsPending: Int = 0, val offDuty: Int = 0, val unreachable: Int = 0,
+                                 val subjectsOpen: Int = 0, val subjectsRed: Int = 0, val subjectsUnassessed: Int = 0, val subjectInbox: Int = 0)   // §5.6b the tally is open to the floor
 @Serializable data class Site(val s4Status: String? = null, val s6Status: String? = null, val s4Red: Int = 0, val s4Lines: Int = 0, val s6Down: Int = 0, val s6Systems: Int = 0, val s6InUse: String? = null, val id: String, val name: String, val type: String = "", val lat: Double, val lon: Double, val city: String = "", val country: String = "", val posture: String = "normal",
                               val effectivePosture: String = "normal", val sensitivity: String = "standard", val isToc: Boolean = false, val assigned: Int = 0, val present: Int = 0, val securityOnShift: Int = 0, val vipsPresent: Int = 0,
-                              val threatIdsInArea: List<String> = emptyList(), val confirmedThreatIds: List<String> = emptyList(), val area: AreaCompact? = null)
+                              val threatIdsInArea: List<String> = emptyList(), val confirmedThreatIds: List<String> = emptyList(), val area: AreaCompact? = null, val subjects: List<SubjectCompact> = emptyList())
 @Serializable data class Person(val shortName: String? = null, val rank: String? = null, val grade: String? = null, val lastName: String? = null, val firstName: String? = null, val teamId: String = "", val id: String, val name: String, val role: String = "", val teamName: String = "", val homeLocationId: String = "", val locationId: String? = null, val isVip: Boolean = false,
                                 val onShift: Boolean = false, val status: String = "at_post", val lat: Double = 0.0, val lon: Double = 0.0, val tripId: String? = null, val positionSource: String = "derived",
                                 val checkinAgeH: Double? = null, val checkinStale: Boolean = false, val lastCheckinNote: String? = null, val threatIdsInArea: List<String> = emptyList(),
-                                val phone: String? = null, val email: String? = null, val incidentStatus: String? = null, val availability: String = "available")
+                                val phone: String? = null, val email: String? = null, val incidentStatus: String? = null, val availability: String = "available",
+                                val subjects: List<SubjectCompact> = emptyList())   // §5.6b who is directed at this principal
 @Serializable data class OperationSummary(val id: String, val title: String = "", val status: String = "planned", val tasksTotal: Int = 0, val tasksDone: Int = 0, val blocked: Int = 0, val resourcesOpen: Int = 0, val pct: Int = 0, val fromProductId: String? = null)
 @Serializable data class Leg(val id: String, val kind: String, val label: String = "", val ref: String? = null, val fromName: String? = null, val toName: String = "", val toLat: Double = 0.0, val toLon: Double = 0.0,
                              val startAt: String = "", val endAt: String = "", val status: String = "planned", val note: String = "", val source: String = "") {
@@ -74,6 +76,30 @@ import kotlinx.serialization.json.double
 @Serializable data class Movement(val riskFlags: List<MovementRisk> = emptyList(), val id: String, val kind: String = "individual", val owner: String = "S3", val name: String = "", val unit: String? = null, val pax: Int = 0, val personIds: List<String> = emptyList(), val isVip: Boolean = false, val purpose: String = "",
                                   val originName: String = "", val destName: String = "", val destLat: Double = 0.0, val destLon: Double = 0.0, val departAt: String? = null, val returnAt: String = "", val hoursToEta: Double? = null,
                                   val status: String = "planned", val mode: String = "unknown", val headLat: Double? = null, val headLon: Double? = null, val currentLeg: String? = null, val legs: List<MovementLeg> = emptyList(), val health: String = "green")
+/** §5.6b the file the desk keeps on a *person* directed at us, rated the way §5.6a rates a place — a fixed indicator
+ *  list, green / amber / red with one line of why, nothing summed. The phone reads the files and the inbox, shows on a
+ *  principal who is directed at them, and files a contact from the field. It never rates: that is the analyst's, at
+ *  the wall. Everything is empty unless the signed-in role is cleared; the tally in Summary is what the floor sees. */
+@Serializable data class SubjectRatingLine(val indicator: String, val label: String = "", val rating: String = "unknown", val note: String = "")
+@Serializable data class SubjectAssessment(val id: String, val subjectId: String = "", val ratings: List<SubjectRatingLine> = emptyList(), val summary: String = "", val assessedBy: String = "", val assessedAt: String = "",
+                                           val status: String = "current", val supersedes: String? = null, val counts: Map<String, Int> = emptyMap(), val worst: String = "unknown", val worstIndicator: String? = null, val ageDays: Double = 0.0, val stale: Boolean = false)
+@Serializable data class SubjectContact(val id: String, val subjectId: String? = null, val channel: String = "email", val receivedAt: String = "", val filedAt: String = "", val fromLabel: String = "",
+                                        val principalId: String? = null, val principalName: String = "", val text: String = "", val directness: String = "none", val triage: String = "new",
+                                        val reliability: String = "F", val credibility: Int = 6, val receivedBy: String = "", val note: String? = null, val triagedBy: String? = null, val triagedAt: String? = null)
+@Serializable data class Subject(val id: String, val name: String = "", val aliases: List<String> = emptyList(), val status: String = "open", val summary: String = "",
+                                 val principalId: String? = null, val principalName: String = "", val locationId: String? = null, val caseId: String? = null,
+                                 val lastSeenAt: String? = null, val lastSeenPlace: String? = null, val lat: Double? = null, val lon: Double? = null,
+                                 val openedBy: String = "", val openedAt: String = "", val closedReason: String? = null, val referredTo: String? = null, val referredAt: String? = null,
+                                 val assessment: SubjectAssessment? = null, val worst: String = "unknown", val worstIndicator: String? = null, val counts: Map<String, Int> = emptyMap(),
+                                 val assessedAt: String? = null, val ageDays: Double? = null, val unassessed: Boolean = true, val stale: Boolean = false,
+                                 val contacts: List<SubjectContact> = emptyList(), val contactCount: Int = 0, val newContacts: Int = 0, val worstDirectness: String = "none", val lastContactAt: String? = null) {
+    val live: Boolean get() = status == "open" || status == "monitoring"
+}
+@Serializable data class SubjectCompact(val id: String, val name: String = "", val status: String = "open", val worst: String = "unknown", val worstIndicator: String? = null, val counts: Map<String, Int> = emptyMap(), val strip: List<String> = emptyList(),
+                                        val assessedAt: String? = null, val ageDays: Double? = null, val stale: Boolean = false, val unassessed: Boolean = true, val worstDirectness: String = "none",
+                                        val contactCount: Int = 0, val newContacts: Int = 0, val lastSeenPlace: String? = null, val lastContactAt: String? = null)
+@Serializable data class InboxItem(val id: String, val channel: String = "email", val receivedAt: String = "", val fromLabel: String = "", val principalId: String? = null, val principalName: String = "",
+                                   val text: String = "", val directness: String = "none", val triage: String = "new", val receivedBy: String = "")
 @Serializable data class AreaCompact(val id: String, val place: String = "", val worst: String = "unknown", val worstIndicator: String? = null, val strip: List<String> = emptyList(), val assessedBy: String = "", val assessedAt: String = "", val ageDays: Double = 0.0, val stale: Boolean = false)
 // §3.4 a control measure a section drew by hand: a point [lon, lat] or a path [[lon, lat], …], typed from the catalog
 @Serializable data class Graphic(val id: String, val type: String = "", val kind: String = "point", val section: String = "S3", val name: String = "", val label: String = "", val geometry: JsonElement, val center: List<Double> = emptyList(),
@@ -101,7 +127,8 @@ import kotlinx.serialization.json.double
                                   val locations: List<Site> = emptyList(), val people: List<Person> = emptyList(), val trips: List<Trip> = emptyList(), val events: List<CopEvent> = emptyList(),
                                   val threats: List<Threat> = emptyList(), val pirs: List<PIR> = emptyList(), val assessments: List<Assessment> = emptyList(), val incidents: List<Incident> = emptyList(),
                                   val log: List<LogEntry> = emptyList(), val operations: List<OperationSummary> = emptyList(), val warnings: List<Warning> = emptyList(),
-                                  val decisionPoints: List<SnapDecisionPoint> = emptyList(), val ccir: CcirBoard? = null, val exercise: ExerciseBoard? = null)
+                                  val decisionPoints: List<SnapDecisionPoint> = emptyList(), val ccir: CcirBoard? = null, val exercise: ExerciseBoard? = null,
+                                  val subjects: List<Subject> = emptyList(), val subjectInbox: List<InboxItem> = emptyList())   // §5.6b — empty unless this role is cleared
 
 /** §3.7 — the phone reads one thing about an exercise and reads it loudly: that there is one. Exercise control is
  *  the wall's seat; what a phone must never do is let a drill read as real. */
@@ -150,6 +177,7 @@ sealed interface Selection {
     data class IncidentSel(val id: String) : Selection
     data class ActorSel(val id: String) : Selection
     data class ReportSel(val id: String) : Selection
+    data class SubjectSel(val id: String) : Selection   // §5.6b
 }
 
 @Serializable data class CoverageInfo(val required: Int = 0, val assigned: Int = 0, val gap: Int = 0, val rule: String = "")

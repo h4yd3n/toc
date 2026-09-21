@@ -86,6 +86,7 @@ struct Snapshot: Decodable {
     var decisionPoints: [SnapDecisionPoint]?   // §5.10b Phase 3, on the strip and in the S2 panel: what we decide, and when
     var ccir: CcirBoard?                        // §3.6 the commander's list: what has to wake him
     var exercise: ExerciseBoard?                // §3.7 whether this wall is running a scenario
+    var subjects: [Subject]?, subjectInbox: [InboxItem]?   // §5.6b the files on people, and the mailroom — empty unless this role is cleared
 }
 
 /// §3.7 — the phone reads one thing about an exercise and reads it loudly: that there is one. Exercise control is
@@ -188,6 +189,41 @@ struct Movement: Decodable, Identifiable, Hashable {
     var riskFlags: [MovementRisk]?
     var head: CLLocationCoordinate2D? { headLat.flatMap { la in headLon.map { .init(latitude: la, longitude: $0) } } }
 }
+/// §5.6b the file the desk keeps on a *person* directed at us, rated the way §5.6a rates a place: a fixed indicator
+/// list, green / amber / red with one line of why, nothing summed. The phone reads the file and the inbox, shows the
+/// strip on the principal it names, and files a contact from the field — the in-person door of the mailroom. It
+/// never rates: judging a person is the S2 analyst's, at the wall. Everything here is empty unless the signed-in
+/// role is cleared for the files, and the tally in `Summary` is what the floor sees instead.
+struct SubjectRatingLine: Decodable, Hashable { var indicator: String, label: String, rating: String, note: String }
+struct SubjectAssessment: Decodable, Identifiable, Hashable {
+    var id: String, subjectId: String, ratings: [SubjectRatingLine], summary: String, assessedBy: String, assessedAt: String
+    var status: String, supersedes: String?, counts: [String: Int], worst: String, worstIndicator: String?, ageDays: Double, stale: Bool
+}
+struct SubjectContact: Decodable, Identifiable, Hashable {
+    var id: String, subjectId: String?, channel: String, receivedAt: String, filedAt: String, fromLabel: String
+    var principalId: String?, principalName: String, text: String, directness: String, triage: String
+    var reliability: String, credibility: Int, receivedBy: String, note: String?, triagedBy: String?, triagedAt: String?
+}
+struct Subject: Decodable, Identifiable, Hashable {
+    var id: String, name: String, aliases: [String], status: String, summary: String
+    var principalId: String?, principalName: String, locationId: String?, caseId: String?
+    var lastSeenAt: String?, lastSeenPlace: String?, lat: Double?, lon: Double?
+    var openedBy: String, openedAt: String, closedReason: String?, referredTo: String?, referredAt: String?
+    var assessment: SubjectAssessment?
+    var worst: String, worstIndicator: String?, counts: [String: Int], assessedAt: String?, ageDays: Double?, unassessed: Bool, stale: Bool
+    var contacts: [SubjectContact], contactCount: Int, newContacts: Int, worstDirectness: String, lastContactAt: String?
+    var live: Bool { status == "open" || status == "monitoring" }
+}
+struct SubjectCompact: Decodable, Identifiable, Hashable {
+    var id: String, name: String, status: String, worst: String, worstIndicator: String?, counts: [String: Int], strip: [String]
+    var assessedAt: String?, ageDays: Double?, stale: Bool, unassessed: Bool, worstDirectness: String
+    var contactCount: Int, newContacts: Int, lastSeenPlace: String?, lastContactAt: String?
+}
+struct InboxItem: Decodable, Identifiable, Hashable {
+    var id: String, channel: String, receivedAt: String, fromLabel: String, principalId: String?, principalName: String
+    var text: String, directness: String, triage: String, receivedBy: String
+}
+
 struct AreaCompact: Decodable, Hashable { var id: String, place: String, worst: String, worstIndicator: String?, strip: [String], assessedBy: String, assessedAt: String, ageDays: Double, stale: Bool }
 
 struct Summary: Decodable {
@@ -197,6 +233,7 @@ struct Summary: Decodable {
     var s4Status: String?, s6Status: String?
     var posture: String
     var flash: Int?, warningsPending: Int?, offDuty: Int?, unreachable: Int?
+    var subjectsOpen: Int?, subjectsRed: Int?, subjectsUnassessed: Int?, subjectInbox: Int?   // §5.6b the tally is open to the floor; the names are not
     var defcon: Int?, defconLevels: [DefconLevel]?
     var s2Actors: Int?, s2ReportsPending: Int?, movementRisks: Int?
 }
@@ -210,6 +247,7 @@ struct Site: Decodable, Identifiable, Hashable {
     var assigned: Int, present: Int, securityOnShift: Int, vipsPresent: Int
     var threatIdsInArea: [String], confirmedThreatIds: [String]
     var area: AreaCompact?   // §5.6a what S2 judges about this place
+    var subjects: [SubjectCompact]?   // §5.6b the open files that name this site
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
 }
 
@@ -223,6 +261,7 @@ struct Person: Decodable, Identifiable, Hashable {
     var positionSource: String, checkinAgeH: Double?, checkinStale: Bool, lastCheckinAt: String?, lastCheckinNote: String?
     var threatIdsInArea: [String], confirmedThreatIds: [String]
     var phone: String?, email: String?, source: String, incidentStatus: String?, availability: String?
+    var subjects: [SubjectCompact]?   // §5.6b who is directed at this principal
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
     var traveling: Bool { status == "traveling" }
 }
@@ -303,9 +342,10 @@ struct Incident: Decodable, Identifiable, Hashable {
 }
 
 enum Selection: Identifiable, Hashable {
-    case site(String), person(String), threat(String), event(String), incident(String), actor(String), report(String)
+    case site(String), person(String), threat(String), event(String), incident(String), actor(String), report(String), subject(String)
     var id: String {
         switch self {
+        case .subject(let s): "subject:\(s)"
         case .actor(let s): "actor:\(s)"
         case .report(let s): "report:\(s)"
         case .site(let s): "site:\(s)"

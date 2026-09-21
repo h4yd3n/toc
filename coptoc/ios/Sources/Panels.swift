@@ -101,6 +101,7 @@ struct IntelScreen: View {
                 }
                 if store.openReports.isEmpty { Text("Nothing filed and waiting. File a SPOTREP from the field.").font(.system(size: 11)).foregroundStyle(Theme.dim) }
             }.listRowBackground(Theme.panel)
+            SubjectsSection()   // §5.6b the files on people directed at us, and the inbox
             TaskingsSection(section: "S2")
             CcirSection(section: "S2")
             DecisionsSection()

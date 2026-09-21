@@ -182,6 +182,9 @@ final class COPStore {
     func person(_ id: String?) -> Person? { snapshot?.people.first { $0.id == id } }
     func actor(_ id: String?) -> S2Actor? { snapshot?.s2Actors?.first { $0.id == id } }
     func report(_ id: String?) -> S2Report? { snapshot?.s2Reports?.first { $0.id == id } }
+    func subject(_ id: String?) -> Subject? { snapshot?.subjects?.first { $0.id == id } }   // §5.6b
+    var liveSubjects: [Subject] { (snapshot?.subjects ?? []).filter(\.live) }
+    var subjectInbox: [InboxItem] { snapshot?.subjectInbox ?? [] }
     func sightings(of actorId: String) -> [S2Sighting] { (snapshot?.s2Sightings ?? []).filter { $0.actorId == actorId }.sorted { $0.at > $1.at } }
     var openReports: [S2Report] { (snapshot?.s2Reports ?? []).filter { $0.status == "filed" } }
     func threat(_ id: String?) -> Threat? { snapshot?.threats.first { $0.id == id } }
